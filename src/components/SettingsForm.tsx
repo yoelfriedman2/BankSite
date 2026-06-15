@@ -13,17 +13,20 @@ export function SettingsForm({
   displayName,
   defaultDormancyMonths,
   holders,
+  notifyEmail,
 }: {
   email: string;
   displayName: string;
   defaultDormancyMonths: number;
   holders: string[];
+  notifyEmail: boolean;
 }) {
   const [name, setName] = useState(displayName);
   const [months, setMonths] = useState(String(defaultDormancyMonths));
   const [holdersList, setHoldersList] = useState<string[]>(
     holders.length ? holders : [""],
   );
+  const [notify, setNotify] = useState(notifyEmail);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -47,6 +50,7 @@ export function SettingsForm({
         display_name: name,
         default_dormancy_months: months,
         holders: holdersList,
+        notify_email: notify,
       });
       if (result.error) {
         setError(result.error);
@@ -140,6 +144,25 @@ export function SettingsForm({
             <Plus className="h-4 w-4" />
             Add name
           </button>
+        </div>
+
+        <div className="flex items-start gap-3 rounded-lg border border-slate-200 p-3">
+          <input
+            id="notify"
+            type="checkbox"
+            checked={notify}
+            onChange={(e) => setNotify(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600"
+          />
+          <label htmlFor="notify" className="text-sm">
+            <span className="font-medium text-slate-700">
+              Email me reminders
+            </span>
+            <span className="block text-xs text-slate-400">
+              A periodic summary of accounts going dormant and CDs maturing
+              soon. Sending turns on once the app is deployed with email set up.
+            </span>
+          </label>
         </div>
 
         {error && (

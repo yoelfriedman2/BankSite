@@ -185,3 +185,31 @@ export async function duplicateAccount(
   revalidate();
   return {};
 }
+
+/** One-click: stamp an account's last activity as today (resets dormancy clock). */
+export async function logActivityToday(
+  id: string,
+): Promise<{ error?: string }> {
+  const today = new Date().toISOString().slice(0, 10);
+
+  if (DEMO_MODE) {
+    updateDemoAccount(id, { last_activity_date: today });
+    revalidate();
+    return {};
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { error } = await supabase
+    .from("accounts")
+    .update({ last_activity_date: today })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidate();
+  return {};
+}

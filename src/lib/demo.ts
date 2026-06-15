@@ -99,6 +99,7 @@ function seedToBankFields(s: (typeof BANKS_SEED)[number]): BankFields {
     priority: null,
     open_methods: null,
     eligibility: null,
+    eligibility_date: null,
     branch_location: null,
     phone: null,
     requirements: null,
@@ -107,7 +108,12 @@ function seedToBankFields(s: (typeof BANKS_SEED)[number]): BankFields {
 }
 
 const BANK_OVERRIDES: Record<number, Partial<BankFields>> = {
-  0: { status: "open", open_methods: ["online", "in_person"], eligibility: "nationwide" },
+  0: {
+    status: "open",
+    open_methods: ["online", "in_person"],
+    eligibility: "nationwide",
+    eligibility_date: yearsAgo(1),
+  },
   1: { status: "open", open_methods: ["in_person"], eligibility: "in_state" },
   2: { status: "open", open_methods: ["online"], eligibility: "nationwide" },
   3: { status: "open" },
@@ -195,6 +201,7 @@ function createInitialStore(): DemoStore {
     display_name: "Demo User",
     default_dormancy_months: 12,
     holders: ["John", "Jane", "Joint"],
+    notify_email: false,
     created_at: new Date().toISOString(),
   };
 

@@ -8,6 +8,7 @@ export async function updateSettings(values: {
   display_name: string;
   default_dormancy_months: string;
   holders: string[];
+  notify_email: boolean;
 }): Promise<{ error?: string }> {
   const months = parseInt(values.default_dormancy_months, 10);
   if (!Number.isFinite(months) || months < 1) {
@@ -23,6 +24,7 @@ export async function updateSettings(values: {
       display_name: displayName,
       default_dormancy_months: months,
       holders,
+      notify_email: values.notify_email,
     });
     revalidatePath("/settings");
     revalidatePath("/banks");
@@ -43,6 +45,7 @@ export async function updateSettings(values: {
       display_name: displayName,
       default_dormancy_months: months,
       holders,
+      notify_email: values.notify_email,
     })
     .eq("id", user.id);
 

@@ -17,6 +17,7 @@ create table if not exists public.profiles (
   display_name            text,
   default_dormancy_months integer not null default 12,
   holders                 text[] not null default '{}',
+  notify_email            boolean not null default false,
   created_at              timestamptz not null default now()
 );
 
@@ -52,6 +53,7 @@ create table if not exists public.banks (
   priority        text check (priority in ('low', 'med', 'high')),
   open_methods    text[],
   eligibility     text check (eligibility in ('nationwide', 'in_state', 'local_only')),
+  eligibility_date date,
   branch_location text,
   phone           text,
   requirements    text,

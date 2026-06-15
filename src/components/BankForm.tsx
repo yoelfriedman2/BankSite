@@ -37,6 +37,7 @@ function toFormValues(b: Bank | null): BankFormValues {
     priority: b?.priority ?? "",
     open_methods: b?.open_methods ?? [],
     eligibility: b?.eligibility ?? "",
+    eligibility_date: b?.eligibility_date ?? "",
     branch_location: b?.branch_location ?? "",
     phone: b?.phone ?? "",
     requirements: b?.requirements ?? "",
@@ -374,6 +375,21 @@ export function BankForm({
                   </option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className={labelClass} htmlFor="eligibility_date">
+                Eligibility / record date
+              </label>
+              <input
+                id="eligibility_date"
+                type="date"
+                className={inputClass}
+                value={values.eligibility_date}
+                onChange={(e) => set("eligibility_date", e.target.value)}
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                Deposit date that sets your IPO subscription priority, if known.
+              </p>
             </div>
             <div>
               <span className={labelClass}>Open methods</span>

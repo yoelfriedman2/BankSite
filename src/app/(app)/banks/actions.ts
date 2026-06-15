@@ -26,6 +26,7 @@ export type BankFormValues = {
   priority: string;
   open_methods: OpenMethod[];
   eligibility: string;
+  eligibility_date: string;
   branch_location: string;
   phone: string;
   requirements: string;
@@ -62,6 +63,7 @@ function buildPatch(values: BankFormValues): Partial<BankFields> {
     priority: text(values.priority) as BankFields["priority"],
     open_methods: values.open_methods.length ? values.open_methods : null,
     eligibility: text(values.eligibility) as BankFields["eligibility"],
+    eligibility_date: text(values.eligibility_date),
     branch_location: text(values.branch_location),
     phone: text(values.phone),
     requirements: text(values.requirements),

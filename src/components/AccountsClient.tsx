@@ -1,8 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Pencil, AlertTriangle } from "lucide-react";
+import {
+  Search,
+  Pencil,
+  AlertTriangle,
+  CalendarCheck,
+  Loader2,
+} from "lucide-react";
 import {
   ACCOUNT_TYPE_LABELS,
   type Account,
@@ -18,6 +24,9 @@ import {
 import { formatCurrency, formatDate, maskAccountNumber, titleCase } from "@/lib/format";
 import { ActivityDot } from "@/components/badges";
 import { AccountModal } from "@/components/AccountModal";
+import { logActivityToday } from "@/app/(app)/accounts/actions";
+
+const ACTIVITY_TYPES = ["checking", "savings", "money_market"];
 
 export type AccountRow = Account & {
   bankName: string;
@@ -41,6 +50,29 @@ export function AccountsClient({
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [attentionOnly, setAttentionOnly] = useState(initialAttention);
   const [editing, setEditing] = useState<AccountRow | null>(null);
+  const [logPendingId, setLogPendingId] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+
+  function handleLogToday(r: AccountRow) {
+    setLogPendingId(r.id);
+    startTransition(async () => {
+      await logActivityToday(r.id);
+      setLogPendingId(null);
+      router.refresh();
+    });
+  }
+
+  const byHolder = useMemo(() => {
+    const m = new Map<string, { total: number; count: number }>();
+    for (const r of rows) {
+      const key = r.holder || "Unassigned";
+      const cur = m.get(key) ?? { total: 0, count: 0 };
+      cur.total += r.balance ?? 0;
+      cur.count += 1;
+      m.set(key, cur);
+    }
+    return Array.from(m.entries()).sort((a, b) => b[1].total - a[1].total);
+  }, [rows]);
 
   const attentionCount = useMemo(
     () => rows.filter((r) => needsAttention(r, defaultDormancyMonths)).length,
@@ -76,6 +108,24 @@ export function AccountsClient({
           </p>
         </div>
       </div>
+
+      {/* Totals by holder */}
+      {byHolder.length > 0 && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {byHolder.map(([name, v]) => (
+            <div
+              key={name}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+            >
+              <span className="font-medium text-slate-700">{name}</span>{" "}
+              <span className="font-semibold text-slate-900">
+                {formatCurrency(v.total)}
+              </span>{" "}
+              <span className="text-slate-400">· {v.count}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -223,7 +273,22 @@ export function AccountsClient({
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex justify-end">
+                      <div className="flex items-center justify-end gap-1">
+                        {r.account_type &&
+                          ACTIVITY_TYPES.includes(r.account_type) && (
+                            <button
+                              onClick={() => handleLogToday(r)}
+                              disabled={logPendingId === r.id}
+                              className="rounded-md p-1.5 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 disabled:opacity-50"
+                              title="Log activity today"
+                            >
+                              {logPendingId === r.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <CalendarCheck className="h-4 w-4" />
+                              )}
+                            </button>
+                          )}
                         <button
                           onClick={() => setEditing(r)}
                           className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"

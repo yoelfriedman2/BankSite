@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Search, Trash2, Loader2 } from "lucide-react";
+import { Plus, Search, Trash2, Loader2, Download } from "lucide-react";
 import {
   STATUS_LABELS,
   STATUS_ORDER,
@@ -19,6 +19,7 @@ import {
 import { formatCurrency, formatAssets, titleCase } from "@/lib/format";
 import { ActivityDot, PriorityBadge } from "@/components/badges";
 import { BankForm } from "@/components/BankForm";
+import { exportToExcel } from "@/lib/export";
 import { setBankStatus, deleteBank } from "@/app/(app)/banks/actions";
 
 type SortKey = "name" | "assets" | "state";
@@ -199,13 +200,22 @@ export function BanksClient({
             open · {counts.cannot_open} can&apos;t
           </p>
         </div>
-        <button
-          onClick={openAdd}
-          className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
-        >
-          <Plus className="h-4 w-4" />
-          Add bank
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => exportToExcel(banks, accounts)}
+            className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            <Download className="h-4 w-4" />
+            Export
+          </button>
+          <button
+            onClick={openAdd}
+            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+          >
+            <Plus className="h-4 w-4" />
+            Add bank
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

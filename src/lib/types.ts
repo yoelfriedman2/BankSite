@@ -36,6 +36,7 @@ export interface Bank {
   priority: Priority | null;
   open_methods: OpenMethod[] | null;
   eligibility: Eligibility | null;
+  eligibility_date: string | null; // deposit eligibility / record date for IPO priority
   branch_location: string | null;
   phone: string | null;
   requirements: string | null;
@@ -71,6 +72,7 @@ export interface Profile {
   display_name: string | null;
   default_dormancy_months: number;
   holders: string[];
+  notify_email: boolean;
   created_at: string;
 }
 
