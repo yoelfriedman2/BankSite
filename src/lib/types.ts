@@ -13,6 +13,12 @@ export type AccountType =
 export type Priority = "low" | "med" | "high";
 export type OpenMethod = "online" | "mail" | "in_person";
 export type Eligibility = "nationwide" | "in_state" | "local_only";
+export type ConversionStage =
+  | "none"
+  | "rumored"
+  | "filed"
+  | "subscription"
+  | "completed";
 
 /**
  * A bank in the user's master list: FDIC reference data plus the user's
@@ -41,6 +47,20 @@ export interface Bank {
   phone: string | null;
   requirements: string | null;
   notes: string | null;
+
+  // Conversion pipeline
+  conversion_stage: ConversionStage;
+  subscription_start: string | null;
+  subscription_end: string | null;
+  pricing_date: string | null;
+
+  // Scale / account-opening helpers
+  application_steps: Record<string, boolean>;
+  online_url: string | null;
+  username: string | null;
+  access_notes: string | null;
+  min_to_open: number | null;
+  target_balance: number | null;
 
   created_at: string;
   updated_at: string;
@@ -127,3 +147,27 @@ export const ELIGIBILITY_LABELS: Record<Eligibility, string> = {
   in_state: "In-state only",
   local_only: "Local area only",
 };
+
+export const CONVERSION_STAGE_LABELS: Record<ConversionStage, string> = {
+  none: "No plans",
+  rumored: "Rumored",
+  filed: "Filed / announced",
+  subscription: "Subscription open",
+  completed: "Converted",
+};
+
+export const CONVERSION_STAGE_ORDER: ConversionStage[] = [
+  "none",
+  "rumored",
+  "filed",
+  "subscription",
+  "completed",
+];
+
+/** Steps shown in the "Applied" account-opening checklist. */
+export const APPLICATION_STEPS: { key: string; label: string }[] = [
+  { key: "submitted", label: "Application submitted" },
+  { key: "funded", label: "Initial deposit funded" },
+  { key: "welcome_kit", label: "Welcome kit received" },
+  { key: "online_access", label: "Online access set up" },
+];

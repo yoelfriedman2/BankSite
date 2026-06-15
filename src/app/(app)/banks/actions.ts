@@ -12,7 +12,7 @@ import {
   type ImportBank,
 } from "@/lib/demo";
 import { BANKS_SEED } from "@/lib/banks-seed";
-import type { BankStatus, OpenMethod } from "@/lib/types";
+import type { BankStatus, OpenMethod, ConversionStage } from "@/lib/types";
 
 export type BankFormValues = {
   id?: string;
@@ -31,6 +31,16 @@ export type BankFormValues = {
   phone: string;
   requirements: string;
   notes: string;
+  conversion_stage: ConversionStage;
+  subscription_start: string;
+  subscription_end: string;
+  pricing_date: string;
+  application_steps: Record<string, boolean>;
+  online_url: string;
+  username: string;
+  access_notes: string;
+  min_to_open: string;
+  target_balance: string;
 };
 
 function text(v: string): string | null {
@@ -68,6 +78,16 @@ function buildPatch(values: BankFormValues): Partial<BankFields> {
     phone: text(values.phone),
     requirements: text(values.requirements),
     notes: text(values.notes),
+    conversion_stage: values.conversion_stage,
+    subscription_start: text(values.subscription_start),
+    subscription_end: text(values.subscription_end),
+    pricing_date: text(values.pricing_date),
+    application_steps: values.application_steps,
+    online_url: text(values.online_url),
+    username: text(values.username),
+    access_notes: text(values.access_notes),
+    min_to_open: decimal(values.min_to_open),
+    target_balance: decimal(values.target_balance),
   };
 }
 

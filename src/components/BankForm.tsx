@@ -9,6 +9,9 @@ import {
   ACCOUNT_TYPE_LABELS,
   OPEN_METHOD_LABELS,
   ELIGIBILITY_LABELS,
+  CONVERSION_STAGE_LABELS,
+  CONVERSION_STAGE_ORDER,
+  APPLICATION_STEPS,
   type Account,
   type Bank,
   type OpenMethod,
@@ -42,6 +45,16 @@ function toFormValues(b: Bank | null): BankFormValues {
     phone: b?.phone ?? "",
     requirements: b?.requirements ?? "",
     notes: b?.notes ?? "",
+    conversion_stage: b?.conversion_stage ?? "none",
+    subscription_start: b?.subscription_start ?? "",
+    subscription_end: b?.subscription_end ?? "",
+    pricing_date: b?.pricing_date ?? "",
+    application_steps: b?.application_steps ?? {},
+    online_url: b?.online_url ?? "",
+    username: b?.username ?? "",
+    access_notes: b?.access_notes ?? "",
+    min_to_open: b?.min_to_open != null ? String(b.min_to_open) : "",
+    target_balance: b?.target_balance != null ? String(b.target_balance) : "",
   };
 }
 
@@ -85,6 +98,16 @@ export function BankForm({
       open_methods: v.open_methods.includes(m)
         ? v.open_methods.filter((x) => x !== m)
         : [...v.open_methods, m],
+    }));
+  }
+
+  function toggleStep(key: string) {
+    setValues((v) => ({
+      ...v,
+      application_steps: {
+        ...v.application_steps,
+        [key]: !v.application_steps[key],
+      },
     }));
   }
 
@@ -169,6 +192,98 @@ export function BankForm({
                   {STATUS_LABELS[s]}
                 </button>
               ))}
+            </div>
+          </section>
+
+          {/* Application checklist */}
+          {(values.status === "applied" || values.status === "open") && (
+            <section className="space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Application checklist
+              </h3>
+              <div className="space-y-2">
+                {APPLICATION_STEPS.map((step) => (
+                  <label
+                    key={step.key}
+                    className="flex items-center gap-2 text-sm text-slate-700"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!!values.application_steps[step.key]}
+                      onChange={() => toggleStep(step.key)}
+                      className="h-4 w-4 rounded border-slate-300 text-indigo-600"
+                    />
+                    {step.label}
+                  </label>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Conversion / IPO */}
+          <section className="space-y-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Conversion / IPO
+            </h3>
+            <div>
+              <label className={labelClass} htmlFor="conversion_stage">
+                Stage
+              </label>
+              <select
+                id="conversion_stage"
+                className={inputClass}
+                value={values.conversion_stage}
+                onChange={(e) =>
+                  set(
+                    "conversion_stage",
+                    e.target.value as BankFormValues["conversion_stage"],
+                  )
+                }
+              >
+                {CONVERSION_STAGE_ORDER.map((s) => (
+                  <option key={s} value={s}>
+                    {CONVERSION_STAGE_LABELS[s]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass} htmlFor="subscription_start">
+                  Subscription opens
+                </label>
+                <input
+                  id="subscription_start"
+                  type="date"
+                  className={inputClass}
+                  value={values.subscription_start}
+                  onChange={(e) => set("subscription_start", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className={labelClass} htmlFor="subscription_end">
+                  Subscription deadline
+                </label>
+                <input
+                  id="subscription_end"
+                  type="date"
+                  className={inputClass}
+                  value={values.subscription_end}
+                  onChange={(e) => set("subscription_end", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className={labelClass} htmlFor="pricing_date">
+                  Expected pricing
+                </label>
+                <input
+                  id="pricing_date"
+                  type="date"
+                  className={inputClass}
+                  value={values.pricing_date}
+                  onChange={(e) => set("pricing_date", e.target.value)}
+                />
+              </div>
             </div>
           </section>
 
@@ -346,6 +461,30 @@ export function BankForm({
                   onChange={(e) => set("holding_company", e.target.value)}
                 />
               </div>
+              <div>
+                <label className={labelClass} htmlFor="min_to_open">
+                  Minimum to open ($)
+                </label>
+                <input
+                  id="min_to_open"
+                  type="number"
+                  className={inputClass}
+                  value={values.min_to_open}
+                  onChange={(e) => set("min_to_open", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className={labelClass} htmlFor="target_balance">
+                  Target balance ($)
+                </label>
+                <input
+                  id="target_balance"
+                  type="number"
+                  className={inputClass}
+                  value={values.target_balance}
+                  onChange={(e) => set("target_balance", e.target.value)}
+                />
+              </div>
             </div>
           </section>
 
@@ -434,6 +573,49 @@ export function BankForm({
                   onChange={(e) => set("phone", e.target.value)}
                 />
               </div>
+            </div>
+          </section>
+
+          {/* Online access */}
+          <section className="space-y-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Online access
+            </h3>
+            <div>
+              <label className={labelClass} htmlFor="online_url">
+                Login URL
+              </label>
+              <input
+                id="online_url"
+                className={inputClass}
+                placeholder="https://…"
+                value={values.online_url}
+                onChange={(e) => set("online_url", e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={labelClass} htmlFor="username">
+                Username
+              </label>
+              <input
+                id="username"
+                className={inputClass}
+                value={values.username}
+                onChange={(e) => set("username", e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={labelClass} htmlFor="access_notes">
+                Access notes
+              </label>
+              <textarea
+                id="access_notes"
+                rows={2}
+                className={inputClass}
+                placeholder="security questions, which email, etc. — don't store passwords"
+                value={values.access_notes}
+                onChange={(e) => set("access_notes", e.target.value)}
+              />
             </div>
           </section>
 

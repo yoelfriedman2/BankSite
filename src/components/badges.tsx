@@ -1,8 +1,10 @@
 import {
   STATUS_LABELS,
   PRIORITY_LABELS,
+  CONVERSION_STAGE_LABELS,
   type BankStatus,
   type Priority,
+  type ConversionStage,
 } from "@/lib/types";
 import type { ActivityLevel } from "@/lib/dormancy";
 
@@ -54,5 +56,24 @@ export function ActivityDot({ level }: { level: ActivityLevel }) {
       className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${DOT_STYLES[level]}`}
       aria-hidden
     />
+  );
+}
+
+const CONVERSION_STYLES: Record<ConversionStage, string> = {
+  none: "",
+  rumored: "bg-slate-100 text-slate-600 ring-slate-200",
+  filed: "bg-amber-100 text-amber-800 ring-amber-200",
+  subscription: "bg-rose-100 text-rose-700 ring-rose-200",
+  completed: "bg-emerald-100 text-emerald-700 ring-emerald-200",
+};
+
+export function ConversionBadge({ stage }: { stage: ConversionStage }) {
+  if (stage === "none") return null;
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${CONVERSION_STYLES[stage]}`}
+    >
+      {CONVERSION_STAGE_LABELS[stage]}
+    </span>
   );
 }

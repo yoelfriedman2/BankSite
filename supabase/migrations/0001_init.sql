@@ -59,6 +59,21 @@ create table if not exists public.banks (
   requirements    text,
   notes           text,
 
+  -- conversion pipeline
+  conversion_stage   text not null default 'none'
+                       check (conversion_stage in ('none', 'rumored', 'filed', 'subscription', 'completed')),
+  subscription_start date,
+  subscription_end   date,
+  pricing_date       date,
+
+  -- scale / account-opening helpers
+  application_steps  jsonb not null default '{}',
+  online_url         text,
+  username           text,
+  access_notes       text,
+  min_to_open        numeric,
+  target_balance     numeric,
+
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now(),
 

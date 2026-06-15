@@ -17,7 +17,7 @@ import {
   type ActivityLevel,
 } from "@/lib/dormancy";
 import { formatCurrency, formatAssets, titleCase } from "@/lib/format";
-import { ActivityDot, PriorityBadge } from "@/components/badges";
+import { ActivityDot, PriorityBadge, ConversionBadge } from "@/components/badges";
 import { BankForm } from "@/components/BankForm";
 import { exportToExcel } from "@/lib/export";
 import { setBankStatus, deleteBank } from "@/app/(app)/banks/actions";
@@ -316,7 +316,12 @@ export function BanksClient({
                     className="cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50/70"
                   >
                     <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900">{b.name}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-slate-900">
+                          {b.name}
+                        </span>
+                        <ConversionBadge stage={b.conversion_stage} />
+                      </div>
                       {b.holding_company && (
                         <div className="max-w-[14rem] truncate text-xs text-slate-400">
                           {titleCase(b.holding_company)}
@@ -378,7 +383,15 @@ export function BanksClient({
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-slate-600">
                       {accts.length > 0 ? (
-                        formatCurrency(total)
+                        <div>
+                          {formatCurrency(total)}
+                          {b.target_balance != null &&
+                            total < b.target_balance && (
+                              <div className="text-xs font-medium text-amber-600">
+                                below target
+                              </div>
+                            )}
+                        </div>
                       ) : (
                         <span className="text-slate-300">—</span>
                       )}
