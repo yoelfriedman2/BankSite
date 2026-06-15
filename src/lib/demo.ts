@@ -84,6 +84,7 @@ function blankAccount(): AccountFields {
     cd_maturity_date: null,
     date_opened: null,
     notes: null,
+    activity_log: [],
   };
 }
 function seedToBankFields(s: (typeof BANKS_SEED)[number]): BankFields {
@@ -111,6 +112,7 @@ function seedToBankFields(s: (typeof BANKS_SEED)[number]): BankFields {
     application_steps: {},
     online_url: null,
     username: null,
+    password: null,
     access_notes: null,
     min_to_open: null,
     target_balance: null,
@@ -129,6 +131,8 @@ const BANK_OVERRIDES: Record<number, Partial<BankFields>> = {
     pricing_date: daysFromNow(20),
     online_url: "https://firstnational.example.com",
     username: "jfriedman",
+    password: "S3cure!demo",
+    application_steps: { online_access: true },
     min_to_open: 50,
     target_balance: 1000,
   },
@@ -157,7 +161,7 @@ const BANK_OVERRIDES: Record<number, Partial<BankFields>> = {
     eligibility: "in_state",
     notes: "Application submitted ~2 weeks ago.",
     conversion_stage: "filed",
-    application_steps: { submitted: true, funded: true },
+    application_steps: { online_access: false },
     online_url: "https://summitsavings.example.com",
     username: "jfriedman",
   },
@@ -186,6 +190,10 @@ function createInitialStore(): DemoStore {
       balance: 2450.75,
       last_activity_date: monthsAgo(1), // green
       date_opened: yearsAgo(3),
+      activity_log: [
+        { date: monthsAgo(1), note: "$1 transfer to keep active" },
+        { date: monthsAgo(7), note: "Deposit" },
+      ],
     }),
     makeAccount(banks[0].id, {
       ...blankAccount(),

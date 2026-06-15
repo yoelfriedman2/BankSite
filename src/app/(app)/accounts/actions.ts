@@ -26,6 +26,7 @@ export type AccountFormValues = {
   cd_maturity_date: string;
   date_opened: string;
   notes: string;
+  activity_log: { date: string; note: string }[];
 };
 
 function text(v: string): string | null {
@@ -46,17 +47,28 @@ function integer(v: string): number | null {
 }
 
 function buildPatch(values: AccountFormValues): AccountFields {
+  const log = (values.activity_log ?? [])
+    .filter((e) => e.date)
+    .map((e) => ({ date: e.date, note: e.note?.trim() ? e.note.trim() : null }));
+  const logMax = log.length
+    ? log.map((e) => e.date).sort().at(-1)!
+    : null;
+  const fieldDate = text(values.last_activity_date);
+  const lastActivity =
+    [fieldDate, logMax].filter(Boolean).sort().at(-1) ?? null;
+
   return {
     holder: text(values.holder),
     account_type: text(values.account_type) as AccountFields["account_type"],
     account_number: text(values.account_number),
     routing_number: text(values.routing_number),
     balance: decimal(values.balance),
-    last_activity_date: text(values.last_activity_date),
+    last_activity_date: lastActivity,
     dormancy_months_override: integer(values.dormancy_months_override),
     cd_maturity_date: text(values.cd_maturity_date),
     date_opened: text(values.date_opened),
     notes: text(values.notes),
+    activity_log: log,
   };
 }
 
@@ -72,6 +84,7 @@ function fieldsFromAccount(a: Account): AccountFields {
     cd_maturity_date: a.cd_maturity_date,
     date_opened: a.date_opened,
     notes: a.notes,
+    activity_log: a.activity_log,
   };
 }
 
@@ -155,6 +168,7 @@ export async function duplicateAccount(
     addDemoAccount(source.bank_id, {
       ...fieldsFromAccount(source),
       account_number: null,
+      activity_log: [],
     });
     revalidate();
     return {};
@@ -177,6 +191,7 @@ export async function duplicateAccount(
   const { error } = await supabase.from("accounts").insert({
     ...copy,
     account_number: null,
+    activity_log: [],
     user_id: user.id,
     bank_id: (source as Account).bank_id,
   });
@@ -193,7 +208,9 @@ export async function logActivityToday(
   const today = new Date().toISOString().slice(0, 10);
 
   if (DEMO_MODE) {
-    updateDemoAccount(id, { last_activity_date: today });
+    const acc = getDemoAccounts().find((a) => a.id === id);
+    const log = [...(acc?.activity_log ?? []), { date: today, note: null }];
+    updateDemoAccount(id, { last_activity_date: today, activity_log: log });
     revalidate();
     return {};
   }
@@ -204,9 +221,18 @@ export async function logActivityToday(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
+  const { data: acc } = await supabase
+    .from("accounts")
+    .select("activity_log")
+    .eq("id", id)
+    .single();
+  const existing =
+    (acc?.activity_log as { date: string; note: string | null }[]) ?? [];
+  const log = [...existing, { date: today, note: null }];
+
   const { error } = await supabase
     .from("accounts")
-    .update({ last_activity_date: today })
+    .update({ last_activity_date: today, activity_log: log })
     .eq("id", id);
   if (error) return { error: error.message };
 

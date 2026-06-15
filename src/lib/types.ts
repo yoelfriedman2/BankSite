@@ -58,6 +58,7 @@ export interface Bank {
   application_steps: Record<string, boolean>;
   online_url: string | null;
   username: string | null;
+  password: string | null;
   access_notes: string | null;
   min_to_open: number | null;
   target_balance: number | null;
@@ -82,6 +83,7 @@ export interface Account {
   cd_maturity_date: string | null;
   date_opened: string | null;
   notes: string | null;
+  activity_log: { date: string; note: string | null }[];
 
   created_at: string;
   updated_at: string;
@@ -164,10 +166,7 @@ export const CONVERSION_STAGE_ORDER: ConversionStage[] = [
   "completed",
 ];
 
-/** Steps shown in the "Applied" account-opening checklist. */
+/** Steps shown in the "Applied" account-opening checklist (kept intentionally simple). */
 export const APPLICATION_STEPS: { key: string; label: string }[] = [
-  { key: "submitted", label: "Application submitted" },
-  { key: "funded", label: "Initial deposit funded" },
-  { key: "welcome_kit", label: "Welcome kit received" },
   { key: "online_access", label: "Online access set up" },
 ];

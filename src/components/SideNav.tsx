@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Landmark,
   CreditCard,
+  CalendarDays,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -14,6 +15,7 @@ const LINKS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/banks", label: "Banks", icon: Landmark },
   { href: "/accounts", label: "Accounts", icon: CreditCard },
+  { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 

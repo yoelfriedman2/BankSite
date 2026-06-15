@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, type FormEvent } from "react";
-import { X, Loader2, Plus, Copy, Pencil, Trash2 } from "lucide-react";
+import { X, Loader2, Plus, Copy, Pencil, Trash2, Eye, EyeOff } from "lucide-react";
 import {
   ASSIGNABLE_STATUSES,
   PRIORITY_LABELS,
@@ -52,6 +52,7 @@ function toFormValues(b: Bank | null): BankFormValues {
     application_steps: b?.application_steps ?? {},
     online_url: b?.online_url ?? "",
     username: b?.username ?? "",
+    password: b?.password ?? "",
     access_notes: b?.access_notes ?? "",
     min_to_open: b?.min_to_open != null ? String(b.min_to_open) : "",
     target_balance: b?.target_balance != null ? String(b.target_balance) : "",
@@ -84,6 +85,7 @@ export function BankForm({
     null,
   );
   const [busyAcctId, setBusyAcctId] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   function set<K extends keyof BankFormValues>(
     key: K,
@@ -603,6 +605,37 @@ export function BankForm({
                 value={values.username}
                 onChange={(e) => set("username", e.target.value)}
               />
+            </div>
+            <div>
+              <label className={labelClass} htmlFor="password">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="off"
+                  className={`${inputClass} pr-10`}
+                  value={values.password}
+                  onChange={(e) => set("password", e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((s) => !s)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  title={showPassword ? "Hide" : "Show"}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-slate-400">
+                Stored privately on your account; never shown in lists or
+                exports.
+              </p>
             </div>
             <div>
               <label className={labelClass} htmlFor="access_notes">

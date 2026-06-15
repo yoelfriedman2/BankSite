@@ -3,6 +3,7 @@
 import { useState, useTransition, type FormEvent } from "react";
 import { X, Loader2 } from "lucide-react";
 import { ACCOUNT_TYPE_LABELS, type Account } from "@/lib/types";
+import { formatDate } from "@/lib/format";
 import {
   upsertAccount,
   type AccountFormValues,
@@ -35,6 +36,10 @@ function toValues(
     cd_maturity_date: a?.cd_maturity_date ?? "",
     date_opened: a?.date_opened ?? "",
     notes: a?.notes ?? "",
+    activity_log: (a?.activity_log ?? []).map((e) => ({
+      date: e.date,
+      note: e.note ?? "",
+    })),
   };
 }
 
@@ -62,12 +67,32 @@ export function AccountModal({
   );
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [newDate, setNewDate] = useState(() =>
+    new Date().toISOString().slice(0, 10),
+  );
+  const [newNote, setNewNote] = useState("");
 
   function set<K extends keyof AccountFormValues>(
     key: K,
     value: AccountFormValues[K],
   ) {
     setValues((v) => ({ ...v, [key]: value }));
+  }
+
+  function addEntry() {
+    if (!newDate) return;
+    setValues((v) => ({
+      ...v,
+      activity_log: [...v.activity_log, { date: newDate, note: newNote }],
+    }));
+    setNewNote("");
+  }
+
+  function removeEntry(index: number) {
+    setValues((v) => ({
+      ...v,
+      activity_log: v.activity_log.filter((_, i) => i !== index),
+    }));
   }
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -85,6 +110,9 @@ export function AccountModal({
 
   const showActivity = DORMANCY_TYPES.includes(values.account_type);
   const showCd = values.account_type === "cd";
+  const sortedLog = values.activity_log
+    .map((e, i) => ({ e, i }))
+    .sort((a, b) => b.e.date.localeCompare(a.e.date));
 
   return (
     <div
@@ -262,6 +290,55 @@ export function AccountModal({
               value={values.notes}
               onChange={(e) => set("notes", e.target.value)}
             />
+          </div>
+
+          <div className="col-span-2">
+            <label className={labelClass}>Activity history</label>
+            {sortedLog.length > 0 && (
+              <ul className="mb-2 space-y-1">
+                {sortedLog.map(({ e, i }) => (
+                  <li
+                    key={i}
+                    className="flex items-center gap-2 rounded-md bg-slate-50 px-2 py-1 text-sm"
+                  >
+                    <span className="w-24 shrink-0 text-slate-500">
+                      {formatDate(e.date)}
+                    </span>
+                    <span className="flex-1 truncate text-slate-700">
+                      {e.note}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeEntry(i)}
+                      className="shrink-0 text-slate-400 hover:text-rose-600"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="flex gap-2">
+              <input
+                type="date"
+                className={`${inputClass} w-40`}
+                value={newDate}
+                onChange={(e) => setNewDate(e.target.value)}
+              />
+              <input
+                className={inputClass}
+                placeholder="note (optional)"
+                value={newNote}
+                onChange={(e) => setNewNote(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={addEntry}
+                className="shrink-0 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:bg-slate-100"
+              >
+                Add
+              </button>
+            </div>
           </div>
         </div>
 

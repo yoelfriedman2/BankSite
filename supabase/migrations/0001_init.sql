@@ -70,6 +70,7 @@ create table if not exists public.banks (
   application_steps  jsonb not null default '{}',
   online_url         text,
   username           text,
+  password           text,
   access_notes       text,
   min_to_open        numeric,
   target_balance     numeric,
@@ -115,6 +116,7 @@ create table if not exists public.accounts (
   cd_maturity_date         date,
   date_opened              date,
   notes                    text,
+  activity_log             jsonb not null default '[]',
 
   created_at               timestamptz not null default now(),
   updated_at               timestamptz not null default now()
