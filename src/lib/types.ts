@@ -1,4 +1,9 @@
-export type BankStatus = "untracked" | "open" | "want_to_open" | "cannot_open";
+export type BankStatus =
+  | "untracked"
+  | "want_to_open"
+  | "applied"
+  | "open"
+  | "cannot_open";
 export type AccountType =
   | "checking"
   | "savings"
@@ -6,6 +11,8 @@ export type AccountType =
   | "money_market"
   | "other";
 export type Priority = "low" | "med" | "high";
+export type OpenMethod = "online" | "mail" | "in_person";
+export type Eligibility = "nationwide" | "in_state" | "local_only";
 
 /**
  * A bank in the user's master list: FDIC reference data plus the user's
@@ -27,6 +34,10 @@ export interface Bank {
   // User tracking
   status: BankStatus;
   priority: Priority | null;
+  open_methods: OpenMethod[] | null;
+  eligibility: Eligibility | null;
+  branch_location: string | null;
+  phone: string | null;
   requirements: string | null;
   notes: string | null;
 
@@ -59,27 +70,33 @@ export interface Profile {
   id: string;
   display_name: string | null;
   default_dormancy_months: number;
+  holders: string[];
   created_at: string;
 }
 
 export const STATUS_LABELS: Record<BankStatus, string> = {
   untracked: "Untracked",
-  open: "Open",
   want_to_open: "Want to open",
+  applied: "Applied",
+  open: "Open",
   cannot_open: "Can't open",
 };
 
+/** Order used for status tabs/filters. */
 export const STATUS_ORDER: BankStatus[] = [
   "open",
+  "applied",
   "want_to_open",
   "cannot_open",
   "untracked",
 ];
 
+/** Order shown in the status picker inside the bank drawer. */
 export const ASSIGNABLE_STATUSES: BankStatus[] = [
   "untracked",
-  "open",
   "want_to_open",
+  "applied",
+  "open",
   "cannot_open",
 ];
 
@@ -95,4 +112,16 @@ export const PRIORITY_LABELS: Record<Priority, string> = {
   low: "Low",
   med: "Medium",
   high: "High",
+};
+
+export const OPEN_METHOD_LABELS: Record<OpenMethod, string> = {
+  online: "Online",
+  mail: "By mail",
+  in_person: "In person",
+};
+
+export const ELIGIBILITY_LABELS: Record<Eligibility, string> = {
+  nationwide: "Out-of-state OK",
+  in_state: "In-state only",
+  local_only: "Local area only",
 };

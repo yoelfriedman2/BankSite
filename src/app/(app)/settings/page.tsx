@@ -10,6 +10,7 @@ export default async function SettingsPage() {
         email={DEMO_USER.email}
         displayName={p.display_name ?? ""}
         defaultDormancyMonths={p.default_dormancy_months}
+        holders={p.holders}
       />
     );
   }
@@ -21,7 +22,7 @@ export default async function SettingsPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("display_name, default_dormancy_months")
+    .select("display_name, default_dormancy_months, holders")
     .eq("id", user!.id)
     .maybeSingle();
 
@@ -30,6 +31,7 @@ export default async function SettingsPage() {
       email={user!.email ?? ""}
       displayName={profile?.display_name ?? ""}
       defaultDormancyMonths={profile?.default_dormancy_months ?? 12}
+      holders={profile?.holders ?? []}
     />
   );
 }

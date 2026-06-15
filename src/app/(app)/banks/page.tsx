@@ -8,9 +8,29 @@ import {
   getKnownHolders,
 } from "@/lib/demo";
 import { seedBanks } from "./actions";
-import type { Account, Bank } from "@/lib/types";
+import type { Account, Bank, BankStatus } from "@/lib/types";
 
-export default async function BanksPage() {
+const VALID_STATUSES: Array<BankStatus | "all"> = [
+  "all",
+  "untracked",
+  "want_to_open",
+  "applied",
+  "open",
+  "cannot_open",
+];
+
+export default async function BanksPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }>;
+}) {
+  const sp = await searchParams;
+  const initialStatus = VALID_STATUSES.includes(
+    sp.status as BankStatus | "all",
+  )
+    ? (sp.status as BankStatus | "all")
+    : undefined;
+
   if (DEMO_MODE) {
     return (
       <BanksClient
@@ -18,6 +38,7 @@ export default async function BanksPage() {
         accounts={getDemoAccounts()}
         knownHolders={getKnownHolders()}
         defaultDormancyMonths={getDemoProfile().default_dormancy_months}
+        initialStatus={initialStatus}
       />
     );
   }
@@ -45,13 +66,16 @@ export default async function BanksPage() {
   const { data: accounts } = await supabase.from("accounts").select("*");
   const { data: profile } = await supabase
     .from("profiles")
-    .select("default_dormancy_months")
+    .select("default_dormancy_months, holders")
     .eq("id", user!.id)
     .maybeSingle();
 
   const accountList = (accounts ?? []) as Account[];
   const knownHolders = Array.from(
-    new Set(accountList.map((a) => a.holder).filter(Boolean) as string[]),
+    new Set([
+      ...((profile?.holders ?? []) as string[]),
+      ...(accountList.map((a) => a.holder).filter(Boolean) as string[]),
+    ]),
   ).sort();
 
   return (
@@ -60,6 +84,7 @@ export default async function BanksPage() {
       accounts={accountList}
       knownHolders={knownHolders}
       defaultDormancyMonths={profile?.default_dormancy_months ?? 12}
+      initialStatus={initialStatus}
     />
   );
 }

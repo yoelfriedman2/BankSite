@@ -8,7 +8,6 @@ import {
   CreditCard,
   Settings,
   LogOut,
-  Wallet,
 } from "lucide-react";
 
 const LINKS = [
@@ -29,8 +28,8 @@ export function SideNav({ displayName }: { displayName: string }) {
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-800 bg-slate-900 text-slate-300 md:flex">
       <div className="flex items-center gap-2.5 px-5 py-5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-sm">
-          <Wallet className="h-5 w-5" />
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-lg font-bold text-white shadow-sm">
+          F
         </span>
         <div className="leading-tight">
           <div className="text-sm font-semibold text-white">Bank Tracker</div>

@@ -8,7 +8,6 @@ import {
   CreditCard,
   Settings,
   LogOut,
-  Wallet,
 } from "lucide-react";
 
 const LINKS = [
@@ -29,8 +28,8 @@ export function TopNav() {
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur md:hidden">
       <div className="flex items-center gap-2 px-4 py-2.5">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-white">
-          <Wallet className="h-4 w-4" />
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-sm font-bold text-white">
+          F
         </span>
         <span className="font-semibold text-slate-900">Bank Tracker</span>
         <form action="/auth/signout" method="post" className="ml-auto">

@@ -36,14 +36,19 @@ function StatCard({
   value,
   icon,
   accent,
+  href,
 }: {
   label: string;
   value: string | number;
   icon: React.ReactNode;
   accent: string;
+  href: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+    <Link
+      href={href}
+      className="rounded-2xl border border-slate-200 bg-white p-5 transition-colors hover:border-indigo-300 hover:bg-indigo-50/30"
+    >
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-slate-500">{label}</span>
         <span
@@ -53,7 +58,7 @@ function StatCard({
         </span>
       </div>
       <p className="mt-3 text-2xl font-semibold text-slate-900">{value}</p>
-    </div>
+    </Link>
   );
 }
 
@@ -132,24 +137,28 @@ export default async function DashboardPage() {
           value={counts.open}
           icon={<Landmark className="h-5 w-5 text-emerald-600" />}
           accent="bg-emerald-50"
+          href="/banks?status=open"
         />
         <StatCard
           label="Accounts"
           value={accounts.length}
           icon={<CreditCard className="h-5 w-5 text-blue-600" />}
           accent="bg-blue-50"
+          href="/accounts"
         />
         <StatCard
           label="Total balance"
           value={formatCurrency(totalBalance)}
           icon={<Wallet className="h-5 w-5 text-indigo-600" />}
           accent="bg-indigo-50"
+          href="/accounts"
         />
         <StatCard
           label="Need attention"
           value={attention.length}
           icon={<AlertTriangle className="h-5 w-5 text-amber-600" />}
           accent="bg-amber-50"
+          href="/accounts?attention=1"
         />
       </div>
 

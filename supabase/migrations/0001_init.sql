@@ -16,6 +16,7 @@ create table if not exists public.profiles (
   id                      uuid primary key references auth.users (id) on delete cascade,
   display_name            text,
   default_dormancy_months integer not null default 12,
+  holders                 text[] not null default '{}',
   created_at              timestamptz not null default now()
 );
 
@@ -47,8 +48,12 @@ create table if not exists public.banks (
 
   -- user tracking
   status          text not null default 'untracked'
-                    check (status in ('untracked', 'open', 'want_to_open', 'cannot_open')),
+                    check (status in ('untracked', 'want_to_open', 'applied', 'open', 'cannot_open')),
   priority        text check (priority in ('low', 'med', 'high')),
+  open_methods    text[],
+  eligibility     text check (eligibility in ('nationwide', 'in_state', 'local_only')),
+  branch_location text,
+  phone           text,
   requirements    text,
   notes           text,
 

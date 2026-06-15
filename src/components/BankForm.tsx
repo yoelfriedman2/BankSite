@@ -7,8 +7,11 @@ import {
   PRIORITY_LABELS,
   STATUS_LABELS,
   ACCOUNT_TYPE_LABELS,
+  OPEN_METHOD_LABELS,
+  ELIGIBILITY_LABELS,
   type Account,
   type Bank,
+  type OpenMethod,
 } from "@/lib/types";
 import { getActivityLevel } from "@/lib/dormancy";
 import { formatCurrency, maskAccountNumber } from "@/lib/format";
@@ -32,6 +35,10 @@ function toFormValues(b: Bank | null): BankFormValues {
     assets: b?.assets != null ? String(b.assets) : "",
     holding_company: b?.holding_company ?? "",
     priority: b?.priority ?? "",
+    open_methods: b?.open_methods ?? [],
+    eligibility: b?.eligibility ?? "",
+    branch_location: b?.branch_location ?? "",
+    phone: b?.phone ?? "",
     requirements: b?.requirements ?? "",
     notes: b?.notes ?? "",
   };
@@ -69,6 +76,15 @@ export function BankForm({
     value: BankFormValues[K],
   ) {
     setValues((v) => ({ ...v, [key]: value }));
+  }
+
+  function toggleMethod(m: OpenMethod) {
+    setValues((v) => ({
+      ...v,
+      open_methods: v.open_methods.includes(m)
+        ? v.open_methods.filter((x) => x !== m)
+        : [...v.open_methods, m],
+    }));
   }
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -327,6 +343,79 @@ export function BankForm({
                   className={inputClass}
                   value={values.holding_company}
                   onChange={(e) => set("holding_company", e.target.value)}
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* How to open */}
+          <section className="space-y-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              How to open
+            </h3>
+            <div>
+              <label className={labelClass} htmlFor="eligibility">
+                Who can open
+              </label>
+              <select
+                id="eligibility"
+                className={inputClass}
+                value={values.eligibility}
+                onChange={(e) => set("eligibility", e.target.value)}
+              >
+                <option value="">—</option>
+                {(
+                  Object.keys(ELIGIBILITY_LABELS) as Array<
+                    keyof typeof ELIGIBILITY_LABELS
+                  >
+                ).map((k) => (
+                  <option key={k} value={k}>
+                    {ELIGIBILITY_LABELS[k]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <span className={labelClass}>Open methods</span>
+              <div className="flex flex-wrap gap-2">
+                {(Object.keys(OPEN_METHOD_LABELS) as OpenMethod[]).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => toggleMethod(m)}
+                    className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                      values.open_methods.includes(m)
+                        ? "border-indigo-600 bg-indigo-600 text-white"
+                        : "border-slate-300 text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {OPEN_METHOD_LABELS[m]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass} htmlFor="branch_location">
+                  Branch location
+                </label>
+                <input
+                  id="branch_location"
+                  className={inputClass}
+                  placeholder="address to call / visit"
+                  value={values.branch_location}
+                  onChange={(e) => set("branch_location", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className={labelClass} htmlFor="phone">
+                  Phone
+                </label>
+                <input
+                  id="phone"
+                  className={inputClass}
+                  value={values.phone}
+                  onChange={(e) => set("phone", e.target.value)}
                 />
               </div>
             </div>

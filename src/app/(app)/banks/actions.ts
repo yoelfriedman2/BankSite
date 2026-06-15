@@ -12,7 +12,7 @@ import {
   type ImportBank,
 } from "@/lib/demo";
 import { BANKS_SEED } from "@/lib/banks-seed";
-import type { BankStatus } from "@/lib/types";
+import type { BankStatus, OpenMethod } from "@/lib/types";
 
 export type BankFormValues = {
   id?: string;
@@ -24,6 +24,10 @@ export type BankFormValues = {
   assets: string;
   holding_company: string;
   priority: string;
+  open_methods: OpenMethod[];
+  eligibility: string;
+  branch_location: string;
+  phone: string;
   requirements: string;
   notes: string;
 };
@@ -56,6 +60,10 @@ function buildPatch(values: BankFormValues): Partial<BankFields> {
     assets: decimal(values.assets),
     holding_company: text(values.holding_company),
     priority: text(values.priority) as BankFields["priority"],
+    open_methods: values.open_methods.length ? values.open_methods : null,
+    eligibility: text(values.eligibility) as BankFields["eligibility"],
+    branch_location: text(values.branch_location),
+    phone: text(values.phone),
     requirements: text(values.requirements),
     notes: text(values.notes),
   };

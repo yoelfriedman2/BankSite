@@ -44,7 +44,7 @@ export default async function AccountsPage({
       .order("created_at", { ascending: true });
     const { data: profile } = await supabase
       .from("profiles")
-      .select("default_dormancy_months")
+      .select("default_dormancy_months, holders")
       .eq("id", user!.id)
       .maybeSingle();
 
@@ -52,7 +52,10 @@ export default async function AccountsPage({
     accounts = (acctData ?? []) as Account[];
     defaultMonths = profile?.default_dormancy_months ?? 12;
     knownHolders = Array.from(
-      new Set(accounts.map((a) => a.holder).filter(Boolean) as string[]),
+      new Set([
+        ...((profile?.holders ?? []) as string[]),
+        ...(accounts.map((a) => a.holder).filter(Boolean) as string[]),
+      ]),
     ).sort();
   }
 

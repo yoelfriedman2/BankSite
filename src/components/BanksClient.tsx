@@ -32,6 +32,7 @@ const SORT_LABELS: Record<SortKey, string> = {
 const STATUS_SELECT_STYLES: Record<BankStatus, string> = {
   untracked: "border-slate-200 bg-slate-50 text-slate-500",
   open: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  applied: "border-amber-200 bg-amber-50 text-amber-700",
   want_to_open: "border-indigo-200 bg-indigo-50 text-indigo-700",
   cannot_open: "border-rose-200 bg-rose-50 text-rose-700",
 };
@@ -77,14 +78,18 @@ export function BanksClient({
   accounts,
   defaultDormancyMonths,
   knownHolders,
+  initialStatus,
 }: {
   banks: Bank[];
   accounts: Account[];
   defaultDormancyMonths: number;
   knownHolders: string[];
+  initialStatus?: BankStatus | "all";
 }) {
   const router = useRouter();
-  const [statusFilter, setStatusFilter] = useState<BankStatus | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<BankStatus | "all">(
+    initialStatus ?? "all",
+  );
   const [stateFilter, setStateFilter] = useState<string>("all");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("name");
@@ -101,7 +106,14 @@ export function BanksClient({
   }, [accounts]);
 
   const counts = useMemo(() => {
-    const c = { all: banks.length, open: 0, want_to_open: 0, cannot_open: 0, untracked: 0 };
+    const c = {
+      all: banks.length,
+      open: 0,
+      applied: 0,
+      want_to_open: 0,
+      cannot_open: 0,
+      untracked: 0,
+    };
     for (const b of banks) c[b.status]++;
     return c;
   }, [banks]);
@@ -338,12 +350,14 @@ export function BanksClient({
                     </td>
                     <td className="px-4 py-3 text-slate-600">
                       {accts.length > 0 ? (
-                        <div>
-                          <div>{accts.length} account{accts.length === 1 ? "" : "s"}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-indigo-100 px-1.5 text-xs font-semibold text-indigo-700">
+                            {accts.length}
+                          </span>
                           {holders && (
-                            <div className="max-w-[12rem] truncate text-xs text-slate-400">
+                            <span className="max-w-[10rem] truncate text-xs text-slate-400">
                               {holders}
-                            </div>
+                            </span>
                           )}
                         </div>
                       ) : b.priority ? (
