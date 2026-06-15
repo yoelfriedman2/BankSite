@@ -1,13 +1,19 @@
 import Link from "next/link";
 import {
-  CircleCheck,
-  Clock3,
+  Landmark,
   Wallet,
+  CreditCard,
   AlertTriangle,
   ArrowRight,
+  CircleCheck,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { DEMO_MODE, getDemoBanks, getDemoProfile } from "@/lib/demo";
+import {
+  DEMO_MODE,
+  getDemoBanks,
+  getDemoAccounts,
+  getDemoProfile,
+} from "@/lib/demo";
 import {
   getActivityLevel,
   isCdMaturingSoon,
@@ -15,11 +21,12 @@ import {
   daysUntil,
   type ActivityLevel,
 } from "@/lib/dormancy";
-import { ACCOUNT_TYPE_LABELS, type Bank } from "@/lib/types";
+import { ACCOUNT_TYPE_LABELS, type Account, type Bank } from "@/lib/types";
 import { formatCurrency } from "@/lib/format";
 
 type AttentionItem = {
-  bank: Bank;
+  account: Account;
+  bankName: string;
   level: Exclude<ActivityLevel, "green" | "none">;
   reason: string;
 };
@@ -52,61 +59,65 @@ function StatCard({
 
 export default async function DashboardPage() {
   let banks: Bank[];
+  let accounts: Account[];
   let defaultMonths: number;
 
   if (DEMO_MODE) {
     banks = getDemoBanks();
+    accounts = getDemoAccounts();
     defaultMonths = getDemoProfile().default_dormancy_months;
   } else {
     const supabase = await createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
-
-    const { data: banksData } = await supabase
-      .from("banks")
-      .select("*")
-      .order("name", { ascending: true });
-
+    const { data: banksData } = await supabase.from("banks").select("*");
+    const { data: acctData } = await supabase.from("accounts").select("*");
     const { data: profile } = await supabase
       .from("profiles")
       .select("default_dormancy_months")
       .eq("id", user!.id)
       .maybeSingle();
-
     banks = (banksData ?? []) as Bank[];
+    accounts = (acctData ?? []) as Account[];
     defaultMonths = profile?.default_dormancy_months ?? 12;
   }
 
   const now = new Date();
   const counts = { open: 0, want_to_open: 0, cannot_open: 0 };
-  let totalBalance = 0;
-  const attention: AttentionItem[] = [];
-
   for (const b of banks) {
     if (b.status === "open" || b.status === "want_to_open" || b.status === "cannot_open") {
       counts[b.status]++;
     }
-    if (b.status === "open" && b.balance) totalBalance += b.balance;
+  }
 
-    const level = getActivityLevel(b, defaultMonths, now);
-    if ((level === "red" || level === "orange") && b.last_activity_date) {
+  const bankMap = new Map(banks.map((b) => [b.id, b.name]));
+  let totalBalance = 0;
+  const attention: AttentionItem[] = [];
+
+  for (const a of accounts) {
+    if (a.balance) totalBalance += a.balance;
+    const bankName = bankMap.get(a.bank_id) ?? "—";
+
+    const level = getActivityLevel(a, defaultMonths, now);
+    if ((level === "red" || level === "orange") && a.last_activity_date) {
       attention.push({
-        bank: b,
+        account: a,
+        bankName,
         level,
-        reason: `No activity in ${monthsSince(b.last_activity_date, now)} months`,
+        reason: `No activity in ${monthsSince(a.last_activity_date, now)} months`,
       });
     }
-    if (isCdMaturingSoon(b, 30, now) && b.cd_maturity_date) {
-      const days = daysUntil(b.cd_maturity_date, now);
+    if (isCdMaturingSoon(a, 30, now) && a.cd_maturity_date) {
+      const days = daysUntil(a.cd_maturity_date, now);
       attention.push({
-        bank: b,
+        account: a,
+        bankName,
         level: "orange",
         reason: days >= 0 ? `CD matures in ${days} days` : "CD has matured",
       });
     }
   }
-
   attention.sort(
     (a, b) => (a.level === "red" ? 0 : 1) - (b.level === "red" ? 0 : 1),
   );
@@ -117,22 +128,22 @@ export default async function DashboardPage() {
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
-          label="Open accounts"
+          label="Open banks"
           value={counts.open}
-          icon={<CircleCheck className="h-5 w-5 text-emerald-600" />}
+          icon={<Landmark className="h-5 w-5 text-emerald-600" />}
           accent="bg-emerald-50"
+        />
+        <StatCard
+          label="Accounts"
+          value={accounts.length}
+          icon={<CreditCard className="h-5 w-5 text-blue-600" />}
+          accent="bg-blue-50"
         />
         <StatCard
           label="Total balance"
           value={formatCurrency(totalBalance)}
           icon={<Wallet className="h-5 w-5 text-indigo-600" />}
           accent="bg-indigo-50"
-        />
-        <StatCard
-          label="Want to open"
-          value={counts.want_to_open}
-          icon={<Clock3 className="h-5 w-5 text-blue-600" />}
-          accent="bg-blue-50"
         />
         <StatCard
           label="Need attention"
@@ -146,10 +157,10 @@ export default async function DashboardPage() {
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <h2 className="font-semibold text-slate-900">Needs attention</h2>
           <Link
-            href="/banks"
+            href="/accounts?attention=1"
             className="flex items-center gap-1 text-sm font-medium text-indigo-600 hover:underline"
           >
-            All banks
+            View all
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
@@ -168,45 +179,47 @@ export default async function DashboardPage() {
         ) : (
           <ul>
             {attention.map((item, i) => (
-              <li
-                key={`${item.bank.id}-${i}`}
-                className="flex items-center gap-3 border-b border-slate-100 px-5 py-3 last:border-0"
-              >
-                <span
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                    item.level === "red"
-                      ? "bg-rose-50 text-rose-600"
-                      : "bg-amber-50 text-amber-600"
-                  }`}
+              <li key={`${item.account.id}-${i}`}>
+                <Link
+                  href="/accounts?attention=1"
+                  className="flex items-center gap-3 border-b border-slate-100 px-5 py-3 last:border-0 hover:bg-slate-50"
                 >
-                  <AlertTriangle className="h-5 w-5" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-slate-900">
-                    {item.bank.name}
-                    {item.bank.account_holder && (
-                      <span className="font-normal text-slate-400">
-                        {" "}
-                        · {item.bank.account_holder}
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-sm text-slate-500">
-                    {item.bank.account_type
-                      ? `${ACCOUNT_TYPE_LABELS[item.bank.account_type]} · `
-                      : ""}
-                    {item.reason}
-                  </p>
-                </div>
-                <span
-                  className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                    item.level === "red"
-                      ? "bg-rose-100 text-rose-700"
-                      : "bg-amber-100 text-amber-800"
-                  }`}
-                >
-                  {item.level === "red" ? "Urgent" : "Soon"}
-                </span>
+                  <span
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                      item.level === "red"
+                        ? "bg-rose-50 text-rose-600"
+                        : "bg-amber-50 text-amber-600"
+                    }`}
+                  >
+                    <AlertTriangle className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-slate-900">
+                      {item.bankName}
+                      {item.account.holder && (
+                        <span className="font-normal text-slate-400">
+                          {" "}
+                          · {item.account.holder}
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-sm text-slate-500">
+                      {item.account.account_type
+                        ? `${ACCOUNT_TYPE_LABELS[item.account.account_type]} · `
+                        : ""}
+                      {item.reason}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                      item.level === "red"
+                        ? "bg-rose-100 text-rose-700"
+                        : "bg-amber-100 text-amber-800"
+                    }`}
+                  >
+                    {item.level === "red" ? "Urgent" : "Soon"}
+                  </span>
+                </Link>
               </li>
             ))}
           </ul>

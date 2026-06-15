@@ -8,8 +8,8 @@ export type AccountType =
 export type Priority = "low" | "med" | "high";
 
 /**
- * A bank in the user's master list. Combines reference data (from the FDIC
- * mutual-institutions list) with the user's own tracking for that bank.
+ * A bank in the user's master list: FDIC reference data plus the user's
+ * status/notes for that bank. The actual accounts held there live in `Account`.
  */
 export interface Bank {
   id: string;
@@ -26,15 +26,29 @@ export interface Bank {
 
   // User tracking
   status: BankStatus;
-  account_holder: string | null;
+  priority: Priority | null;
+  requirements: string | null;
+  notes: string | null;
+
+  created_at: string;
+  updated_at: string;
+}
+
+/** An individual account held at a bank (a bank can have several). */
+export interface Account {
+  id: string;
+  user_id: string;
+  bank_id: string;
+
+  holder: string | null;
   account_type: AccountType | null;
+  account_number: string | null;
+  routing_number: string | null;
   balance: number | null;
   last_activity_date: string | null;
   dormancy_months_override: number | null;
   cd_maturity_date: string | null;
   date_opened: string | null;
-  priority: Priority | null;
-  requirements: string | null;
   notes: string | null;
 
   created_at: string;
@@ -55,7 +69,6 @@ export const STATUS_LABELS: Record<BankStatus, string> = {
   cannot_open: "Can't open",
 };
 
-/** Order used for status tabs/filters (untracked last). */
 export const STATUS_ORDER: BankStatus[] = [
   "open",
   "want_to_open",
@@ -63,7 +76,6 @@ export const STATUS_ORDER: BankStatus[] = [
   "untracked",
 ];
 
-/** Statuses a user actively assigns (excludes the untracked default). */
 export const ASSIGNABLE_STATUSES: BankStatus[] = [
   "untracked",
   "open",

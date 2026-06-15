@@ -2,16 +2,12 @@
 -- Run this in the Supabase SQL Editor (Dashboard -> SQL Editor -> New query),
 -- or via the Supabase CLI: `supabase db push`.
 --
--- It creates:
+-- Tables:
 --   * profiles — one row per user (display name + default dormancy window)
---   * banks    — the user's master list of banks: FDIC reference data + the
---                user's own status ("untracked" by default) and account details
---   * Row-Level Security so each user can only see/modify their OWN rows
---   * a trigger that auto-creates a profile row when a user signs up
---   * a trigger that keeps banks.updated_at fresh
---
--- New users start with an empty list; the app seeds the default 426-bank list
--- (from the bundled FDIC mutual-institutions data) on first load.
+--   * banks    — the user's master list of banks (FDIC reference data + status)
+--   * accounts — individual accounts held at a bank (a bank can have several)
+-- Row-Level Security keeps every row private to its owner. New users start
+-- empty; the app seeds the default 426-bank list on first load.
 
 -- ---------------------------------------------------------------------------
 -- profiles
@@ -37,35 +33,27 @@ create policy "profiles_update_own"
 -- banks
 -- ---------------------------------------------------------------------------
 create table if not exists public.banks (
-  id                       uuid primary key default gen_random_uuid(),
-  user_id                  uuid not null references auth.users (id) on delete cascade,
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid not null references auth.users (id) on delete cascade,
 
   -- reference / master data
-  cert                     integer,
-  name                     text not null,
-  city                     text,
-  state                    text,
-  regulator                text,
-  assets                   numeric,            -- total assets in $000
-  holding_company          text,
+  cert            integer,
+  name            text not null,
+  city            text,
+  state           text,
+  regulator       text,
+  assets          numeric,            -- total assets in $000
+  holding_company text,
 
   -- user tracking
-  status                   text not null default 'untracked'
-                             check (status in ('untracked', 'open', 'want_to_open', 'cannot_open')),
-  account_holder           text,
-  account_type             text
-                             check (account_type in ('checking', 'savings', 'cd', 'money_market', 'other')),
-  balance                  numeric(14, 2),
-  last_activity_date       date,
-  dormancy_months_override integer,
-  cd_maturity_date         date,
-  date_opened              date,
-  priority                 text check (priority in ('low', 'med', 'high')),
-  requirements             text,
-  notes                    text,
+  status          text not null default 'untracked'
+                    check (status in ('untracked', 'open', 'want_to_open', 'cannot_open')),
+  priority        text check (priority in ('low', 'med', 'high')),
+  requirements    text,
+  notes           text,
 
-  created_at               timestamptz not null default now(),
-  updated_at               timestamptz not null default now(),
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
 
   -- lets Excel import upsert by (user, FDIC cert) without creating duplicates
   unique (user_id, cert)
@@ -78,20 +66,51 @@ create index if not exists banks_user_state_idx on public.banks (user_id, state)
 alter table public.banks enable row level security;
 
 drop policy if exists "banks_select_own" on public.banks;
-create policy "banks_select_own"
-  on public.banks for select using (auth.uid() = user_id);
-
+create policy "banks_select_own" on public.banks for select using (auth.uid() = user_id);
 drop policy if exists "banks_insert_own" on public.banks;
-create policy "banks_insert_own"
-  on public.banks for insert with check (auth.uid() = user_id);
-
+create policy "banks_insert_own" on public.banks for insert with check (auth.uid() = user_id);
 drop policy if exists "banks_update_own" on public.banks;
-create policy "banks_update_own"
-  on public.banks for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
-
+create policy "banks_update_own" on public.banks for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 drop policy if exists "banks_delete_own" on public.banks;
-create policy "banks_delete_own"
-  on public.banks for delete using (auth.uid() = user_id);
+create policy "banks_delete_own" on public.banks for delete using (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------------------
+-- accounts
+-- ---------------------------------------------------------------------------
+create table if not exists public.accounts (
+  id                       uuid primary key default gen_random_uuid(),
+  user_id                  uuid not null references auth.users (id) on delete cascade,
+  bank_id                  uuid not null references public.banks (id) on delete cascade,
+
+  holder                   text,
+  account_type             text
+                             check (account_type in ('checking', 'savings', 'cd', 'money_market', 'other')),
+  account_number           text,
+  routing_number           text,
+  balance                  numeric(14, 2),
+  last_activity_date       date,
+  dormancy_months_override integer,
+  cd_maturity_date         date,
+  date_opened              date,
+  notes                    text,
+
+  created_at               timestamptz not null default now(),
+  updated_at               timestamptz not null default now()
+);
+
+create index if not exists accounts_user_id_idx on public.accounts (user_id);
+create index if not exists accounts_bank_id_idx on public.accounts (bank_id);
+
+alter table public.accounts enable row level security;
+
+drop policy if exists "accounts_select_own" on public.accounts;
+create policy "accounts_select_own" on public.accounts for select using (auth.uid() = user_id);
+drop policy if exists "accounts_insert_own" on public.accounts;
+create policy "accounts_insert_own" on public.accounts for insert with check (auth.uid() = user_id);
+drop policy if exists "accounts_update_own" on public.accounts;
+create policy "accounts_update_own" on public.accounts for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "accounts_delete_own" on public.accounts;
+create policy "accounts_delete_own" on public.accounts for delete using (auth.uid() = user_id);
 
 -- ---------------------------------------------------------------------------
 -- trigger: create a profile row automatically for every new auth user
@@ -119,7 +138,7 @@ create trigger on_auth_user_created
   for each row execute function public.handle_new_user();
 
 -- ---------------------------------------------------------------------------
--- trigger: keep banks.updated_at current on every update
+-- trigger: keep updated_at current on every update
 -- ---------------------------------------------------------------------------
 create or replace function public.set_updated_at()
 returns trigger
@@ -134,4 +153,9 @@ $$;
 drop trigger if exists banks_set_updated_at on public.banks;
 create trigger banks_set_updated_at
   before update on public.banks
+  for each row execute function public.set_updated_at();
+
+drop trigger if exists accounts_set_updated_at on public.accounts;
+create trigger accounts_set_updated_at
+  before update on public.accounts
   for each row execute function public.set_updated_at();

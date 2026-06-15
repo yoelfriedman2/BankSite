@@ -28,6 +28,14 @@ export function titleCase(value: string | null | undefined): string {
     .replace(/\bMhc\b/gi, "MHC");
 }
 
+/** Show only the last 4 digits of an account number (e.g. ••1234). */
+export function maskAccountNumber(value: string | null | undefined): string {
+  if (!value) return "";
+  const trimmed = value.trim();
+  if (trimmed.length <= 4) return trimmed;
+  return `••${trimmed.slice(-4)}`;
+}
+
 /** Format total assets, which arrive in thousands of dollars, as $1.8B / $475M. */
 export function formatAssets(thousands: number | null | undefined): string {
   if (thousands === null || thousands === undefined) return "—";

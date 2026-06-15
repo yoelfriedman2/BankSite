@@ -23,13 +23,6 @@ export type BankFormValues = {
   state: string;
   assets: string;
   holding_company: string;
-  account_holder: string;
-  account_type: string;
-  balance: string;
-  last_activity_date: string;
-  dormancy_months_override: string;
-  cd_maturity_date: string;
-  date_opened: string;
   priority: string;
   requirements: string;
   notes: string;
@@ -52,7 +45,6 @@ function integer(v: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** The columns the form manages (everything except regulator, which is preserved). */
 function buildPatch(values: BankFormValues): Partial<BankFields> {
   const state = text(values.state);
   return {
@@ -63,13 +55,6 @@ function buildPatch(values: BankFormValues): Partial<BankFields> {
     state: state ? state.toUpperCase() : null,
     assets: decimal(values.assets),
     holding_company: text(values.holding_company),
-    account_holder: text(values.account_holder),
-    account_type: text(values.account_type) as BankFields["account_type"],
-    balance: decimal(values.balance),
-    last_activity_date: text(values.last_activity_date),
-    dormancy_months_override: integer(values.dormancy_months_override),
-    cd_maturity_date: text(values.cd_maturity_date),
-    date_opened: text(values.date_opened),
     priority: text(values.priority) as BankFields["priority"],
     requirements: text(values.requirements),
     notes: text(values.notes),
@@ -78,6 +63,7 @@ function buildPatch(values: BankFormValues): Partial<BankFields> {
 
 function revalidate() {
   revalidatePath("/banks");
+  revalidatePath("/accounts");
   revalidatePath("/");
 }
 
@@ -101,10 +87,7 @@ export async function upsertBank(
   if (!user) return { error: "You are not signed in." };
 
   if (values.id) {
-    const { error } = await supabase
-      .from("banks")
-      .update(patch)
-      .eq("id", values.id);
+    const { error } = await supabase.from("banks").update(patch).eq("id", values.id);
     if (error) return { error: error.message };
   } else {
     const { error } = await supabase
@@ -133,10 +116,7 @@ export async function setBankStatus(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
-  const { error } = await supabase
-    .from("banks")
-    .update({ status })
-    .eq("id", id);
+  const { error } = await supabase.from("banks").update({ status }).eq("id", id);
   if (error) return { error: error.message };
 
   revalidate();
@@ -182,27 +162,16 @@ export async function importBanks(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
-  // Upsert by (user_id, cert). Rows without a cert are always inserted.
   const withCert = rows.filter((r) => r.cert != null);
   const withoutCert = rows.filter((r) => r.cert == null);
 
   if (withCert.length) {
-    const payload = withCert.map((r) => ({
-      user_id: user.id,
-      cert: r.cert,
-      name: r.name,
-      city: r.city,
-      state: r.state,
-      regulator: r.regulator,
-      assets: r.assets,
-      holding_company: r.holding_company,
-    }));
+    const payload = withCert.map((r) => ({ user_id: user.id, ...r }));
     const { error } = await supabase
       .from("banks")
       .upsert(payload, { onConflict: "user_id,cert" });
     if (error) return { error: error.message };
   }
-
   if (withoutCert.length) {
     const payload = withoutCert.map((r) => ({
       user_id: user.id,
@@ -236,16 +205,7 @@ export async function seedBanks(): Promise<{ seeded?: number; error?: string }> 
     .select("id", { count: "exact", head: true });
   if ((count ?? 0) > 0) return { seeded: 0 };
 
-  const payload = BANKS_SEED.map((s) => ({
-    user_id: user.id,
-    cert: s.cert,
-    name: s.name,
-    city: s.city,
-    state: s.state,
-    regulator: s.regulator,
-    assets: s.assets,
-    holding_company: s.holding_company,
-  }));
+  const payload = BANKS_SEED.map((s) => ({ user_id: user.id, ...s }));
   const { error } = await supabase.from("banks").insert(payload);
   if (error) return { error: error.message };
 

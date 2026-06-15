@@ -1,21 +1,25 @@
 "use client";
 
 import { useState, useTransition, type FormEvent } from "react";
-import { X, Loader2 } from "lucide-react";
+import { X, Loader2, Plus, Copy, Pencil, Trash2 } from "lucide-react";
 import {
-  ACCOUNT_TYPE_LABELS,
   ASSIGNABLE_STATUSES,
   PRIORITY_LABELS,
   STATUS_LABELS,
+  ACCOUNT_TYPE_LABELS,
+  type Account,
   type Bank,
 } from "@/lib/types";
+import { getActivityLevel } from "@/lib/dormancy";
+import { formatCurrency, maskAccountNumber } from "@/lib/format";
+import { ActivityDot } from "@/components/badges";
+import { AccountModal } from "@/components/AccountModal";
 import { upsertBank, type BankFormValues } from "@/app/(app)/banks/actions";
+import { deleteAccount, duplicateAccount } from "@/app/(app)/accounts/actions";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
 const labelClass = "mb-1 block text-sm font-medium text-slate-700";
-
-const DORMANCY_TYPES = ["checking", "savings", "money_market"];
 
 function toFormValues(b: Bank | null): BankFormValues {
   return {
@@ -27,16 +31,6 @@ function toFormValues(b: Bank | null): BankFormValues {
     state: b?.state ?? "",
     assets: b?.assets != null ? String(b.assets) : "",
     holding_company: b?.holding_company ?? "",
-    account_holder: b?.account_holder ?? "",
-    account_type: b?.account_type ?? "",
-    balance: b?.balance != null ? String(b.balance) : "",
-    last_activity_date: b?.last_activity_date ?? "",
-    dormancy_months_override:
-      b?.dormancy_months_override != null
-        ? String(b.dormancy_months_override)
-        : "",
-    cd_maturity_date: b?.cd_maturity_date ?? "",
-    date_opened: b?.date_opened ?? "",
     priority: b?.priority ?? "",
     requirements: b?.requirements ?? "",
     notes: b?.notes ?? "",
@@ -45,20 +39,30 @@ function toFormValues(b: Bank | null): BankFormValues {
 
 export function BankForm({
   initial,
+  accounts,
   defaultDormancyMonths,
+  knownHolders,
   onClose,
   onSaved,
+  onChanged,
 }: {
   initial: Bank | null;
+  accounts: Account[];
   defaultDormancyMonths: number;
+  knownHolders: string[];
   onClose: () => void;
   onSaved: () => void;
+  onChanged: () => void;
 }) {
   const [values, setValues] = useState<BankFormValues>(() =>
     toFormValues(initial),
   );
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [acctModal, setAcctModal] = useState<{ account: Account | null } | null>(
+    null,
+  );
+  const [busyAcctId, setBusyAcctId] = useState<string | null>(null);
 
   function set<K extends keyof BankFormValues>(
     key: K,
@@ -80,9 +84,29 @@ export function BankForm({
     });
   }
 
-  const isOpen = values.status === "open";
-  const showActivity = isOpen && DORMANCY_TYPES.includes(values.account_type);
-  const showCd = isOpen && values.account_type === "cd";
+  function handleDuplicate(a: Account) {
+    setBusyAcctId(a.id);
+    startTransition(async () => {
+      await duplicateAccount(a.id);
+      setBusyAcctId(null);
+      onChanged();
+    });
+  }
+
+  function handleDeleteAccount(a: Account) {
+    if (!window.confirm("Delete this account?")) return;
+    setBusyAcctId(a.id);
+    startTransition(async () => {
+      await deleteAccount(a.id);
+      setBusyAcctId(null);
+      onChanged();
+    });
+  }
+
+  const defaultHolder =
+    accounts.length > 0
+      ? accounts[accounts.length - 1].holder ?? ""
+      : knownHolders[0] ?? "";
 
   return (
     <div
@@ -96,7 +120,7 @@ export function BankForm({
       >
         <header className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
           <h2 className="text-lg font-semibold text-slate-900">
-            {initial ? "Edit bank" : "Add bank"}
+            {initial ? initial.name : "Add bank"}
           </h2>
           <button
             type="button"
@@ -108,6 +132,127 @@ export function BankForm({
         </header>
 
         <div className="flex-1 space-y-6 overflow-y-auto p-6">
+          {/* Status */}
+          <section className="space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Your status
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {ASSIGNABLE_STATUSES.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => set("status", s)}
+                  className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                    values.status === s
+                      ? "border-indigo-600 bg-indigo-600 text-white"
+                      : "border-slate-300 text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  {STATUS_LABELS[s]}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {/* Accounts */}
+          {initial ? (
+            <section className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Accounts ({accounts.length})
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setAcctModal({ account: null })}
+                  className="flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add account
+                </button>
+              </div>
+
+              {accounts.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-400">
+                  No accounts yet. Add checking, savings, a CD, or one per
+                  person.
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {accounts.map((a) => {
+                    const level = getActivityLevel(a, defaultDormancyMonths);
+                    return (
+                      <li
+                        key={a.id}
+                        className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5"
+                      >
+                        {level !== "none" ? (
+                          <ActivityDot level={level} />
+                        ) : (
+                          <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-slate-200" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 text-sm font-medium text-slate-800">
+                            {a.holder || "—"}
+                            {a.account_type && (
+                              <span className="font-normal text-slate-400">
+                                · {ACCOUNT_TYPE_LABELS[a.account_type]}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            {a.account_number
+                              ? maskAccountNumber(a.account_number)
+                              : "no account #"}
+                            {a.balance != null
+                              ? ` · ${formatCurrency(a.balance)}`
+                              : ""}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setAcctModal({ account: a })}
+                            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                            title="Edit"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDuplicate(a)}
+                            disabled={busyAcctId === a.id}
+                            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+                            title="Duplicate (same holder)"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAccount(a)}
+                            disabled={busyAcctId === a.id}
+                            className="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                            title="Delete"
+                          >
+                            {busyAcctId === a.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          ) : (
+            <p className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-500">
+              Save the bank first, then reopen it to add accounts.
+            </p>
+          )}
+
           {/* Bank details */}
           <section className="space-y-4">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -123,7 +268,6 @@ export function BankForm({
                 value={values.name}
                 onChange={(e) => set("name", e.target.value)}
                 required
-                autoFocus
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -188,152 +332,7 @@ export function BankForm({
             </div>
           </section>
 
-          {/* Status */}
-          <section className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Your status
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {ASSIGNABLE_STATUSES.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => set("status", s)}
-                  className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-                    values.status === s
-                      ? "border-indigo-600 bg-indigo-600 text-white"
-                      : "border-slate-300 text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  {STATUS_LABELS[s]}
-                </button>
-              ))}
-            </div>
-          </section>
-
-          {/* Account details (only when open) */}
-          {isOpen && (
-            <section className="space-y-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Account
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className={labelClass} htmlFor="account_holder">
-                    Account holder
-                  </label>
-                  <input
-                    id="account_holder"
-                    className={inputClass}
-                    placeholder="e.g. John, Jane, joint"
-                    value={values.account_holder}
-                    onChange={(e) => set("account_holder", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className={labelClass} htmlFor="account_type">
-                    Account type
-                  </label>
-                  <select
-                    id="account_type"
-                    className={inputClass}
-                    value={values.account_type}
-                    onChange={(e) => set("account_type", e.target.value)}
-                  >
-                    <option value="">—</option>
-                    {(
-                      Object.keys(ACCOUNT_TYPE_LABELS) as Array<
-                        keyof typeof ACCOUNT_TYPE_LABELS
-                      >
-                    ).map((t) => (
-                      <option key={t} value={t}>
-                        {ACCOUNT_TYPE_LABELS[t]}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className={labelClass} htmlFor="balance">
-                    Balance (USD)
-                  </label>
-                  <input
-                    id="balance"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    className={inputClass}
-                    value={values.balance}
-                    onChange={(e) => set("balance", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className={labelClass} htmlFor="date_opened">
-                    Date opened
-                  </label>
-                  <input
-                    id="date_opened"
-                    type="date"
-                    className={inputClass}
-                    value={values.date_opened}
-                    onChange={(e) => set("date_opened", e.target.value)}
-                  />
-                </div>
-                {showActivity && (
-                  <>
-                    <div>
-                      <label className={labelClass} htmlFor="last_activity_date">
-                        Last activity date
-                      </label>
-                      <input
-                        id="last_activity_date"
-                        type="date"
-                        className={inputClass}
-                        value={values.last_activity_date}
-                        onChange={(e) =>
-                          set("last_activity_date", e.target.value)
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label
-                        className={labelClass}
-                        htmlFor="dormancy_months_override"
-                      >
-                        Dormancy window (months)
-                      </label>
-                      <input
-                        id="dormancy_months_override"
-                        type="number"
-                        min="1"
-                        className={inputClass}
-                        placeholder={`Default: ${defaultDormancyMonths}`}
-                        value={values.dormancy_months_override}
-                        onChange={(e) =>
-                          set("dormancy_months_override", e.target.value)
-                        }
-                      />
-                    </div>
-                  </>
-                )}
-                {showCd && (
-                  <div>
-                    <label className={labelClass} htmlFor="cd_maturity_date">
-                      CD maturity date
-                    </label>
-                    <input
-                      id="cd_maturity_date"
-                      type="date"
-                      className={inputClass}
-                      value={values.cd_maturity_date}
-                      onChange={(e) => set("cd_maturity_date", e.target.value)}
-                    />
-                  </div>
-                )}
-              </div>
-            </section>
-          )}
-
-          {/* Notes / requirements / priority */}
+          {/* Notes */}
           <section className="space-y-4">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
               Notes
@@ -400,7 +399,7 @@ export function BankForm({
             onClick={onClose}
             className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
           >
-            Cancel
+            Close
           </button>
           <button
             type="submit"
@@ -408,10 +407,26 @@ export function BankForm({
             className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
           >
             {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-            {initial ? "Save changes" : "Add bank"}
+            Save bank
           </button>
         </footer>
       </form>
+
+      {acctModal && initial && (
+        <AccountModal
+          bankId={initial.id}
+          bankName={initial.name}
+          initial={acctModal.account}
+          knownHolders={knownHolders}
+          defaultHolder={defaultHolder}
+          defaultDormancyMonths={defaultDormancyMonths}
+          onClose={() => setAcctModal(null)}
+          onSaved={() => {
+            setAcctModal(null);
+            onChanged();
+          }}
+        />
+      )}
     </div>
   );
 }
