@@ -1,21 +1,22 @@
 import {
   STATUS_LABELS,
   PRIORITY_LABELS,
-  type AccountStatus,
+  type BankStatus,
   type Priority,
 } from "@/lib/types";
 import type { ActivityLevel } from "@/lib/dormancy";
 
-const STATUS_STYLES: Record<AccountStatus, string> = {
-  open: "bg-green-100 text-green-800",
-  want_to_open: "bg-blue-100 text-blue-800",
-  cannot_open: "bg-slate-200 text-slate-600",
+const STATUS_STYLES: Record<BankStatus, string> = {
+  untracked: "bg-slate-100 text-slate-500 ring-slate-200",
+  open: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  want_to_open: "bg-indigo-50 text-indigo-700 ring-indigo-200",
+  cannot_open: "bg-rose-50 text-rose-700 ring-rose-200",
 };
 
-export function StatusBadge({ status }: { status: AccountStatus }) {
+export function StatusBadge({ status }: { status: BankStatus }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLES[status]}`}
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${STATUS_STYLES[status]}`}
     >
       {STATUS_LABELS[status]}
     </span>
@@ -25,11 +26,11 @@ export function StatusBadge({ status }: { status: AccountStatus }) {
 const PRIORITY_STYLES: Record<Priority, string> = {
   low: "bg-slate-100 text-slate-600",
   med: "bg-amber-100 text-amber-800",
-  high: "bg-red-100 text-red-700",
+  high: "bg-rose-100 text-rose-700",
 };
 
 export function PriorityBadge({ priority }: { priority: Priority | null }) {
-  if (!priority) return <span className="text-slate-300">—</span>;
+  if (!priority) return null;
   return (
     <span
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_STYLES[priority]}`}
@@ -40,9 +41,9 @@ export function PriorityBadge({ priority }: { priority: Priority | null }) {
 }
 
 const DOT_STYLES: Record<ActivityLevel, string> = {
-  green: "bg-green-500",
+  green: "bg-emerald-500",
   orange: "bg-amber-500",
-  red: "bg-red-500",
+  red: "bg-rose-500",
   none: "bg-slate-300",
 };
 

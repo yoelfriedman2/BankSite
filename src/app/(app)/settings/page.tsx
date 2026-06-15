@@ -1,7 +1,19 @@
 import { createClient } from "@/lib/supabase/server";
 import { SettingsForm } from "@/components/SettingsForm";
+import { DEMO_MODE, DEMO_USER, getDemoProfile } from "@/lib/demo";
 
 export default async function SettingsPage() {
+  if (DEMO_MODE) {
+    const p = getDemoProfile();
+    return (
+      <SettingsForm
+        email={DEMO_USER.email}
+        displayName={p.display_name ?? ""}
+        defaultDormancyMonths={p.default_dormancy_months}
+      />
+    );
+  }
+
   const supabase = await createClient();
   const {
     data: { user },

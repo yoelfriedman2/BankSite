@@ -1,0 +1,254 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import {
+  DEMO_MODE,
+  addDemoBank,
+  updateDemoBank,
+  deleteDemoBank,
+  importDemoBanks,
+  type BankFields,
+  type ImportBank,
+} from "@/lib/demo";
+import { BANKS_SEED } from "@/lib/banks-seed";
+import type { BankStatus } from "@/lib/types";
+
+export type BankFormValues = {
+  id?: string;
+  name: string;
+  status: BankStatus;
+  cert: string;
+  city: string;
+  state: string;
+  assets: string;
+  holding_company: string;
+  account_holder: string;
+  account_type: string;
+  balance: string;
+  last_activity_date: string;
+  dormancy_months_override: string;
+  cd_maturity_date: string;
+  date_opened: string;
+  priority: string;
+  requirements: string;
+  notes: string;
+};
+
+function text(v: string): string | null {
+  const t = (v ?? "").trim();
+  return t === "" ? null : t;
+}
+function decimal(v: string): number | null {
+  const t = (v ?? "").trim();
+  if (t === "") return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+function integer(v: string): number | null {
+  const t = (v ?? "").trim();
+  if (t === "") return null;
+  const n = parseInt(t, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** The columns the form manages (everything except regulator, which is preserved). */
+function buildPatch(values: BankFormValues): Partial<BankFields> {
+  const state = text(values.state);
+  return {
+    name: values.name.trim(),
+    status: values.status,
+    cert: integer(values.cert),
+    city: text(values.city),
+    state: state ? state.toUpperCase() : null,
+    assets: decimal(values.assets),
+    holding_company: text(values.holding_company),
+    account_holder: text(values.account_holder),
+    account_type: text(values.account_type) as BankFields["account_type"],
+    balance: decimal(values.balance),
+    last_activity_date: text(values.last_activity_date),
+    dormancy_months_override: integer(values.dormancy_months_override),
+    cd_maturity_date: text(values.cd_maturity_date),
+    date_opened: text(values.date_opened),
+    priority: text(values.priority) as BankFields["priority"],
+    requirements: text(values.requirements),
+    notes: text(values.notes),
+  };
+}
+
+function revalidate() {
+  revalidatePath("/banks");
+  revalidatePath("/");
+}
+
+export async function upsertBank(
+  values: BankFormValues,
+): Promise<{ error?: string }> {
+  if (!values.name?.trim()) return { error: "Bank name is required." };
+  const patch = buildPatch(values);
+
+  if (DEMO_MODE) {
+    if (values.id) updateDemoBank(values.id, patch);
+    else addDemoBank({ regulator: null, ...patch } as BankFields);
+    revalidate();
+    return {};
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  if (values.id) {
+    const { error } = await supabase
+      .from("banks")
+      .update(patch)
+      .eq("id", values.id);
+    if (error) return { error: error.message };
+  } else {
+    const { error } = await supabase
+      .from("banks")
+      .insert({ regulator: null, ...patch, user_id: user.id });
+    if (error) return { error: error.message };
+  }
+
+  revalidate();
+  return {};
+}
+
+export async function setBankStatus(
+  id: string,
+  status: BankStatus,
+): Promise<{ error?: string }> {
+  if (DEMO_MODE) {
+    updateDemoBank(id, { status });
+    revalidate();
+    return {};
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { error } = await supabase
+    .from("banks")
+    .update({ status })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidate();
+  return {};
+}
+
+export async function deleteBank(id: string): Promise<{ error?: string }> {
+  if (DEMO_MODE) {
+    deleteDemoBank(id);
+    revalidate();
+    return {};
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { error } = await supabase.from("banks").delete().eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidate();
+  return {};
+}
+
+export async function importBanks(
+  rows: ImportBank[],
+): Promise<{ added?: number; updated?: number; error?: string }> {
+  if (!rows || rows.length === 0) {
+    return { error: "No bank rows were found in that file." };
+  }
+
+  if (DEMO_MODE) {
+    const result = importDemoBanks(rows);
+    revalidate();
+    return result;
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  // Upsert by (user_id, cert). Rows without a cert are always inserted.
+  const withCert = rows.filter((r) => r.cert != null);
+  const withoutCert = rows.filter((r) => r.cert == null);
+
+  if (withCert.length) {
+    const payload = withCert.map((r) => ({
+      user_id: user.id,
+      cert: r.cert,
+      name: r.name,
+      city: r.city,
+      state: r.state,
+      regulator: r.regulator,
+      assets: r.assets,
+      holding_company: r.holding_company,
+    }));
+    const { error } = await supabase
+      .from("banks")
+      .upsert(payload, { onConflict: "user_id,cert" });
+    if (error) return { error: error.message };
+  }
+
+  if (withoutCert.length) {
+    const payload = withoutCert.map((r) => ({
+      user_id: user.id,
+      name: r.name,
+      city: r.city,
+      state: r.state,
+      regulator: r.regulator,
+      assets: r.assets,
+      holding_company: r.holding_company,
+    }));
+    const { error } = await supabase.from("banks").insert(payload);
+    if (error) return { error: error.message };
+  }
+
+  revalidate();
+  return { added: rows.length, updated: 0 };
+}
+
+/** Real-mode only: populate a brand-new user's list with the default 426 banks. */
+export async function seedBanks(): Promise<{ seeded?: number; error?: string }> {
+  if (DEMO_MODE) return { seeded: 0 };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { count } = await supabase
+    .from("banks")
+    .select("id", { count: "exact", head: true });
+  if ((count ?? 0) > 0) return { seeded: 0 };
+
+  const payload = BANKS_SEED.map((s) => ({
+    user_id: user.id,
+    cert: s.cert,
+    name: s.name,
+    city: s.city,
+    state: s.state,
+    regulator: s.regulator,
+    assets: s.assets,
+    holding_company: s.holding_company,
+  }));
+  const { error } = await supabase.from("banks").insert(payload);
+  if (error) return { error: error.message };
+
+  revalidate();
+  return { seeded: payload.length };
+}
