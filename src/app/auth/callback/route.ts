@@ -9,6 +9,8 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/";
+  const providerError =
+    searchParams.get("error_description") || searchParams.get("error");
 
   if (code) {
     const supabase = await createClient();
@@ -16,12 +18,15 @@ export async function GET(request: NextRequest) {
     if (!error) {
       return NextResponse.redirect(`${origin}${next}`);
     }
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("error", error.message);
+    return NextResponse.redirect(loginUrl);
   }
 
   const loginUrl = new URL("/login", request.url);
   loginUrl.searchParams.set(
     "error",
-    "Could not complete sign-in. Please try again.",
+    providerError ?? "Could not complete sign-in. Please try again.",
   );
   return NextResponse.redirect(loginUrl);
 }
