@@ -1,6 +1,6 @@
 /**
- * App logo: a gradient badge with a geometric "F" whose stepped bars double as a
- * little bar chart (a quiet nod to "tracker"). Used in the nav, login, and icon.
+ * App logo: a deep indigo→violet→fuchsia badge with a geometric "F" and a small
+ * gold rising-bars accent (a quiet nod to finance + "tracking up").
  */
 export function Logo({ className = "h-9 w-9" }: { className?: string }) {
   return (
@@ -14,34 +14,35 @@ export function Logo({ className = "h-9 w-9" }: { className?: string }) {
       <defs>
         <linearGradient
           id="logoGrad"
-          x1="0"
-          y1="0"
-          x2="48"
-          y2="48"
+          x1="2"
+          y1="2"
+          x2="46"
+          y2="46"
           gradientUnits="userSpaceOnUse"
         >
-          <stop stopColor="#6366F1" />
-          <stop offset="1" stopColor="#8B5CF6" />
+          <stop stopColor="#4338CA" />
+          <stop offset="0.55" stopColor="#7C3AED" />
+          <stop offset="1" stopColor="#C026D3" />
         </linearGradient>
       </defs>
       <rect width="48" height="48" rx="13" fill="url(#logoGrad)" />
-      {/* F stem */}
-      <rect x="15" y="13" width="5.5" height="22" rx="2.75" fill="#fff" />
-      {/* F top bar */}
-      <rect x="15" y="13" width="19" height="5.5" rx="2.75" fill="#fff" />
-      {/* F middle bar (shorter — bar-chart feel) */}
+      {/* subtle top gloss */}
+      <rect width="48" height="22" rx="13" fill="#ffffff" fillOpacity="0.08" />
+      {/* F */}
+      <rect x="14" y="12" width="5.5" height="24" rx="2.75" fill="#fff" />
+      <rect x="14" y="12" width="18" height="5.5" rx="2.75" fill="#fff" />
       <rect
-        x="15"
-        y="21.5"
-        width="12.5"
+        x="14"
+        y="20.5"
+        width="12"
         height="5.5"
         rx="2.75"
         fill="#fff"
-        fillOpacity="0.92"
+        fillOpacity="0.95"
       />
-      {/* rising accent bars */}
-      <rect x="28.5" y="29" width="3.4" height="6" rx="1.7" fill="#fff" fillOpacity="0.65" />
-      <rect x="33.4" y="25.5" width="3.4" height="9.5" rx="1.7" fill="#fff" fillOpacity="0.8" />
+      {/* gold rising-bars accent */}
+      <rect x="28.6" y="29" width="3.4" height="6.5" rx="1.7" fill="#FCD34D" />
+      <rect x="33.5" y="25" width="3.4" height="10.5" rx="1.7" fill="#FBBF24" />
     </svg>
   );
 }

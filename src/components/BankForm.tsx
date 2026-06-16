@@ -208,7 +208,7 @@ export function BankForm({
                       type="checkbox"
                       checked={!!values.application_steps[step.key]}
                       onChange={() => toggleStep(step.key)}
-                      className="h-4 w-4 rounded border-slate-300 accent-indigo-600"
+                      className="h-4 w-4 rounded border-slate-300 accent-indigo-900"
                     />
                     {step.label}
                   </label>

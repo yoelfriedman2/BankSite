@@ -27,7 +27,12 @@ export default async function AppLayout({
       .eq("id", user.id)
       .maybeSingle();
 
-    displayName = profile?.display_name ?? user.email ?? "Account";
+    displayName =
+      profile?.display_name ||
+      (user.user_metadata?.full_name as string | undefined) ||
+      (user.user_metadata?.name as string | undefined) ||
+      user.email ||
+      "Account";
   }
 
   return (

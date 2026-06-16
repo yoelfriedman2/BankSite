@@ -25,7 +25,8 @@ export type AccountFields = Omit<
   "id" | "user_id" | "bank_id" | "created_at" | "updated_at"
 >;
 
-export type ImportBank = {
+export type ImportRow = {
+  // bank
   cert: number | null;
   name: string;
   city: string | null;
@@ -33,6 +34,25 @@ export type ImportBank = {
   regulator: string | null;
   assets: number | null;
   holding_company: string | null;
+  status: Bank["status"] | null;
+  open_methods: Bank["open_methods"];
+  eligibility: Bank["eligibility"];
+  branch_location: string | null;
+  phone: string | null;
+  requirements: string | null;
+  bank_notes: string | null;
+  // optional account on the same row
+  holder: string | null;
+  account_type: Account["account_type"];
+  account_number: string | null;
+  routing_number: string | null;
+  balance: number | null;
+  online_url: string | null;
+  username: string | null;
+  password: string | null;
+  last_activity_date: string | null;
+  cd_maturity_date: string | null;
+  account_notes: string | null;
 };
 
 function monthsAgo(n: number): string {
@@ -297,24 +317,39 @@ export function getKnownHolders(): string[] {
   return Array.from(seen).sort();
 }
 
-// ---- Import (reference data only) ----
-export function importDemoBanks(rows: ImportBank[]): {
-  added: number;
-  updated: number;
+// ---- Import (banks + optional accounts) ----
+function rowHasAccount(row: ImportRow): boolean {
+  return !!(
+    row.holder ||
+    row.account_type ||
+    row.account_number ||
+    row.balance != null ||
+    row.online_url ||
+    row.username
+  );
+}
+
+export function importDemoRows(rows: ImportRow[]): {
+  banks: number;
+  accounts: number;
 } {
-  let added = 0;
-  let updated = 0;
+  let banksTouched = 0;
+  let accountsAdded = 0;
+
   for (const row of rows) {
-    const banks = store().banks;
-    const idx = banks.findIndex((b) =>
+    const existing = store().banks.find((b) =>
       row.cert != null && b.cert != null
         ? b.cert === row.cert
         : b.name.toLowerCase() === row.name.toLowerCase(),
     );
-    if (idx >= 0) {
-      const existing = banks[idx];
-      banks[idx] = {
-        ...existing,
+    const hasAccount = rowHasAccount(row);
+    const status =
+      row.status ??
+      (hasAccount ? "open" : existing ? existing.status : "untracked");
+
+    let bankId: string;
+    if (existing) {
+      updateDemoBank(existing.id, {
         cert: row.cert ?? existing.cert,
         name: row.name || existing.name,
         city: row.city ?? existing.city,
@@ -322,16 +357,67 @@ export function importDemoBanks(rows: ImportBank[]): {
         regulator: row.regulator ?? existing.regulator,
         assets: row.assets ?? existing.assets,
         holding_company: row.holding_company ?? existing.holding_company,
-        updated_at: new Date().toISOString(),
-      };
-      updated++;
+        status,
+        open_methods: row.open_methods ?? existing.open_methods,
+        eligibility: row.eligibility ?? existing.eligibility,
+        branch_location: row.branch_location ?? existing.branch_location,
+        phone: row.phone ?? existing.phone,
+        requirements: row.requirements ?? existing.requirements,
+        notes: row.bank_notes ?? existing.notes,
+      });
+      bankId = existing.id;
     } else {
-      store().banks = [
-        makeBank({ ...seedToBankFields(row as (typeof BANKS_SEED)[number]) }),
-        ...store().banks,
-      ];
-      added++;
+      const bank = makeBank({
+        cert: row.cert,
+        name: row.name,
+        city: row.city,
+        state: row.state,
+        regulator: row.regulator,
+        assets: row.assets,
+        holding_company: row.holding_company,
+        status,
+        priority: null,
+        open_methods: row.open_methods,
+        eligibility: row.eligibility,
+        eligibility_date: null,
+        branch_location: row.branch_location,
+        phone: row.phone,
+        requirements: row.requirements,
+        notes: row.bank_notes,
+        conversion_stage: "none",
+        subscription_start: null,
+        subscription_end: null,
+        pricing_date: null,
+        application_steps: {},
+        min_to_open: null,
+        target_balance: null,
+      });
+      store().banks = [bank, ...store().banks];
+      bankId = bank.id;
+    }
+    banksTouched++;
+
+    if (hasAccount) {
+      addDemoAccount(bankId, {
+        holder: row.holder,
+        account_type: row.account_type,
+        account_number: row.account_number,
+        routing_number: row.routing_number,
+        balance: row.balance,
+        last_activity_date: row.last_activity_date,
+        dormancy_months_override: null,
+        cd_maturity_date: row.cd_maturity_date,
+        date_opened: null,
+        notes: row.account_notes,
+        online_url: row.online_url,
+        username: row.username,
+        password: row.password,
+        access_notes: null,
+        activity_log: [],
+      });
+      accountsAdded++;
     }
   }
-  return { added, updated };
+
+  return { banks: banksTouched, accounts: accountsAdded };
 }

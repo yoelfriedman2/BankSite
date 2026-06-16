@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { X, Loader2, UploadCloud, FileSpreadsheet, Download } from "lucide-react";
 import { importBanks } from "@/app/(app)/banks/actions";
 import { downloadImportTemplate } from "@/lib/export";
-import type { ImportBank } from "@/lib/demo";
+import type { ImportRow } from "@/lib/demo";
 
 function toNumber(v: unknown): number | null {
   if (v === null || v === undefined || v === "") return null;
@@ -12,21 +12,68 @@ function toNumber(v: unknown): number | null {
   const n = Number(String(v).replace(/[,$\s]/g, ""));
   return Number.isFinite(n) ? n : null;
 }
-
 function toText(v: unknown): string | null {
   if (v === null || v === undefined) return null;
   const t = String(v).trim();
   if (t === "" || t.toUpperCase() === "N/A") return null;
   return t;
 }
+function fmtDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate(),
+  ).padStart(2, "0")}`;
+}
+function parseDate(v: unknown): string | null {
+  if (v == null || v === "") return null;
+  if (v instanceof Date) return fmtDate(v);
+  const d = new Date(String(v).trim());
+  return Number.isNaN(d.getTime()) ? null : fmtDate(d);
+}
+function parseStatus(v: unknown): ImportRow["status"] {
+  const t = toText(v)?.toLowerCase();
+  if (!t) return null;
+  if (t.includes("can")) return "cannot_open";
+  if (t.includes("appl")) return "applied";
+  if (t.includes("want")) return "want_to_open";
+  if (t.includes("open")) return "open";
+  if (t.includes("untrack")) return "untracked";
+  return null;
+}
+function parseOpenMethods(v: unknown): ImportRow["open_methods"] {
+  const t = toText(v)?.toLowerCase();
+  if (!t) return null;
+  const m: ("online" | "mail" | "in_person")[] = [];
+  if (t.includes("online")) m.push("online");
+  if (t.includes("mail")) m.push("mail");
+  if (t.includes("person") || t.includes("branch")) m.push("in_person");
+  return m.length ? m : null;
+}
+function parseEligibility(v: unknown): ImportRow["eligibility"] {
+  const t = toText(v)?.toLowerCase();
+  if (!t) return null;
+  if (t.includes("local")) return "local_only";
+  if (t.includes("in state") || t.includes("in-state")) return "in_state";
+  if (t.includes("out") || t.includes("nation") || t.includes("any")) return "nationwide";
+  return null;
+}
+function parseAccountType(v: unknown): ImportRow["account_type"] {
+  const t = toText(v)?.toLowerCase();
+  if (!t) return null;
+  if (t.includes("check")) return "checking";
+  if (t.includes("sav")) return "savings";
+  if (t === "cd" || t.includes("certificate")) return "cd";
+  if (t.includes("money")) return "money_market";
+  return "other";
+}
 
+const NAME_KEYS = ["name", "institution", "bank", "bank name"];
 function findCol(header: string[], candidates: string[]): number {
   return header.findIndex((h) => candidates.includes(h));
 }
 
-async function parseWorkbook(buf: ArrayBuffer): Promise<ImportBank[]> {
+async function parseWorkbook(buf: ArrayBuffer): Promise<ImportRow[]> {
   const XLSX = await import("xlsx");
-  const wb = XLSX.read(buf, { type: "array" });
+  const wb = XLSX.read(buf, { type: "array", cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const grid = XLSX.utils.sheet_to_json<unknown[]>(ws, {
     header: 1,
@@ -38,7 +85,7 @@ async function parseWorkbook(buf: ArrayBuffer): Promise<ImportBank[]> {
     (row) =>
       Array.isArray(row) &&
       row.some(
-        (c) => typeof c === "string" && c.trim().toLowerCase() === "name",
+        (c) => typeof c === "string" && NAME_KEYS.includes(c.trim().toLowerCase()),
       ),
   );
   if (headerIdx < 0) headerIdx = 0;
@@ -47,36 +94,72 @@ async function parseWorkbook(buf: ArrayBuffer): Promise<ImportBank[]> {
     c == null ? "" : String(c).trim().toLowerCase(),
   );
 
-  const idx = {
+  const col = {
     cert: findCol(header, ["cert", "certificate", "fdic cert", "cert #"]),
-    name: findCol(header, ["name", "institution", "bank", "bank name"]),
+    name: findCol(header, NAME_KEYS),
     city: findCol(header, ["city"]),
     state: findCol(header, ["state", "st"]),
-    reg: findCol(header, ["pfr", "regulator", "primary federal regulator"]),
+    reg: findCol(header, ["pfr", "regulator"]),
     assets: findCol(header, ["assets", "total assets", "assets ($000)"]),
-    hc: findCol(header, ["holding company", "holding", "mhc", "holding co"]),
+    hc: findCol(header, ["holding company", "holding", "mhc"]),
+    status: findCol(header, ["status"]),
+    methods: findCol(header, ["open methods", "how to open", "open method", "methods"]),
+    elig: findCol(header, ["eligibility", "who can open"]),
+    branch: findCol(header, ["branch location", "branch", "location"]),
+    phone: findCol(header, ["phone", "phone number"]),
+    requirements: findCol(header, ["requirements", "requirement"]),
+    holder: findCol(header, ["holder", "account holder", "owner", "name on account"]),
+    acctType: findCol(header, ["account type", "type"]),
+    acctNum: findCol(header, ["account number", "account #", "account no", "acct #"]),
+    routing: findCol(header, ["routing number", "routing #", "routing", "aba"]),
+    balance: findCol(header, ["balance", "amount"]),
+    url: findCol(header, ["login url", "url", "website", "online url"]),
+    username: findCol(header, ["username", "user name", "user"]),
+    password: findCol(header, ["password", "pass"]),
+    lastActivity: findCol(header, ["last activity", "last activity date"]),
+    cdMaturity: findCol(header, ["cd maturity", "cd maturity date", "maturity"]),
+    notes: findCol(header, ["notes", "account notes", "comment", "comments"]),
   };
 
-  if (idx.name < 0) {
+  if (col.name < 0) {
     throw new Error(
-      'Could not find a "Name" column. Use the template, or make sure your sheet has a header row with a bank-name column.',
+      'Could not find a "Name" column. Use the template, or include a header row with a bank-name column.',
     );
   }
+  const get = (r: unknown[], i: number) => (i >= 0 ? r[i] : null);
 
-  const rows: ImportBank[] = [];
+  const rows: ImportRow[] = [];
   for (let i = headerIdx + 1; i < grid.length; i++) {
     const r = grid[i] as unknown[];
     if (!r) continue;
-    const name = toText(r[idx.name]);
+    const name = toText(get(r, col.name));
     if (!name) continue;
     rows.push({
-      cert: idx.cert >= 0 ? toNumber(r[idx.cert]) : null,
+      cert: toNumber(get(r, col.cert)),
       name,
-      city: idx.city >= 0 ? toText(r[idx.city]) : null,
-      state: idx.state >= 0 ? toText(r[idx.state]) : null,
-      regulator: idx.reg >= 0 ? toText(r[idx.reg]) : null,
-      assets: idx.assets >= 0 ? toNumber(r[idx.assets]) : null,
-      holding_company: idx.hc >= 0 ? toText(r[idx.hc]) : null,
+      city: toText(get(r, col.city)),
+      state: toText(get(r, col.state)),
+      regulator: toText(get(r, col.reg)),
+      assets: toNumber(get(r, col.assets)),
+      holding_company: toText(get(r, col.hc)),
+      status: parseStatus(get(r, col.status)),
+      open_methods: parseOpenMethods(get(r, col.methods)),
+      eligibility: parseEligibility(get(r, col.elig)),
+      branch_location: toText(get(r, col.branch)),
+      phone: toText(get(r, col.phone)),
+      requirements: toText(get(r, col.requirements)),
+      bank_notes: null,
+      holder: toText(get(r, col.holder)),
+      account_type: parseAccountType(get(r, col.acctType)),
+      account_number: toText(get(r, col.acctNum)),
+      routing_number: toText(get(r, col.routing)),
+      balance: toNumber(get(r, col.balance)),
+      online_url: toText(get(r, col.url)),
+      username: toText(get(r, col.username)),
+      password: toText(get(r, col.password)),
+      last_activity_date: parseDate(get(r, col.lastActivity)),
+      cd_maturity_date: parseDate(get(r, col.cdMaturity)),
+      account_notes: toText(get(r, col.notes)),
     });
   }
   return rows;
@@ -90,7 +173,7 @@ export function ImportDialog({
   onImported: () => void;
 }) {
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ added: number; updated: number } | null>(
+  const [result, setResult] = useState<{ banks: number; accounts: number } | null>(
     null,
   );
   const [fileName, setFileName] = useState<string | null>(null);
@@ -100,7 +183,7 @@ export function ImportDialog({
     setError(null);
     setResult(null);
     setFileName(file.name);
-    let rows: ImportBank[];
+    let rows: ImportRow[];
     try {
       const buf = await file.arrayBuffer();
       rows = await parseWorkbook(buf);
@@ -118,7 +201,7 @@ export function ImportDialog({
         setError(res.error);
         return;
       }
-      setResult({ added: res.added ?? 0, updated: res.updated ?? 0 });
+      setResult({ banks: res.banks ?? 0, accounts: res.accounts ?? 0 });
       onImported();
     });
   }
@@ -144,12 +227,11 @@ export function ImportDialog({
         </div>
 
         <p className="mb-3 text-sm text-slate-500">
-          Upload an Excel/CSV file with a header row. We match{" "}
-          <span className="font-medium text-slate-700">
-            Name, Cert, City, State, Assets, Holding Company
-          </span>{" "}
-          automatically. Existing banks (matched by FDIC cert) are updated; new
-          ones are added.
+          Upload an Excel/CSV with a header row. We recognize bank columns
+          (Name, Cert, City, State, Assets, Holding Company, Status, Open
+          Methods, Eligibility) and account columns (Holder, Account Type,
+          Account/Routing Number, Balance, Login URL, Username, Password). A row
+          with account details adds an account under that bank.
         </p>
 
         <button
@@ -196,7 +278,8 @@ export function ImportDialog({
         )}
         {result && (
           <div className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-            Done — {result.added} added, {result.updated} updated.
+            Done — {result.banks} bank{result.banks === 1 ? "" : "s"} and{" "}
+            {result.accounts} account{result.accounts === 1 ? "" : "s"} imported.
           </div>
         )}
 

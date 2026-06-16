@@ -7,9 +7,9 @@ import {
   addDemoBank,
   updateDemoBank,
   deleteDemoBank,
-  importDemoBanks,
+  importDemoRows,
   type BankFields,
-  type ImportBank,
+  type ImportRow,
 } from "@/lib/demo";
 import { BANKS_SEED } from "@/lib/banks-seed";
 import type { BankStatus, OpenMethod, ConversionStage } from "@/lib/types";
@@ -167,15 +167,26 @@ export async function deleteBank(id: string): Promise<{ error?: string }> {
   return {};
 }
 
+function rowHasAccount(r: ImportRow): boolean {
+  return !!(
+    r.holder ||
+    r.account_type ||
+    r.account_number ||
+    r.balance != null ||
+    r.online_url ||
+    r.username
+  );
+}
+
 export async function importBanks(
-  rows: ImportBank[],
-): Promise<{ added?: number; updated?: number; error?: string }> {
+  rows: ImportRow[],
+): Promise<{ banks?: number; accounts?: number; error?: string }> {
   if (!rows || rows.length === 0) {
     return { error: "No bank rows were found in that file." };
   }
 
   if (DEMO_MODE) {
-    const result = importDemoBanks(rows);
+    const result = importDemoRows(rows);
     revalidate();
     return result;
   }
@@ -186,32 +197,106 @@ export async function importBanks(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
-  const withCert = rows.filter((r) => r.cert != null);
-  const withoutCert = rows.filter((r) => r.cert == null);
-
-  if (withCert.length) {
-    const payload = withCert.map((r) => ({ user_id: user.id, ...r }));
-    const { error } = await supabase
-      .from("banks")
-      .upsert(payload, { onConflict: "user_id,cert" });
-    if (error) return { error: error.message };
+  const { data: existing } = await supabase
+    .from("banks")
+    .select("id, cert, name, status");
+  const byCert = new Map<number, { id: string; status: string }>();
+  const byName = new Map<string, { id: string; status: string }>();
+  for (const b of existing ?? []) {
+    const entry = { id: b.id as string, status: b.status as string };
+    if (b.cert != null) byCert.set(b.cert as number, entry);
+    byName.set((b.name as string).toLowerCase(), entry);
   }
-  if (withoutCert.length) {
-    const payload = withoutCert.map((r) => ({
-      user_id: user.id,
-      name: r.name,
-      city: r.city,
-      state: r.state,
-      regulator: r.regulator,
-      assets: r.assets,
-      holding_company: r.holding_company,
-    }));
-    const { error } = await supabase.from("banks").insert(payload);
+
+  const accountInserts: Record<string, unknown>[] = [];
+  let banksTouched = 0;
+
+  for (const row of rows) {
+    const found =
+      (row.cert != null ? byCert.get(row.cert) : undefined) ??
+      byName.get(row.name.toLowerCase());
+    const acct = rowHasAccount(row);
+
+    let bankId: string;
+    if (found) {
+      bankId = found.id;
+      const upd: Record<string, unknown> = { name: row.name };
+      if (row.cert != null) upd.cert = row.cert;
+      if (row.city != null) upd.city = row.city;
+      if (row.state != null) upd.state = row.state;
+      if (row.regulator != null) upd.regulator = row.regulator;
+      if (row.assets != null) upd.assets = row.assets;
+      if (row.holding_company != null) upd.holding_company = row.holding_company;
+      if (row.open_methods != null) upd.open_methods = row.open_methods;
+      if (row.eligibility != null) upd.eligibility = row.eligibility;
+      if (row.branch_location != null) upd.branch_location = row.branch_location;
+      if (row.phone != null) upd.phone = row.phone;
+      if (row.requirements != null) upd.requirements = row.requirements;
+      if (row.bank_notes != null) upd.notes = row.bank_notes;
+      if (row.status || acct) upd.status = row.status ?? "open";
+      const { error } = await supabase
+        .from("banks")
+        .update(upd)
+        .eq("id", bankId);
+      if (error) return { error: error.message };
+    } else {
+      const { data, error } = await supabase
+        .from("banks")
+        .insert({
+          user_id: user.id,
+          cert: row.cert,
+          name: row.name,
+          city: row.city,
+          state: row.state,
+          regulator: row.regulator,
+          assets: row.assets,
+          holding_company: row.holding_company,
+          status: row.status ?? (acct ? "open" : "untracked"),
+          open_methods: row.open_methods,
+          eligibility: row.eligibility,
+          branch_location: row.branch_location,
+          phone: row.phone,
+          requirements: row.requirements,
+          notes: row.bank_notes,
+        })
+        .select("id")
+        .single();
+      if (error || !data) {
+        return { error: error?.message ?? "Could not add a bank." };
+      }
+      bankId = data.id as string;
+      const entry = { id: bankId, status: "open" };
+      if (row.cert != null) byCert.set(row.cert, entry);
+      byName.set(row.name.toLowerCase(), entry);
+    }
+    banksTouched++;
+
+    if (acct) {
+      accountInserts.push({
+        user_id: user.id,
+        bank_id: bankId,
+        holder: row.holder,
+        account_type: row.account_type,
+        account_number: row.account_number,
+        routing_number: row.routing_number,
+        balance: row.balance,
+        last_activity_date: row.last_activity_date,
+        cd_maturity_date: row.cd_maturity_date,
+        notes: row.account_notes,
+        online_url: row.online_url,
+        username: row.username,
+        password: row.password,
+      });
+    }
+  }
+
+  if (accountInserts.length) {
+    const { error } = await supabase.from("accounts").insert(accountInserts);
     if (error) return { error: error.message };
   }
 
   revalidate();
-  return { added: rows.length, updated: 0 };
+  return { banks: banksTouched, accounts: accountInserts.length };
 }
 
 /** Real-mode only: populate a brand-new user's list with the default 426 banks. */

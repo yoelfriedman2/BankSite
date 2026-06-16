@@ -59,7 +59,7 @@ export function LoginForm({ initialError }: { initialError?: string }) {
   }
 
   const btn =
-    "flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:border-slate-300 hover:shadow disabled:opacity-60";
+    "flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-lg active:translate-y-0 disabled:opacity-60";
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4">
@@ -76,9 +76,9 @@ export function LoginForm({ initialError }: { initialError?: string }) {
       />
 
       {/* Card */}
-      <div className="w-full max-w-sm rounded-3xl border border-white/40 bg-white/85 p-8 shadow-2xl backdrop-blur-xl">
+      <div className="w-full max-w-sm rounded-3xl border border-white/50 bg-white/80 p-8 shadow-[0_25px_70px_-20px_rgba(79,70,229,0.55)] ring-1 ring-white/30 backdrop-blur-2xl">
         <div className="mb-7 flex flex-col items-center text-center">
-          <Logo className="mb-4 h-14 w-14 drop-shadow-sm" />
+          <Logo className="login-float mb-4 h-14 w-14 drop-shadow-md" />
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
             Bank Tracker
           </h1>

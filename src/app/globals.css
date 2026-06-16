@@ -65,9 +65,24 @@ body {
   }
 }
 
+.login-float {
+  animation: loginFloat 6s ease-in-out infinite;
+}
+
+@keyframes loginFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .login-aurora,
-  .login-blob {
+  .login-blob,
+  .login-float {
     animation: none;
   }
 }
