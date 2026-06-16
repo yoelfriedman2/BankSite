@@ -181,8 +181,77 @@ export function AccountsClient({
         </select>
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+      {/* Mobile cards */}
+      <div className="space-y-2 md:hidden">
+        {filtered.length === 0 ? (
+          <p className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center text-slate-400">
+            {rows.length === 0
+              ? "No accounts yet. Open a bank to add one."
+              : "No accounts match your filters."}
+          </p>
+        ) : (
+          filtered.map((r) => {
+            const level = getActivityLevel(r, defaultDormancyMonths);
+            return (
+              <div
+                key={r.id}
+                className="rounded-xl border border-slate-200 bg-white p-3"
+              >
+                <div className="flex items-center gap-2">
+                  {level !== "none" ? (
+                    <ActivityDot level={level} />
+                  ) : (
+                    <span className="h-2.5 w-2.5 shrink-0" />
+                  )}
+                  <span className="min-w-0 flex-1 truncate font-medium text-slate-900">
+                    {r.bankName}
+                  </span>
+                  {r.account_type && ACTIVITY_TYPES.includes(r.account_type) && (
+                    <button
+                      onClick={() => handleLogToday(r)}
+                      disabled={logPendingId === r.id}
+                      className="rounded-md p-1.5 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 disabled:opacity-50"
+                      title="Log activity today"
+                    >
+                      {logPendingId === r.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <CalendarCheck className="h-4 w-4" />
+                      )}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setEditing(r)}
+                    className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                    title="Edit"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="mt-1 flex items-center justify-between text-sm">
+                  <span className="text-slate-600">
+                    {r.holder ?? "—"}
+                    {r.account_type
+                      ? ` · ${ACCOUNT_TYPE_LABELS[r.account_type]}`
+                      : ""}
+                  </span>
+                  <span className="tabular-nums text-slate-700">
+                    {formatCurrency(r.balance)}
+                  </span>
+                </div>
+                {r.account_number && (
+                  <div className="mt-0.5 text-xs text-slate-400">
+                    {maskAccountNumber(r.account_number)}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Table (md and up) */}
+      <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white md:block">
         <table className="min-w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">

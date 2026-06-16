@@ -17,7 +17,12 @@ import {
   type ActivityLevel,
 } from "@/lib/dormancy";
 import { formatCurrency, formatAssets, titleCase } from "@/lib/format";
-import { ActivityDot, PriorityBadge, ConversionBadge } from "@/components/badges";
+import {
+  ActivityDot,
+  PriorityBadge,
+  ConversionBadge,
+  StatusBadge,
+} from "@/components/badges";
 import { BankForm } from "@/components/BankForm";
 import { exportToExcel } from "@/lib/export";
 import { setBankStatus, deleteBank } from "@/app/(app)/banks/actions";
@@ -279,8 +284,53 @@ export function BanksClient({
         </select>
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+      {/* Mobile cards */}
+      <div className="space-y-2 md:hidden">
+        {filtered.length === 0 ? (
+          <p className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center text-slate-400">
+            No banks match your filters.
+          </p>
+        ) : (
+          filtered.map((b) => {
+            const accts = accountsByBank[b.id] ?? [];
+            const total = accts.reduce((s, a) => s + (a.balance ?? 0), 0);
+            const health = bankHealth(accts, defaultDormancyMonths);
+            return (
+              <button
+                key={b.id}
+                onClick={() => openBank(b)}
+                className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left"
+              >
+                {health !== "none" ? (
+                  <ActivityDot level={health} />
+                ) : (
+                  <span className="h-2.5 w-2.5 shrink-0" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate font-medium text-slate-900">
+                      {b.name}
+                    </span>
+                    <ConversionBadge stage={b.conversion_stage} />
+                  </div>
+                  <div className="mt-0.5 truncate text-xs text-slate-400">
+                    {[b.city ? titleCase(b.city) : null, b.state]
+                      .filter(Boolean)
+                      .join(", ")}
+                    {accts.length > 0
+                      ? ` · ${accts.length} acct${accts.length === 1 ? "" : "s"} · ${formatCurrency(total)}`
+                      : ""}
+                  </div>
+                </div>
+                <StatusBadge status={b.status} />
+              </button>
+            );
+          })
+        )}
+      </div>
+
+      {/* Table (md and up) */}
+      <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white md:block">
         <table className="min-w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">

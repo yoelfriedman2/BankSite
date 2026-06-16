@@ -249,7 +249,7 @@ export function BankForm({
                 ))}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className={labelClass} htmlFor="subscription_start">
                   Subscription opens
@@ -404,7 +404,7 @@ export function BankForm({
                 required
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className={labelClass} htmlFor="city">
                   City
@@ -551,7 +551,7 @@ export function BankForm({
                 ))}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className={labelClass} htmlFor="branch_location">
                   Branch location
