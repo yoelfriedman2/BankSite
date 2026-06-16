@@ -9,7 +9,7 @@
 // every page render (Next can otherwise load this module more than once).
 // Changes persist only while the dev server runs.
 // ---------------------------------------------------------------------------
-import type { Account, Bank, Profile } from "./types";
+import type { Account, Bank, BankComment, Profile } from "./types";
 import { BANKS_SEED } from "./banks-seed";
 
 export const DEMO_MODE = process.env.DEMO_MODE === "true";
@@ -188,7 +188,12 @@ const BANK_OVERRIDES: Record<number, Partial<BankFields>> = {
   7: { status: "want_to_open", open_methods: ["online"], eligibility: "nationwide" },
 };
 
-type DemoStore = { profile: Profile; banks: Bank[]; accounts: Account[] };
+type DemoStore = {
+  profile: Profile;
+  banks: Bank[];
+  accounts: Account[];
+  comments: BankComment[];
+};
 
 function createInitialStore(): DemoStore {
   const banks = BANKS_SEED.map((s, i) =>
@@ -259,7 +264,21 @@ function createInitialStore(): DemoStore {
     created_at: new Date().toISOString(),
   };
 
-  return { profile, banks, accounts };
+  const comments: BankComment[] =
+    banks[0].cert != null
+      ? [
+          {
+            id: crypto.randomUUID(),
+            cert: banks[0].cert,
+            author_id: DEMO_USER.id,
+            author_name: "Demo User",
+            body: "Opened in person — they require a $50 minimum and you must visit a branch to open.",
+            created_at: new Date().toISOString(),
+          },
+        ]
+      : [];
+
+  return { profile, banks, accounts, comments };
 }
 
 const g = globalThis as unknown as { __btDemo?: DemoStore };
@@ -315,6 +334,29 @@ export function getKnownHolders(): string[] {
     if (a.holder && a.holder.trim()) seen.add(a.holder.trim());
   }
   return Array.from(seen).sort();
+}
+
+// ---- Comments (shared community notes) ----
+export function getDemoComments(cert: number): BankComment[] {
+  return store()
+    .comments.filter((c) => c.cert === cert)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+export function addDemoComment(cert: number, body: string): void {
+  store().comments = [
+    {
+      id: crypto.randomUUID(),
+      cert,
+      author_id: DEMO_USER.id,
+      author_name: store().profile.display_name ?? "You",
+      body,
+      created_at: new Date().toISOString(),
+    },
+    ...store().comments,
+  ];
+}
+export function deleteDemoComment(id: string): void {
+  store().comments = store().comments.filter((c) => c.id !== id);
 }
 
 // ---- Import (banks + optional accounts) ----

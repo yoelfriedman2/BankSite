@@ -89,6 +89,16 @@ export interface Account {
   updated_at: string;
 }
 
+/** A shared community comment on a bank (keyed by FDIC cert, visible to all users). */
+export interface BankComment {
+  id: string;
+  cert: number;
+  author_id: string;
+  author_name: string | null;
+  body: string;
+  created_at: string;
+}
+
 export interface Profile {
   id: string;
   display_name: string | null;

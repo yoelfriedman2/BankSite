@@ -22,7 +22,7 @@ const VALID_STATUSES: Array<BankStatus | "all"> = [
 export default async function BanksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; q?: string }>;
 }) {
   const sp = await searchParams;
   const initialStatus = VALID_STATUSES.includes(
@@ -30,6 +30,7 @@ export default async function BanksPage({
   )
     ? (sp.status as BankStatus | "all")
     : undefined;
+  const initialQuery = typeof sp.q === "string" ? sp.q : undefined;
 
   if (DEMO_MODE) {
     return (
@@ -39,6 +40,7 @@ export default async function BanksPage({
         knownHolders={getKnownHolders()}
         defaultDormancyMonths={getDemoProfile().default_dormancy_months}
         initialStatus={initialStatus}
+      initialQuery={initialQuery}
       />
     );
   }
@@ -85,6 +87,7 @@ export default async function BanksPage({
       knownHolders={knownHolders}
       defaultDormancyMonths={profile?.default_dormancy_months ?? 12}
       initialStatus={initialStatus}
+      initialQuery={initialQuery}
     />
   );
 }

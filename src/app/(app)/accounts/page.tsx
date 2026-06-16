@@ -14,10 +14,11 @@ type BankRef = { id: string; name: string; state: string | null };
 export default async function AccountsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ attention?: string }>;
+  searchParams: Promise<{ attention?: string; q?: string }>;
 }) {
   const sp = await searchParams;
   const initialAttention = sp.attention === "1";
+  const initialQuery = typeof sp.q === "string" ? sp.q : undefined;
 
   let banks: BankRef[];
   let accounts: Account[];
@@ -72,6 +73,7 @@ export default async function AccountsPage({
       defaultDormancyMonths={defaultMonths}
       knownHolders={knownHolders}
       initialAttention={initialAttention}
+      initialQuery={initialQuery}
     />
   );
 }

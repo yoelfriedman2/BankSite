@@ -86,19 +86,21 @@ export function BanksClient({
   defaultDormancyMonths,
   knownHolders,
   initialStatus,
+  initialQuery,
 }: {
   banks: Bank[];
   accounts: Account[];
   defaultDormancyMonths: number;
   knownHolders: string[];
   initialStatus?: BankStatus | "all";
+  initialQuery?: string;
 }) {
   const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<BankStatus | "all">(
     initialStatus ?? "all",
   );
   const [stateFilter, setStateFilter] = useState<string>("all");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery ?? "");
   const [sort, setSort] = useState<SortKey>("name");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);

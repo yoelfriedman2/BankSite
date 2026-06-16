@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, type FormEvent } from "react";
+import { useState, useEffect, useTransition, type FormEvent } from "react";
 import { X, Loader2, Plus, Copy, Pencil, Trash2 } from "lucide-react";
 import {
   ASSIGNABLE_STATUSES,
@@ -14,13 +14,19 @@ import {
   APPLICATION_STEPS,
   type Account,
   type Bank,
+  type BankComment,
   type OpenMethod,
 } from "@/lib/types";
 import { getActivityLevel } from "@/lib/dormancy";
-import { formatCurrency, maskAccountNumber } from "@/lib/format";
+import { formatCurrency, formatDate, maskAccountNumber } from "@/lib/format";
 import { ActivityDot } from "@/components/badges";
 import { AccountModal } from "@/components/AccountModal";
-import { upsertBank, type BankFormValues } from "@/app/(app)/banks/actions";
+import {
+  upsertBank,
+  getBankComments,
+  addBankComment,
+  type BankFormValues,
+} from "@/app/(app)/banks/actions";
 import { deleteAccount, duplicateAccount } from "@/app/(app)/accounts/actions";
 
 const inputClass =
@@ -81,6 +87,31 @@ export function BankForm({
     null,
   );
   const [busyAcctId, setBusyAcctId] = useState<string | null>(null);
+  const [comments, setComments] = useState<BankComment[]>([]);
+  const [commentBody, setCommentBody] = useState("");
+  const [notifyAll, setNotifyAll] = useState(false);
+  const [commentBusy, setCommentBusy] = useState(false);
+
+  useEffect(() => {
+    if (initial?.cert != null) {
+      getBankComments(initial.cert)
+        .then(setComments)
+        .catch(() => {});
+    }
+  }, [initial]);
+
+  function handlePostComment() {
+    const cert = initial?.cert;
+    if (cert == null || !commentBody.trim()) return;
+    setCommentBusy(true);
+    startTransition(async () => {
+      await addBankComment(cert, commentBody, notifyAll);
+      setCommentBody("");
+      const fresh = await getBankComments(cert);
+      setComments(fresh);
+      setCommentBusy(false);
+    });
+  }
 
   function set<K extends keyof BankFormValues>(
     key: K,
@@ -626,6 +657,66 @@ export function BankForm({
               />
             </div>
           </section>
+
+          {/* Community notes (shared with everyone) */}
+          {initial?.cert != null && (
+            <section className="space-y-3 border-t border-slate-100 pt-5">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Community notes
+              </h3>
+              <p className="-mt-1 text-xs text-slate-400">
+                Shared with everyone using the app — how you opened it,
+                requirements, who to call, etc.
+              </p>
+              {comments.length > 0 && (
+                <ul className="space-y-2">
+                  {comments.map((c) => (
+                    <li
+                      key={c.id}
+                      className="rounded-lg bg-slate-50 px-3 py-2 text-sm"
+                    >
+                      <div className="mb-0.5 flex items-center gap-2 text-xs text-slate-400">
+                        <span className="font-medium text-slate-600">
+                          {c.author_name || "Someone"}
+                        </span>
+                        <span>{formatDate(c.created_at.slice(0, 10))}</span>
+                      </div>
+                      <p className="whitespace-pre-wrap text-slate-700">
+                        {c.body}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <textarea
+                rows={2}
+                className={inputClass}
+                placeholder="Add a note for everyone…"
+                value={commentBody}
+                onChange={(e) => setCommentBody(e.target.value)}
+              />
+              <div className="flex items-center justify-between gap-2">
+                <label className="flex items-center gap-2 text-xs text-slate-500">
+                  <input
+                    type="checkbox"
+                    checked={notifyAll}
+                    onChange={(e) => setNotifyAll(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 accent-indigo-900"
+                  />
+                  Email everyone (once email is set up)
+                </label>
+                <button
+                  type="button"
+                  onClick={handlePostComment}
+                  disabled={commentBusy || !commentBody.trim()}
+                  className="flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {commentBusy && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Post
+                </button>
+              </div>
+            </section>
+          )}
 
           {error && (
             <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">

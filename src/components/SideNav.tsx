@@ -11,6 +11,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { GlobalSearch } from "@/components/GlobalSearch";
 
 const LINKS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -36,6 +37,10 @@ export function SideNav({ displayName }: { displayName: string }) {
           <div className="text-sm font-semibold text-white">Bank Tracker</div>
           <div className="text-[11px] text-slate-500">Mutual conversions</div>
         </div>
+      </div>
+
+      <div className="px-3 pb-3">
+        <GlobalSearch />
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-2">

@@ -8,11 +8,20 @@ import {
   updateDemoBank,
   deleteDemoBank,
   importDemoRows,
+  getDemoBanks,
+  getDemoAccounts,
+  getDemoComments,
+  addDemoComment,
   type BankFields,
   type ImportRow,
 } from "@/lib/demo";
 import { BANKS_SEED } from "@/lib/banks-seed";
-import type { BankStatus, OpenMethod, ConversionStage } from "@/lib/types";
+import type {
+  BankStatus,
+  OpenMethod,
+  ConversionStage,
+  BankComment,
+} from "@/lib/types";
 
 export type BankFormValues = {
   id?: string;
@@ -321,4 +330,142 @@ export async function seedBanks(): Promise<{ seeded?: number; error?: string }> 
   // No revalidatePath here: seedBanks runs during the Banks page render (which
   // re-queries immediately after), and revalidatePath can't be called mid-render.
   return { seeded: payload.length };
+}
+
+export type SearchResults = {
+  banks: { id: string; name: string; state: string | null }[];
+  accounts: { id: string; holder: string | null; bankName: string }[];
+};
+
+export async function searchAll(query: string): Promise<SearchResults> {
+  const q = query.trim();
+  if (q.length < 2) return { banks: [], accounts: [] };
+  const lower = q.toLowerCase();
+
+  if (DEMO_MODE) {
+    const banks = getDemoBanks();
+    const nameMap = new Map(banks.map((b) => [b.id, b.name]));
+    return {
+      banks: banks
+        .filter(
+          (b) =>
+            b.name.toLowerCase().includes(lower) ||
+            b.city?.toLowerCase().includes(lower) ||
+            b.state?.toLowerCase().includes(lower),
+        )
+        .slice(0, 6)
+        .map((b) => ({ id: b.id, name: b.name, state: b.state })),
+      accounts: getDemoAccounts()
+        .filter(
+          (a) =>
+            a.holder?.toLowerCase().includes(lower) ||
+            a.account_number?.toLowerCase().includes(lower) ||
+            (nameMap.get(a.bank_id) ?? "").toLowerCase().includes(lower),
+        )
+        .slice(0, 6)
+        .map((a) => ({
+          id: a.id,
+          holder: a.holder,
+          bankName: nameMap.get(a.bank_id) ?? "",
+        })),
+    };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { banks: [], accounts: [] };
+
+  // Strip characters that would break the PostgREST or-filter syntax.
+  const safe = q.replace(/[%,()]/g, " ");
+
+  const { data: banks } = await supabase
+    .from("banks")
+    .select("id, name, state")
+    .or(`name.ilike.%${safe}%,city.ilike.%${safe}%,state.ilike.%${safe}%`)
+    .limit(6);
+
+  const { data: accts } = await supabase
+    .from("accounts")
+    .select("id, holder, account_number, bank_id")
+    .or(`holder.ilike.%${safe}%,account_number.ilike.%${safe}%`)
+    .limit(6);
+
+  const bankIds = [...new Set((accts ?? []).map((a) => a.bank_id as string))];
+  const nameMap = new Map<string, string>();
+  if (bankIds.length) {
+    const { data: bs } = await supabase
+      .from("banks")
+      .select("id, name")
+      .in("id", bankIds);
+    for (const b of bs ?? []) nameMap.set(b.id as string, b.name as string);
+  }
+
+  return {
+    banks: (banks ?? []).map((b) => ({
+      id: b.id as string,
+      name: b.name as string,
+      state: (b.state as string | null) ?? null,
+    })),
+    accounts: (accts ?? []).map((a) => ({
+      id: a.id as string,
+      holder: (a.holder as string | null) ?? null,
+      bankName: nameMap.get(a.bank_id as string) ?? "",
+    })),
+  };
+}
+
+export async function getBankComments(cert: number): Promise<BankComment[]> {
+  if (DEMO_MODE) return getDemoComments(cert);
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("bank_comments")
+    .select("*")
+    .eq("cert", cert)
+    .order("created_at", { ascending: false });
+  return (data ?? []) as BankComment[];
+}
+
+export async function addBankComment(
+  cert: number,
+  body: string,
+  notify: boolean,
+): Promise<{ error?: string }> {
+  const text = body.trim();
+  if (!text) return { error: "Comment can't be empty." };
+
+  if (DEMO_MODE) {
+    addDemoComment(cert, text);
+    revalidate();
+    return {};
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("display_name")
+    .eq("id", user.id)
+    .maybeSingle();
+  const authorName =
+    profile?.display_name ||
+    (user.user_metadata?.full_name as string | undefined) ||
+    user.email ||
+    null;
+
+  const { error } = await supabase
+    .from("bank_comments")
+    .insert({ cert, author_id: user.id, author_name: authorName, body: text });
+  if (error) return { error: error.message };
+
+  // `notify` (email everyone) is wired once the email service is connected.
+  void notify;
+
+  revalidate();
+  return {};
 }

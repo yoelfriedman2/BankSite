@@ -38,14 +38,16 @@ export function AccountsClient({
   defaultDormancyMonths,
   knownHolders,
   initialAttention,
+  initialQuery,
 }: {
   rows: AccountRow[];
   defaultDormancyMonths: number;
   knownHolders: string[];
   initialAttention: boolean;
+  initialQuery?: string;
 }) {
   const router = useRouter();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery ?? "");
   const [holderFilter, setHolderFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [attentionOnly, setAttentionOnly] = useState(initialAttention);

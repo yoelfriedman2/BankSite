@@ -11,6 +11,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { GlobalSearch } from "@/components/GlobalSearch";
 
 const LINKS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -42,6 +43,9 @@ export function TopNav() {
             <LogOut className="h-5 w-5" />
           </button>
         </form>
+      </div>
+      <div className="px-3 pb-2">
+        <GlobalSearch />
       </div>
       <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
         {LINKS.map(({ href, label, icon: Icon }) => {
