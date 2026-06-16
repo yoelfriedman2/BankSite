@@ -241,6 +241,7 @@ export async function seedBanks(): Promise<{ seeded?: number; error?: string }> 
   const { error } = await supabase.from("banks").insert(payload);
   if (error) return { error: error.message };
 
-  revalidate();
+  // No revalidatePath here: seedBanks runs during the Banks page render (which
+  // re-queries immediately after), and revalidatePath can't be called mid-render.
   return { seeded: payload.length };
 }
