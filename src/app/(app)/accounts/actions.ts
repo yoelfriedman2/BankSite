@@ -26,6 +26,10 @@ export type AccountFormValues = {
   cd_maturity_date: string;
   date_opened: string;
   notes: string;
+  online_url: string;
+  username: string;
+  password: string;
+  access_notes: string;
   activity_log: { date: string; note: string }[];
 };
 
@@ -68,6 +72,10 @@ function buildPatch(values: AccountFormValues): AccountFields {
     cd_maturity_date: text(values.cd_maturity_date),
     date_opened: text(values.date_opened),
     notes: text(values.notes),
+    online_url: text(values.online_url),
+    username: text(values.username),
+    password: text(values.password),
+    access_notes: text(values.access_notes),
     activity_log: log,
   };
 }
@@ -84,6 +92,10 @@ function fieldsFromAccount(a: Account): AccountFields {
     cd_maturity_date: a.cd_maturity_date,
     date_opened: a.date_opened,
     notes: a.notes,
+    online_url: a.online_url,
+    username: a.username,
+    password: a.password,
+    access_notes: a.access_notes,
     activity_log: a.activity_log,
   };
 }

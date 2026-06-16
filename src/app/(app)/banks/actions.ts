@@ -36,10 +36,6 @@ export type BankFormValues = {
   subscription_end: string;
   pricing_date: string;
   application_steps: Record<string, boolean>;
-  online_url: string;
-  username: string;
-  password: string;
-  access_notes: string;
   min_to_open: string;
   target_balance: string;
 };
@@ -84,10 +80,6 @@ function buildPatch(values: BankFormValues): Partial<BankFields> {
     subscription_end: text(values.subscription_end),
     pricing_date: text(values.pricing_date),
     application_steps: values.application_steps,
-    online_url: text(values.online_url),
-    username: text(values.username),
-    password: text(values.password),
-    access_notes: text(values.access_notes),
     min_to_open: decimal(values.min_to_open),
     target_balance: decimal(values.target_balance),
   };

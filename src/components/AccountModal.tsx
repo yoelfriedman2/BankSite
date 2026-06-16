@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, type FormEvent } from "react";
-import { X, Loader2 } from "lucide-react";
+import { X, Loader2, Eye, EyeOff } from "lucide-react";
 import { ACCOUNT_TYPE_LABELS, type Account } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 import {
@@ -36,6 +36,10 @@ function toValues(
     cd_maturity_date: a?.cd_maturity_date ?? "",
     date_opened: a?.date_opened ?? "",
     notes: a?.notes ?? "",
+    online_url: a?.online_url ?? "",
+    username: a?.username ?? "",
+    password: a?.password ?? "",
+    access_notes: a?.access_notes ?? "",
     activity_log: (a?.activity_log ?? []).map((e) => ({
       date: e.date,
       note: e.note ?? "",
@@ -67,6 +71,7 @@ export function AccountModal({
   );
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [showPassword, setShowPassword] = useState(false);
   const [newDate, setNewDate] = useState(() =>
     new Date().toISOString().slice(0, 10),
   );
@@ -289,6 +294,74 @@ export function AccountModal({
               className={inputClass}
               value={values.notes}
               onChange={(e) => set("notes", e.target.value)}
+            />
+          </div>
+
+          <div className="col-span-2 mt-1 border-t border-slate-100 pt-4">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Online access
+            </h3>
+            <label className={labelClass} htmlFor="online_url">
+              Login URL
+            </label>
+            <input
+              id="online_url"
+              className={inputClass}
+              placeholder="https://…"
+              value={values.online_url}
+              onChange={(e) => set("online_url", e.target.value)}
+            />
+          </div>
+          <div>
+            <label className={labelClass} htmlFor="acct_username">
+              Username
+            </label>
+            <input
+              id="acct_username"
+              autoComplete="off"
+              className={inputClass}
+              value={values.username}
+              onChange={(e) => set("username", e.target.value)}
+            />
+          </div>
+          <div>
+            <label className={labelClass} htmlFor="acct_password">
+              Password
+            </label>
+            <div className="relative">
+              <input
+                id="acct_password"
+                type={showPassword ? "text" : "password"}
+                autoComplete="off"
+                className={`${inputClass} pr-10`}
+                value={values.password}
+                onChange={(e) => set("password", e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                title={showPassword ? "Hide" : "Show"}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+          </div>
+          <div className="col-span-2">
+            <label className={labelClass} htmlFor="access_notes">
+              Access notes
+            </label>
+            <textarea
+              id="access_notes"
+              rows={2}
+              className={inputClass}
+              placeholder="security questions, which email, etc."
+              value={values.access_notes}
+              onChange={(e) => set("access_notes", e.target.value)}
             />
           </div>
 

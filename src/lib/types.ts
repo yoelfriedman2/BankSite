@@ -56,10 +56,6 @@ export interface Bank {
 
   // Scale / account-opening helpers
   application_steps: Record<string, boolean>;
-  online_url: string | null;
-  username: string | null;
-  password: string | null;
-  access_notes: string | null;
   min_to_open: number | null;
   target_balance: number | null;
 
@@ -83,6 +79,10 @@ export interface Account {
   cd_maturity_date: string | null;
   date_opened: string | null;
   notes: string | null;
+  online_url: string | null;
+  username: string | null;
+  password: string | null;
+  access_notes: string | null;
   activity_log: { date: string; note: string | null }[];
 
   created_at: string;

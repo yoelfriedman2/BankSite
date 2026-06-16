@@ -68,10 +68,6 @@ create table if not exists public.banks (
 
   -- scale / account-opening helpers
   application_steps  jsonb not null default '{}',
-  online_url         text,
-  username           text,
-  password           text,
-  access_notes       text,
   min_to_open        numeric,
   target_balance     numeric,
 
@@ -116,6 +112,10 @@ create table if not exists public.accounts (
   cd_maturity_date         date,
   date_opened              date,
   notes                    text,
+  online_url               text,
+  username                 text,
+  password                 text,
+  access_notes             text,
   activity_log             jsonb not null default '[]',
 
   created_at               timestamptz not null default now(),

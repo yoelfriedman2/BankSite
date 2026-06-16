@@ -58,3 +58,22 @@ export async function exportToExcel(banks: Bank[], accounts: Account[]) {
   const date = new Date().toISOString().slice(0, 10);
   XLSX.writeFile(wb, `bank-tracker-${date}.xlsx`);
 }
+
+/** Download a blank import template (correct headers + one example row). */
+export async function downloadImportTemplate() {
+  const XLSX = await import("xlsx");
+  const rows = [
+    {
+      Name: "Example Savings Bank",
+      Cert: 12345,
+      City: "Springfield",
+      State: "MA",
+      "Assets ($000)": 250000,
+      "Holding Company": "Example MHC",
+    },
+  ];
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Banks");
+  XLSX.writeFile(wb, "bank-tracker-import-template.xlsx");
+}

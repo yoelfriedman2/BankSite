@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Search, Trash2, Loader2, Download } from "lucide-react";
+import { Plus, Search, Trash2, Loader2, Download, UploadCloud } from "lucide-react";
 import {
   STATUS_LABELS,
   STATUS_ORDER,
@@ -24,6 +24,7 @@ import {
   StatusBadge,
 } from "@/components/badges";
 import { BankForm } from "@/components/BankForm";
+import { ImportDialog } from "@/components/ImportDialog";
 import { exportToExcel } from "@/lib/export";
 import { setBankStatus, deleteBank } from "@/app/(app)/banks/actions";
 
@@ -100,6 +101,7 @@ export function BanksClient({
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("name");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editingBankId, setEditingBankId] = useState<string | null>(null);
   const [statusPendingId, setStatusPendingId] = useState<string | null>(null);
   const [deletePendingId, setDeletePendingId] = useState<string | null>(null);
@@ -206,6 +208,13 @@ export function BanksClient({
           </p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => setImportOpen(true)}
+            className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            <UploadCloud className="h-4 w-4" />
+            Import
+          </button>
           <button
             onClick={() => exportToExcel(banks, accounts)}
             className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
@@ -497,6 +506,12 @@ export function BanksClient({
             router.refresh();
           }}
           onChanged={() => router.refresh()}
+        />
+      )}
+      {importOpen && (
+        <ImportDialog
+          onClose={() => setImportOpen(false)}
+          onImported={() => router.refresh()}
         />
       )}
     </div>

@@ -84,6 +84,10 @@ function blankAccount(): AccountFields {
     cd_maturity_date: null,
     date_opened: null,
     notes: null,
+    online_url: null,
+    username: null,
+    password: null,
+    access_notes: null,
     activity_log: [],
   };
 }
@@ -110,10 +114,6 @@ function seedToBankFields(s: (typeof BANKS_SEED)[number]): BankFields {
     subscription_end: null,
     pricing_date: null,
     application_steps: {},
-    online_url: null,
-    username: null,
-    password: null,
-    access_notes: null,
     min_to_open: null,
     target_balance: null,
   };
@@ -129,9 +129,6 @@ const BANK_OVERRIDES: Record<number, Partial<BankFields>> = {
     subscription_start: daysFromNow(-8),
     subscription_end: daysFromNow(12),
     pricing_date: daysFromNow(20),
-    online_url: "https://firstnational.example.com",
-    username: "jfriedman",
-    password: "S3cure!demo",
     application_steps: { online_access: true },
     min_to_open: 50,
     target_balance: 1000,
@@ -162,8 +159,6 @@ const BANK_OVERRIDES: Record<number, Partial<BankFields>> = {
     notes: "Application submitted ~2 weeks ago.",
     conversion_stage: "filed",
     application_steps: { online_access: false },
-    online_url: "https://summitsavings.example.com",
-    username: "jfriedman",
   },
   6: {
     status: "cannot_open",
@@ -187,6 +182,9 @@ function createInitialStore(): DemoStore {
       account_type: "checking",
       account_number: "100012345",
       routing_number: "021000021",
+      online_url: "https://firstnational.example.com",
+      username: "jfriedman",
+      password: "S3cure!demo",
       balance: 2450.75,
       last_activity_date: monthsAgo(1), // green
       date_opened: yearsAgo(3),

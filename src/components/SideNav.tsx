@@ -10,6 +10,7 @@ import {
   Settings,
   LogOut,
 } from "lucide-react";
+import { Logo } from "@/components/Logo";
 
 const LINKS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -30,9 +31,7 @@ export function SideNav({ displayName }: { displayName: string }) {
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-800 bg-slate-900 text-slate-300 md:flex">
       <div className="flex items-center gap-2.5 px-5 py-5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-lg font-bold text-white shadow-sm">
-          F
-        </span>
+        <Logo className="h-9 w-9 shadow-sm" />
         <div className="leading-tight">
           <div className="text-sm font-semibold text-white">Bank Tracker</div>
           <div className="text-[11px] text-slate-500">Mutual conversions</div>

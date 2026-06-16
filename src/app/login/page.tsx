@@ -15,10 +15,5 @@ export default async function LoginPage({
   } = await supabase.auth.getUser();
   if (user) redirect("/");
 
-  return (
-    <LoginForm
-      initialError={sp.error}
-      redirectedFrom={sp.redirectedFrom ?? "/"}
-    />
-  );
+  return <LoginForm initialError={sp.error} />;
 }
