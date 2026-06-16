@@ -7,6 +7,8 @@ import {
   addDemoAccount,
   updateDemoAccount,
   deleteDemoAccount,
+  restoreDemoAccount,
+  permanentlyDeleteDemoAccount,
   updateDemoBank,
   getDemoAccounts,
   type AccountFields,
@@ -50,7 +52,7 @@ function integer(v: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function buildPatch(values: AccountFormValues): AccountFields {
+function buildPatch(values: AccountFormValues): Omit<AccountFields, "deleted_at"> {
   const log = (values.activity_log ?? [])
     .filter((e) => e.date)
     .map((e) => ({ date: e.date, note: e.note?.trim() ? e.note.trim() : null }));
@@ -80,7 +82,7 @@ function buildPatch(values: AccountFormValues): AccountFields {
   };
 }
 
-function fieldsFromAccount(a: Account): AccountFields {
+function fieldsFromAccount(a: Account): Omit<AccountFields, "deleted_at"> {
   return {
     holder: a.holder,
     account_type: a.account_type,
@@ -116,7 +118,7 @@ export async function upsertAccount(
     if (values.id) {
       updateDemoAccount(values.id, patch);
     } else {
-      addDemoAccount(values.bank_id, patch);
+      addDemoAccount(values.bank_id, { ...patch, deleted_at: null });
       updateDemoBank(values.bank_id, { status: "open" });
     }
     revalidate();
@@ -151,9 +153,59 @@ export async function upsertAccount(
   return {};
 }
 
+/** Moves an account to Trash. */
 export async function deleteAccount(id: string): Promise<{ error?: string }> {
   if (DEMO_MODE) {
     deleteDemoAccount(id);
+    revalidate();
+    return {};
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { error } = await supabase
+    .from("accounts")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidate();
+  return {};
+}
+
+export async function restoreAccount(id: string): Promise<{ error?: string }> {
+  if (DEMO_MODE) {
+    restoreDemoAccount(id);
+    revalidate();
+    return {};
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { error } = await supabase
+    .from("accounts")
+    .update({ deleted_at: null })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidate();
+  return {};
+}
+
+/** Permanently removes an account — cannot be undone. */
+export async function permanentlyDeleteAccount(
+  id: string,
+): Promise<{ error?: string }> {
+  if (DEMO_MODE) {
+    permanentlyDeleteDemoAccount(id);
     revalidate();
     return {};
   }
@@ -181,6 +233,7 @@ export async function duplicateAccount(
       ...fieldsFromAccount(source),
       account_number: null,
       activity_log: [],
+      deleted_at: null,
     });
     revalidate();
     return {};

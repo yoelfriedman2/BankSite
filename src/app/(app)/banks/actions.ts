@@ -7,11 +7,18 @@ import {
   addDemoBank,
   updateDemoBank,
   deleteDemoBank,
+  restoreDemoBank,
+  permanentlyDeleteDemoBank,
   importDemoRows,
   getDemoBanks,
   getDemoAccounts,
+  getDemoTrashedBanks,
+  getDemoTrashedAccounts,
   getDemoComments,
   addDemoComment,
+  deleteDemoComment,
+  getDemoUnreadCerts,
+  markDemoCommentsRead,
   type BankFields,
   type ImportRow,
 } from "@/lib/demo";
@@ -21,6 +28,8 @@ import type {
   OpenMethod,
   ConversionStage,
   BankComment,
+  Bank,
+  Account,
 } from "@/lib/types";
 
 export type BankFormValues = {
@@ -108,7 +117,7 @@ export async function upsertBank(
 
   if (DEMO_MODE) {
     if (values.id) updateDemoBank(values.id, patch);
-    else addDemoBank({ regulator: null, ...patch } as BankFields);
+    else addDemoBank({ regulator: null, deleted_at: null, ...patch } as BankFields);
     revalidate();
     return {};
   }
@@ -156,9 +165,66 @@ export async function setBankStatus(
   return {};
 }
 
+/** Moves a bank (and its currently-active accounts) to Trash. */
 export async function deleteBank(id: string): Promise<{ error?: string }> {
   if (DEMO_MODE) {
     deleteDemoBank(id);
+    revalidate();
+    return {};
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("banks")
+    .update({ deleted_at: now })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  await supabase
+    .from("accounts")
+    .update({ deleted_at: now })
+    .eq("bank_id", id)
+    .is("deleted_at", null);
+
+  revalidate();
+  return {};
+}
+
+export async function restoreBank(id: string): Promise<{ error?: string }> {
+  if (DEMO_MODE) {
+    restoreDemoBank(id);
+    revalidate();
+    return {};
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { error } = await supabase
+    .from("banks")
+    .update({ deleted_at: null })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidate();
+  return {};
+}
+
+/** Permanently removes a bank (and its accounts) — cannot be undone. */
+export async function permanentlyDeleteBank(
+  id: string,
+): Promise<{ error?: string }> {
+  if (DEMO_MODE) {
+    permanentlyDeleteDemoBank(id);
     revalidate();
     return {};
   }
@@ -174,6 +240,74 @@ export async function deleteBank(id: string): Promise<{ error?: string }> {
 
   revalidate();
   return {};
+}
+
+export type TrashedBank = Bank & { accountCount: number };
+
+export async function getTrash(): Promise<{
+  banks: TrashedBank[];
+  accounts: (Account & { bankName: string })[];
+}> {
+  if (DEMO_MODE) {
+    const banks = getDemoTrashedBanks();
+    const trashedAccounts = getDemoTrashedAccounts();
+    const nameMap = new Map([
+      ...getDemoBanks().map((b) => [b.id, b.name] as const),
+      ...banks.map((b) => [b.id, b.name] as const),
+    ]);
+    return {
+      banks: banks.map((b) => ({
+        ...b,
+        accountCount: trashedAccounts.filter((a) => a.bank_id === b.id).length,
+      })),
+      accounts: trashedAccounts.map((a) => ({
+        ...a,
+        bankName: nameMap.get(a.bank_id) ?? "—",
+      })),
+    };
+  }
+
+  const supabase = await createClient();
+  const { data: trashedBanks } = await supabase
+    .from("banks")
+    .select("*")
+    .not("deleted_at", "is", null)
+    .order("deleted_at", { ascending: false });
+  const { data: trashedAccounts } = await supabase
+    .from("accounts")
+    .select("*")
+    .not("deleted_at", "is", null)
+    .order("deleted_at", { ascending: false });
+
+  const bankIds = [
+    ...new Set((trashedAccounts ?? []).map((a) => a.bank_id as string)),
+  ];
+  const nameMap = new Map<string, string>();
+  if (bankIds.length) {
+    const { data: bs } = await supabase
+      .from("banks")
+      .select("id, name")
+      .in("id", bankIds);
+    for (const b of bs ?? []) nameMap.set(b.id as string, b.name as string);
+  }
+
+  const banks = (trashedBanks ?? []) as Bank[];
+  const accountsByBank = new Map<string, number>();
+  for (const a of trashedAccounts ?? []) {
+    const key = a.bank_id as string;
+    accountsByBank.set(key, (accountsByBank.get(key) ?? 0) + 1);
+  }
+
+  return {
+    banks: banks.map((b) => ({
+      ...b,
+      accountCount: accountsByBank.get(b.id) ?? 0,
+    })),
+    accounts: ((trashedAccounts ?? []) as Account[]).map((a) => ({
+      ...a,
+      bankName: nameMap.get(a.bank_id) ?? "—",
+    })),
+  };
 }
 
 function rowHasAccount(r: ImportRow): boolean {
@@ -208,7 +342,8 @@ export async function importBanks(
 
   const { data: existing } = await supabase
     .from("banks")
-    .select("id, cert, name, status");
+    .select("id, cert, name, status")
+    .is("deleted_at", null);
   const byCert = new Map<number, { id: string; status: string }>();
   const byName = new Map<string, { id: string; status: string }>();
   for (const b of existing ?? []) {
@@ -320,7 +455,8 @@ export async function seedBanks(): Promise<{ seeded?: number; error?: string }> 
 
   const { count } = await supabase
     .from("banks")
-    .select("id", { count: "exact", head: true });
+    .select("id", { count: "exact", head: true })
+    .is("deleted_at", null);
   if ((count ?? 0) > 0) return { seeded: 0 };
 
   const payload = BANKS_SEED.map((s) => ({ user_id: user.id, ...s }));
@@ -383,12 +519,14 @@ export async function searchAll(query: string): Promise<SearchResults> {
   const { data: banks } = await supabase
     .from("banks")
     .select("id, name, state")
+    .is("deleted_at", null)
     .or(`name.ilike.%${safe}%,city.ilike.%${safe}%,state.ilike.%${safe}%`)
     .limit(6);
 
   const { data: accts } = await supabase
     .from("accounts")
     .select("id, holder, account_number, bank_id")
+    .is("deleted_at", null)
     .or(`holder.ilike.%${safe}%,account_number.ilike.%${safe}%`)
     .limit(6);
 
@@ -463,9 +601,94 @@ export async function addBankComment(
     .insert({ cert, author_id: user.id, author_name: authorName, body: text });
   if (error) return { error: error.message };
 
+  // The author has obviously just seen this thread.
+  await supabase.from("bank_comment_reads").upsert(
+    { user_id: user.id, cert, last_read_at: new Date().toISOString() },
+    { onConflict: "user_id,cert" },
+  );
+
   // `notify` (email everyone) is wired once the email service is connected.
   void notify;
 
   revalidate();
   return {};
+}
+
+/** Deletes a comment. RLS (`comments_delete_own`) restricts this to its author. */
+export async function deleteBankComment(id: string): Promise<{ error?: string }> {
+  if (DEMO_MODE) {
+    deleteDemoComment(id);
+    revalidate();
+    return {};
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { error } = await supabase.from("bank_comments").delete().eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidate();
+  return {};
+}
+
+/** Marks a bank's comment thread as read for the current user, clearing its unread badge. */
+export async function markCommentsRead(cert: number): Promise<void> {
+  if (DEMO_MODE) {
+    markDemoCommentsRead(cert);
+    return;
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  await supabase.from("bank_comment_reads").upsert(
+    { user_id: user.id, cert, last_read_at: new Date().toISOString() },
+    { onConflict: "user_id,cert" },
+  );
+}
+
+/** Certs whose comment thread has activity the current user hasn't read yet. */
+export async function getUnreadCommentCerts(): Promise<number[]> {
+  if (DEMO_MODE) return Array.from(getDemoUnreadCerts());
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data: comments } = await supabase
+    .from("bank_comments")
+    .select("cert, created_at");
+  if (!comments || comments.length === 0) return [];
+
+  const latestByCert = new Map<number, string>();
+  for (const c of comments) {
+    const cert = c.cert as number;
+    const createdAt = c.created_at as string;
+    const cur = latestByCert.get(cert);
+    if (!cur || createdAt > cur) latestByCert.set(cert, createdAt);
+  }
+
+  const { data: reads } = await supabase
+    .from("bank_comment_reads")
+    .select("cert, last_read_at")
+    .eq("user_id", user.id);
+  const readByCert = new Map<number, string>(
+    (reads ?? []).map((r) => [r.cert as number, r.last_read_at as string]),
+  );
+
+  const unread: number[] = [];
+  for (const [cert, latest] of latestByCert) {
+    const readAt = readByCert.get(cert);
+    if (!readAt || latest > readAt) unread.push(cert);
+  }
+  return unread;
 }

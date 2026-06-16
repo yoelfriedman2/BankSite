@@ -85,6 +85,8 @@ export function BanksClient({
   accounts,
   defaultDormancyMonths,
   knownHolders,
+  currentUserId,
+  unreadCerts,
   initialStatus,
   initialQuery,
 }: {
@@ -92,9 +94,12 @@ export function BanksClient({
   accounts: Account[];
   defaultDormancyMonths: number;
   knownHolders: string[];
+  currentUserId: string | null;
+  unreadCerts: number[];
   initialStatus?: BankStatus | "all";
   initialQuery?: string;
 }) {
+  const unreadSet = useMemo(() => new Set(unreadCerts), [unreadCerts]);
   const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<BankStatus | "all">(
     initialStatus ?? "all",
@@ -179,7 +184,7 @@ export function BanksClient({
     });
   }
   function handleDelete(b: Bank) {
-    if (!window.confirm(`Remove "${b.name}" and its accounts from your list?`))
+    if (!window.confirm(`Move "${b.name}" and its accounts to Trash?`))
       return;
     setDeletePendingId(b.id);
     startTransition(async () => {
@@ -322,6 +327,12 @@ export function BanksClient({
                     <span className="truncate font-medium text-slate-900">
                       {b.name}
                     </span>
+                    {b.cert != null && unreadSet.has(b.cert) && (
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full bg-indigo-600"
+                        title="Unread note"
+                      />
+                    )}
                     <ConversionBadge stage={b.conversion_stage} />
                   </div>
                   <div className="mt-0.5 truncate text-xs text-slate-400">
@@ -381,6 +392,12 @@ export function BanksClient({
                         <span className="font-medium text-slate-900">
                           {b.name}
                         </span>
+                        {b.cert != null && unreadSet.has(b.cert) && (
+                          <span
+                            className="h-2 w-2 shrink-0 rounded-full bg-indigo-600"
+                            title="Unread note"
+                          />
+                        )}
                         <ConversionBadge stage={b.conversion_stage} />
                       </div>
                       {b.holding_company && (
@@ -502,6 +519,7 @@ export function BanksClient({
           accounts={editingAccounts}
           defaultDormancyMonths={defaultDormancyMonths}
           knownHolders={knownHolders}
+          currentUserId={currentUserId}
           onClose={closeDrawer}
           onSaved={() => {
             closeDrawer();

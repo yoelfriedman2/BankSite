@@ -59,6 +59,7 @@ export interface Bank {
   min_to_open: number | null;
   target_balance: number | null;
 
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -85,6 +86,7 @@ export interface Account {
   access_notes: string | null;
   activity_log: { date: string; note: string | null }[];
 
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -38,10 +38,12 @@ export default async function AccountsPage({
 
     const { data: banksData } = await supabase
       .from("banks")
-      .select("id, name, state");
+      .select("id, name, state")
+      .is("deleted_at", null);
     const { data: acctData } = await supabase
       .from("accounts")
       .select("*")
+      .is("deleted_at", null)
       .order("created_at", { ascending: true });
     const { data: profile } = await supabase
       .from("profiles")

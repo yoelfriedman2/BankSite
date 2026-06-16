@@ -109,6 +109,7 @@ function blankAccount(): AccountFields {
     password: null,
     access_notes: null,
     activity_log: [],
+    deleted_at: null,
   };
 }
 function seedToBankFields(s: (typeof BANKS_SEED)[number]): BankFields {
@@ -136,6 +137,7 @@ function seedToBankFields(s: (typeof BANKS_SEED)[number]): BankFields {
     application_steps: {},
     min_to_open: null,
     target_balance: null,
+    deleted_at: null,
   };
 }
 
@@ -193,6 +195,7 @@ type DemoStore = {
   banks: Bank[];
   accounts: Account[];
   comments: BankComment[];
+  commentReads: Record<number, string>;
 };
 
 function createInitialStore(): DemoStore {
@@ -278,7 +281,7 @@ function createInitialStore(): DemoStore {
         ]
       : [];
 
-  return { profile, banks, accounts, comments };
+  return { profile, banks, accounts, comments, commentReads: {} };
 }
 
 const g = globalThis as unknown as { __btDemo?: DemoStore };
@@ -296,7 +299,10 @@ export function setDemoProfile(patch: Partial<Profile>): void {
 
 // ---- Banks ----
 export function getDemoBanks(): Bank[] {
-  return store().banks;
+  return store().banks.filter((b) => !b.deleted_at);
+}
+export function getDemoTrashedBanks(): Bank[] {
+  return store().banks.filter((b) => !!b.deleted_at);
 }
 export function addDemoBank(fields: BankFields): void {
   store().banks = [makeBank(fields), ...store().banks];
@@ -306,14 +312,32 @@ export function updateDemoBank(id: string, fields: Partial<BankFields>): void {
     b.id === id ? { ...b, ...fields, updated_at: new Date().toISOString() } : b,
   );
 }
+/** Soft delete: moves the bank (and its currently-active accounts) to Trash. */
 export function deleteDemoBank(id: string): void {
+  const now = new Date().toISOString();
+  store().banks = store().banks.map((b) =>
+    b.id === id ? { ...b, deleted_at: now } : b,
+  );
+  store().accounts = store().accounts.map((a) =>
+    a.bank_id === id && !a.deleted_at ? { ...a, deleted_at: now } : a,
+  );
+}
+export function restoreDemoBank(id: string): void {
+  store().banks = store().banks.map((b) =>
+    b.id === id ? { ...b, deleted_at: null } : b,
+  );
+}
+export function permanentlyDeleteDemoBank(id: string): void {
   store().banks = store().banks.filter((b) => b.id !== id);
   store().accounts = store().accounts.filter((a) => a.bank_id !== id);
 }
 
 // ---- Accounts ----
 export function getDemoAccounts(): Account[] {
-  return store().accounts;
+  return store().accounts.filter((a) => !a.deleted_at);
+}
+export function getDemoTrashedAccounts(): Account[] {
+  return store().accounts.filter((a) => !!a.deleted_at);
 }
 export function addDemoAccount(bankId: string, fields: AccountFields): void {
   store().accounts = [...store().accounts, makeAccount(bankId, fields)];
@@ -323,15 +347,26 @@ export function updateDemoAccount(id: string, fields: Partial<AccountFields>): v
     a.id === id ? { ...a, ...fields, updated_at: new Date().toISOString() } : a,
   );
 }
+/** Soft delete: moves the account to Trash. */
 export function deleteDemoAccount(id: string): void {
+  store().accounts = store().accounts.map((a) =>
+    a.id === id ? { ...a, deleted_at: new Date().toISOString() } : a,
+  );
+}
+export function restoreDemoAccount(id: string): void {
+  store().accounts = store().accounts.map((a) =>
+    a.id === id ? { ...a, deleted_at: null } : a,
+  );
+}
+export function permanentlyDeleteDemoAccount(id: string): void {
   store().accounts = store().accounts.filter((a) => a.id !== id);
 }
 
-/** Distinct holder names: the user's saved list plus any used on accounts. */
+/** Distinct holder names: the user's saved list plus any used on active accounts. */
 export function getKnownHolders(): string[] {
   const seen = new Set<string>(store().profile.holders);
   for (const a of store().accounts) {
-    if (a.holder && a.holder.trim()) seen.add(a.holder.trim());
+    if (!a.deleted_at && a.holder && a.holder.trim()) seen.add(a.holder.trim());
   }
   return Array.from(seen).sort();
 }
@@ -354,9 +389,30 @@ export function addDemoComment(cert: number, body: string): void {
     },
     ...store().comments,
   ];
+  // The author has obviously just seen this thread.
+  markDemoCommentsRead(cert);
 }
 export function deleteDemoComment(id: string): void {
   store().comments = store().comments.filter((c) => c.id !== id);
+}
+
+// ---- Comment read tracking (unread badges) ----
+export function getDemoUnreadCerts(): Set<number> {
+  const s = store();
+  const latestByCert = new Map<number, string>();
+  for (const c of s.comments) {
+    const cur = latestByCert.get(c.cert);
+    if (!cur || c.created_at > cur) latestByCert.set(c.cert, c.created_at);
+  }
+  const unread = new Set<number>();
+  for (const [cert, latest] of latestByCert) {
+    const readAt = s.commentReads[cert];
+    if (!readAt || latest > readAt) unread.add(cert);
+  }
+  return unread;
+}
+export function markDemoCommentsRead(cert: number): void {
+  store().commentReads[cert] = new Date().toISOString();
 }
 
 // ---- Import (banks + optional accounts) ----
@@ -433,6 +489,7 @@ export function importDemoRows(rows: ImportRow[]): {
         application_steps: {},
         min_to_open: null,
         target_balance: null,
+        deleted_at: null,
       });
       store().banks = [bank, ...store().banks];
       bankId = bank.id;
@@ -456,6 +513,7 @@ export function importDemoRows(rows: ImportRow[]): {
         password: row.password,
         access_notes: null,
         activity_log: [],
+        deleted_at: null,
       });
       accountsAdded++;
     }

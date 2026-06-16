@@ -25,6 +25,8 @@ import {
   upsertBank,
   getBankComments,
   addBankComment,
+  deleteBankComment,
+  markCommentsRead,
   type BankFormValues,
 } from "@/app/(app)/banks/actions";
 import { deleteAccount, duplicateAccount } from "@/app/(app)/accounts/actions";
@@ -66,6 +68,7 @@ export function BankForm({
   accounts,
   defaultDormancyMonths,
   knownHolders,
+  currentUserId,
   onClose,
   onSaved,
   onChanged,
@@ -74,6 +77,7 @@ export function BankForm({
   accounts: Account[];
   defaultDormancyMonths: number;
   knownHolders: string[];
+  currentUserId: string | null;
   onClose: () => void;
   onSaved: () => void;
   onChanged: () => void;
@@ -91,12 +95,18 @@ export function BankForm({
   const [commentBody, setCommentBody] = useState("");
   const [notifyAll, setNotifyAll] = useState(false);
   const [commentBusy, setCommentBusy] = useState(false);
+  const [commentError, setCommentError] = useState<string | null>(null);
+  const [commentDeletingId, setCommentDeletingId] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     if (initial?.cert != null) {
-      getBankComments(initial.cert)
+      const cert = initial.cert;
+      getBankComments(cert)
         .then(setComments)
         .catch(() => {});
+      markCommentsRead(cert).catch(() => {});
     }
   }, [initial]);
 
@@ -104,12 +114,30 @@ export function BankForm({
     const cert = initial?.cert;
     if (cert == null || !commentBody.trim()) return;
     setCommentBusy(true);
+    setCommentError(null);
     startTransition(async () => {
-      await addBankComment(cert, commentBody, notifyAll);
+      const result = await addBankComment(cert, commentBody, notifyAll);
+      if (result.error) {
+        setCommentError(result.error);
+        setCommentBusy(false);
+        return;
+      }
       setCommentBody("");
       const fresh = await getBankComments(cert);
       setComments(fresh);
       setCommentBusy(false);
+    });
+  }
+
+  function handleDeleteComment(id: string) {
+    const cert = initial?.cert;
+    if (cert == null || !window.confirm("Delete this note?")) return;
+    setCommentDeletingId(id);
+    startTransition(async () => {
+      await deleteBankComment(id);
+      const fresh = await getBankComments(cert);
+      setComments(fresh);
+      setCommentDeletingId(null);
     });
   }
 
@@ -675,11 +703,28 @@ export function BankForm({
                       key={c.id}
                       className="rounded-lg bg-slate-50 px-3 py-2 text-sm"
                     >
-                      <div className="mb-0.5 flex items-center gap-2 text-xs text-slate-400">
-                        <span className="font-medium text-slate-600">
-                          {c.author_name || "Someone"}
-                        </span>
-                        <span>{formatDate(c.created_at.slice(0, 10))}</span>
+                      <div className="mb-0.5 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 text-xs text-slate-400">
+                          <span className="font-medium text-slate-600">
+                            {c.author_name || "Someone"}
+                          </span>
+                          <span>{formatDate(c.created_at.slice(0, 10))}</span>
+                        </div>
+                        {c.author_id === currentUserId && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteComment(c.id)}
+                            disabled={commentDeletingId === c.id}
+                            className="rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                            title="Delete note"
+                          >
+                            {commentDeletingId === c.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        )}
                       </div>
                       <p className="whitespace-pre-wrap text-slate-700">
                         {c.body}
@@ -687,6 +732,11 @@ export function BankForm({
                     </li>
                   ))}
                 </ul>
+              )}
+              {commentError && (
+                <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                  {commentError}
+                </p>
               )}
               <textarea
                 rows={2}

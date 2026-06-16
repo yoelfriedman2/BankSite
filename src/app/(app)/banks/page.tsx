@@ -2,12 +2,13 @@ import { createClient } from "@/lib/supabase/server";
 import { BanksClient } from "@/components/BanksClient";
 import {
   DEMO_MODE,
+  DEMO_USER,
   getDemoBanks,
   getDemoAccounts,
   getDemoProfile,
   getKnownHolders,
 } from "@/lib/demo";
-import { seedBanks } from "./actions";
+import { seedBanks, getUnreadCommentCerts } from "./actions";
 import type { Account, Bank, BankStatus } from "@/lib/types";
 
 const VALID_STATUSES: Array<BankStatus | "all"> = [
@@ -33,14 +34,17 @@ export default async function BanksPage({
   const initialQuery = typeof sp.q === "string" ? sp.q : undefined;
 
   if (DEMO_MODE) {
+    const unreadCerts = await getUnreadCommentCerts();
     return (
       <BanksClient
         banks={getDemoBanks()}
         accounts={getDemoAccounts()}
         knownHolders={getKnownHolders()}
         defaultDormancyMonths={getDemoProfile().default_dormancy_months}
+        currentUserId={DEMO_USER.id}
+        unreadCerts={unreadCerts}
         initialStatus={initialStatus}
-      initialQuery={initialQuery}
+        initialQuery={initialQuery}
       />
     );
   }
@@ -53,6 +57,7 @@ export default async function BanksPage({
   let { data: banks } = await supabase
     .from("banks")
     .select("*")
+    .is("deleted_at", null)
     .order("name", { ascending: true });
 
   // First visit: populate the default 426-bank list for this user.
@@ -61,11 +66,15 @@ export default async function BanksPage({
     const reload = await supabase
       .from("banks")
       .select("*")
+      .is("deleted_at", null)
       .order("name", { ascending: true });
     banks = reload.data ?? [];
   }
 
-  const { data: accounts } = await supabase.from("accounts").select("*");
+  const { data: accounts } = await supabase
+    .from("accounts")
+    .select("*")
+    .is("deleted_at", null);
   const { data: profile } = await supabase
     .from("profiles")
     .select("default_dormancy_months, holders")
@@ -80,12 +89,16 @@ export default async function BanksPage({
     ]),
   ).sort();
 
+  const unreadCerts = await getUnreadCommentCerts();
+
   return (
     <BanksClient
       banks={(banks ?? []) as Bank[]}
       accounts={accountList}
       knownHolders={knownHolders}
       defaultDormancyMonths={profile?.default_dormancy_months ?? 12}
+      currentUserId={user?.id ?? null}
+      unreadCerts={unreadCerts}
       initialStatus={initialStatus}
       initialQuery={initialQuery}
     />

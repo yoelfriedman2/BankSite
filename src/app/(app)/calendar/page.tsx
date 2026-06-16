@@ -31,8 +31,14 @@ export default async function CalendarPage() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    const { data: banksData } = await supabase.from("banks").select("*");
-    const { data: acctData } = await supabase.from("accounts").select("*");
+    const { data: banksData } = await supabase
+      .from("banks")
+      .select("*")
+      .is("deleted_at", null);
+    const { data: acctData } = await supabase
+      .from("accounts")
+      .select("*")
+      .is("deleted_at", null);
     const { data: profile } = await supabase
       .from("profiles")
       .select("default_dormancy_months")

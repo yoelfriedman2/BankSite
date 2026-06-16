@@ -29,60 +29,162 @@ body {
   scrollbar-color: #cbd5e1 transparent;
 }
 
-/* Animated login background */
-.login-aurora {
-  background: linear-gradient(125deg, #4f46e5, #7c3aed, #2563eb, #6d28d9, #4f46e5);
-  background-size: 300% 300%;
-  animation: auroraShift 20s ease infinite;
+/* ── Futuristic login page ── */
+
+/* Rotating neon card border via CSS custom property */
+@property --login-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
 }
 
-@keyframes auroraShift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
+.login-card-wrap {
+  padding: 1.5px;
+  border-radius: 1.5rem;
+  background: conic-gradient(
+    from var(--login-angle),
+    #4f46e5 0deg,
+    #7c3aed 90deg,
+    #06b6d4 180deg,
+    #4f46e5 360deg
+  );
+  animation: loginAngleSpin 5s linear infinite;
+  box-shadow:
+    0 0 50px rgba(79, 70, 229, 0.35),
+    0 0 100px rgba(79, 70, 229, 0.15);
+}
+
+@keyframes loginAngleSpin {
+  to {
+    --login-angle: 360deg;
   }
 }
 
-.login-blob {
-  animation: blobFloat 16s ease-in-out infinite;
+/* Perspective grid overlay */
+.login-grid {
+  background-image:
+    linear-gradient(rgba(99, 102, 241, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99, 102, 241, 0.12) 1px, transparent 1px);
+  background-size: 52px 52px;
+  mask-image: radial-gradient(
+    ellipse 85% 85% at 50% 50%,
+    black 30%,
+    transparent 100%
+  );
 }
 
-@keyframes blobFloat {
+/* Floating neon orbs */
+.login-orb {
+  border-radius: 50%;
+  filter: blur(72px);
+  animation: loginOrbFloat 14s ease-in-out infinite;
+}
+
+.login-orb-2 {
+  animation-delay: -5s;
+  animation-duration: 18s;
+}
+
+.login-orb-3 {
+  animation-delay: -9s;
+  animation-duration: 11s;
+}
+
+@keyframes loginOrbFloat {
   0%,
   100% {
     transform: translate(0, 0) scale(1);
   }
   33% {
-    transform: translate(36px, -44px) scale(1.12);
+    transform: translate(40px, -55px) scale(1.18);
   }
   66% {
-    transform: translate(-28px, 24px) scale(0.92);
+    transform: translate(-35px, 30px) scale(0.88);
   }
 }
 
-.login-float {
-  animation: loginFloat 6s ease-in-out infinite;
+/* Horizontal scan line */
+.login-scan::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -4px;
+  height: 4px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(99, 102, 241, 0.7),
+    rgba(139, 92, 246, 0.7),
+    transparent
+  );
+  animation: loginScanDown 9s linear infinite;
 }
 
-@keyframes loginFloat {
+@keyframes loginScanDown {
+  0% {
+    top: -4px;
+    opacity: 0;
+  }
+  3% {
+    opacity: 1;
+  }
+  97% {
+    opacity: 1;
+  }
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
+}
+
+/* Logo glow pulse */
+.login-logo-pulse {
+  animation: loginLogoPulse 3s ease-in-out infinite;
+}
+
+@keyframes loginLogoPulse {
   0%,
   100% {
-    transform: translateY(0);
+    filter: drop-shadow(0 0 10px rgba(99, 102, 241, 0.55));
   }
   50% {
-    transform: translateY(-6px);
+    filter: drop-shadow(0 0 28px rgba(139, 92, 246, 0.95));
+  }
+}
+
+/* Shimmering gradient title */
+.login-title {
+  background: linear-gradient(90deg, #818cf8, #c084fc, #67e8f9, #818cf8);
+  background-size: 250% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: loginTitleShimmer 4s linear infinite;
+}
+
+@keyframes loginTitleShimmer {
+  to {
+    background-position: 250% center;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .login-aurora,
-  .login-blob,
-  .login-float {
+  .login-card-wrap {
     animation: none;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed, #06b6d4);
+  }
+  .login-orb,
+  .login-orb-2,
+  .login-orb-3,
+  .login-logo-pulse {
+    animation: none;
+  }
+  .login-scan::after {
+    display: none;
+  }
+  .login-title {
+    animation: none;
+    background-position: 0 center;
   }
 }

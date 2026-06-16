@@ -8,6 +8,7 @@ import {
   CreditCard,
   CalendarDays,
   Settings,
+  Trash2,
   LogOut,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
@@ -19,6 +20,7 @@ const LINKS = [
   { href: "/accounts", label: "Accounts", icon: CreditCard },
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/trash", label: "Trash", icon: Trash2 },
 ] as const;
 
 function isActive(pathname: string, href: string) {
