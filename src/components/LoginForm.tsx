@@ -91,7 +91,7 @@ export function LoginForm({
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
-        options: { emailRedirectTo: `${window.location.origin}/auth/confirm` },
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
       });
       if (error) {
         setError(error.message);
@@ -120,7 +120,7 @@ export function LoginForm({
     setMessage(null);
     const supabase = createClient();
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/auth/confirm`,
+      redirectTo: `${window.location.origin}/auth/callback?next=/account/update-password`,
     });
     if (error) setError(error.message);
     else
