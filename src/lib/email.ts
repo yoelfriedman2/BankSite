@@ -22,98 +22,84 @@ export async function sendEmail(
 /* ── Welcome email sent to new users on first sign-in ── */
 export async function sendWelcomeEmail(to: string, name: string) {
   if (!to) return {};
-  const greeting = name ? `Hi ${name.split(" ")[0]},` : "Hi there,";
+  const first = name ? name.split(" ")[0] : "";
+  const greeting = first ? `Hi ${first},` : "Hi there,";
 
-  const html = `
-<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f6f7f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f6f7f9;padding:40px 16px;">
-    <tr><td align="center">
-      <table width="100%" style="max-width:560px;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f1f5f9;">
+<tr><td align="center" style="padding:40px 16px;">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:560px;">
 
-        <!-- Header -->
-        <tr>
-          <td style="background:#0f172a;padding:36px 40px 32px;text-align:center;">
-            <!-- Three-bar logo mark -->
-            <table cellpadding="0" cellspacing="0" style="margin:0 auto 20px;">
-              <tr><td style="background:#F59E0B;width:40px;height:8px;border-radius:4px;display:block;"></td></tr>
-              <tr><td style="height:5px;"></td></tr>
-              <tr><td style="background:rgba(255,255,255,0.72);width:22px;height:8px;border-radius:4px;display:block;"></td></tr>
-              <tr><td style="height:5px;"></td></tr>
-              <tr><td style="background:rgba(255,255,255,0.30);width:9px;height:8px;border-radius:4px;display:block;"></td></tr>
-            </table>
-            <div style="font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;">Bank Tracker</div>
-            <div style="font-size:11px;font-weight:500;color:rgba(245,158,11,0.7);letter-spacing:0.2em;text-transform:uppercase;margin-top:4px;">Mutual Conversion Intelligence</div>
-          </td>
-        </tr>
+<tr><td bgcolor="#0f172a" style="border-radius:16px 16px 0 0;padding:38px 48px 34px;text-align:center;">
+  <table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 auto 22px;">
+    <tr><td width="40" height="8" bgcolor="#F59E0B" style="border-radius:4px;font-size:0;line-height:0;">&nbsp;</td></tr>
+    <tr><td height="5" style="font-size:0;line-height:0;">&nbsp;</td></tr>
+    <tr><td width="22" height="8" bgcolor="#b8c5d6" style="border-radius:4px;font-size:0;line-height:0;">&nbsp;</td></tr>
+    <tr><td height="5" style="font-size:0;line-height:0;">&nbsp;</td></tr>
+    <tr><td width="9" height="8" bgcolor="#5a6a7e" style="border-radius:4px;font-size:0;line-height:0;">&nbsp;</td></tr>
+  </table>
+  <div style="font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.4px;margin-bottom:6px;">Bank Tracker</div>
+  <div style="font-size:10px;font-weight:600;color:#F59E0B;letter-spacing:0.24em;text-transform:uppercase;">Mutual Conversion Intelligence</div>
+</td></tr>
 
-        <!-- Body -->
-        <tr>
-          <td style="background:#ffffff;padding:40px 40px 36px;">
-            <p style="margin:0 0 8px;font-size:18px;font-weight:600;color:#0f172a;">${greeting}</p>
-            <p style="margin:0 0 24px;font-size:15px;color:#475569;line-height:1.6;">
-              Welcome to Bank Tracker — you're all set. Here's a quick look at what you can do:
-            </p>
+<tr><td bgcolor="#ffffff" style="padding:38px 48px 36px;">
+  <p style="margin:0 0 7px;font-size:19px;font-weight:700;color:#0f172a;">${greeting}</p>
+  <p style="margin:0 0 26px;font-size:14px;color:#475569;line-height:1.65;">Welcome to Bank Tracker — you're all set. Here's a quick look at what you can do:</p>
 
-            <!-- Feature list -->
-            <table cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:28px;">
-              <tr>
-                <td style="padding:12px 16px;background:#f8fafc;border-radius:10px;margin-bottom:8px;">
-                  <span style="font-size:18px;">🏦</span>
-                  <span style="font-size:14px;font-weight:600;color:#0f172a;margin-left:8px;">Track every account</span>
-                  <p style="margin:4px 0 0 34px;font-size:13px;color:#64748b;line-height:1.5;">Add your mutual bank accounts, set activity dates, and watch dormancy status in real time.</p>
-                </td>
-              </tr>
-              <tr><td style="height:8px;"></td></tr>
-              <tr>
-                <td style="padding:12px 16px;background:#f8fafc;border-radius:10px;">
-                  <span style="font-size:18px;">📊</span>
-                  <span style="font-size:14px;font-weight:600;color:#0f172a;margin-left:8px;">Watch conversions</span>
-                  <p style="margin:4px 0 0 34px;font-size:13px;color:#64748b;line-height:1.5;">Flag banks that have filed, announced, or completed mutual-to-stock conversions — and track your eligibility.</p>
-                </td>
-              </tr>
-              <tr><td style="height:8px;"></td></tr>
-              <tr>
-                <td style="padding:12px 16px;background:#f8fafc;border-radius:10px;">
-                  <span style="font-size:18px;">🔔</span>
-                  <span style="font-size:14px;font-weight:600;color:#0f172a;margin-left:8px;">Stay reminded</span>
-                  <p style="margin:4px 0 0 34px;font-size:13px;color:#64748b;line-height:1.5;">Enable email reminders in Settings so you never let an account go dormant without noticing.</p>
-                </td>
-              </tr>
-            </table>
-
-            <!-- CTA -->
-            <div style="text-align:center;margin-bottom:32px;">
-              <a href="${APP_URL}" style="display:inline-block;background:#F59E0B;color:#000000;font-size:14px;font-weight:700;text-decoration:none;padding:13px 32px;border-radius:10px;letter-spacing:0.01em;">
-                Open Bank Tracker →
-              </a>
-            </div>
-
-            <!-- Feedback callout -->
-            <div style="border-left:3px solid #F59E0B;padding:14px 18px;background:#fffbeb;border-radius:0 8px 8px 0;margin-bottom:8px;">
-              <p style="margin:0;font-size:14px;font-weight:600;color:#92400e;">Got feedback or a feature idea?</p>
-              <p style="margin:6px 0 0;font-size:13px;color:#78350f;line-height:1.5;">
-                We'd love to hear it — just reply to this email. Whether it's a missing field, a workflow that feels off, or something you wish it could do, every message gets read.
-              </p>
-            </div>
-          </td>
-        </tr>
-
-        <!-- Footer -->
-        <tr>
-          <td style="background:#f8fafc;padding:20px 40px;border-top:1px solid #e2e8f0;text-align:center;">
-            <p style="margin:0;font-size:12px;color:#94a3b8;line-height:1.6;">
-              Bank Tracker · <a href="${APP_URL}/settings" style="color:#94a3b8;">Manage notifications</a><br>
-              You're receiving this because you just joined. You won't get marketing email.
-            </p>
-          </td>
-        </tr>
-
-      </table>
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:10px;">
+    <tr><td bgcolor="#f8fafc" style="border-radius:10px;padding:15px 18px;">
+      <table cellpadding="0" cellspacing="0" role="presentation"><tr>
+        <td style="font-size:20px;vertical-align:top;padding-right:12px;padding-top:1px;">&#127970;</td>
+        <td><div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:4px;">Track every account</div>
+        <div style="font-size:12px;color:#64748b;line-height:1.55;">Add your mutual bank accounts, set activity dates, and watch dormancy status automatically.</div></td>
+      </tr></table>
     </td></tr>
   </table>
+
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:10px;">
+    <tr><td bgcolor="#f8fafc" style="border-radius:10px;padding:15px 18px;">
+      <table cellpadding="0" cellspacing="0" role="presentation"><tr>
+        <td style="font-size:20px;vertical-align:top;padding-right:12px;padding-top:1px;">&#128202;</td>
+        <td><div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:4px;">Watch conversions</div>
+        <div style="font-size:12px;color:#64748b;line-height:1.55;">Flag banks that have filed, announced, or completed mutual-to-stock conversions and track your eligibility.</div></td>
+      </tr></table>
+    </td></tr>
+  </table>
+
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:30px;">
+    <tr><td bgcolor="#f8fafc" style="border-radius:10px;padding:15px 18px;">
+      <table cellpadding="0" cellspacing="0" role="presentation"><tr>
+        <td style="font-size:20px;vertical-align:top;padding-right:12px;padding-top:1px;">&#128276;</td>
+        <td><div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:4px;">Stay reminded</div>
+        <div style="font-size:12px;color:#64748b;line-height:1.55;">Enable email reminders in Settings so you never let an account go dormant unnoticed.</div></td>
+      </tr></table>
+    </td></tr>
+  </table>
+
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:30px;">
+    <tr><td align="center">
+      <a href="${APP_URL}" style="display:inline-block;background:#F59E0B;color:#000000;font-size:14px;font-weight:700;text-decoration:none;padding:13px 34px;border-radius:10px;letter-spacing:0.01em;">Open Bank Tracker &rarr;</a>
+    </td></tr>
+  </table>
+
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+    <tr><td bgcolor="#fffbeb" style="border-left:3px solid #F59E0B;border-radius:0 8px 8px 0;padding:14px 18px;">
+      <div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:5px;">Got feedback or a feature idea?</div>
+      <div style="font-size:12px;color:#78350f;line-height:1.55;">Just reply to this email &mdash; we&rsquo;d love to hear it. Whether it&rsquo;s a missing field, a workflow that feels off, or something you wish it could do, every message gets read.</div>
+    </td></tr>
+  </table>
+</td></tr>
+
+<tr><td bgcolor="#f8fafc" style="border-radius:0 0 16px 16px;padding:18px 48px;border-top:1px solid #e2e8f0;text-align:center;">
+  <p style="margin:0;font-size:11px;color:#94a3b8;line-height:1.7;">Bank Tracker &middot; <a href="${APP_URL}/settings" style="color:#94a3b8;">Manage notifications</a><br>You&rsquo;re receiving this because you just joined. You won&rsquo;t get marketing email.</p>
+</td></tr>
+
+</table>
+</td></tr>
+</table>
 </body>
 </html>`;
 
