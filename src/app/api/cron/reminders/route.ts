@@ -67,6 +67,7 @@ export async function GET(req: NextRequest) {
     const userEmail = `user-${profile.id}@placeholder.local`;
     const name = profile.display_name ?? "there";
 
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://banktracker.app";
     await sendEmail(
       userEmail,
       `Bank Tracker — ${alerts.length} account${alerts.length === 1 ? "" : "s"} need attention`,
@@ -74,7 +75,8 @@ export async function GET(req: NextRequest) {
        <p>The following accounts in your Bank Tracker are approaching or past their dormancy threshold:</p>
        <ul>${alerts.join("")}</ul>
        <p>Log in and record some activity to keep them active.</p>
-       <p>— Bank Tracker</p>`,
+       <p><a href="${appUrl}">${appUrl}</a></p>
+       <p style="color:#888;font-size:12px">— Bank Tracker · <a href="${appUrl}/settings" style="color:#888">manage notifications</a></p>`,
     );
     sent++;
   }
