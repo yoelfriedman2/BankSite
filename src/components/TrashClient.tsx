@@ -10,7 +10,7 @@ import {
   type TrashedBank,
 } from "@/app/(app)/banks/actions";
 import { restoreAccount, permanentlyDeleteAccount } from "@/app/(app)/accounts/actions";
-import type { Account } from "@/lib/types";
+import { ACCOUNT_TYPE_LABELS, type Account } from "@/lib/types";
 
 type Props = {
   banks: TrashedBank[];
@@ -94,7 +94,7 @@ export function TrashClient({ banks, accounts }: Props) {
               <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Banks ({banks.length})
               </h2>
-              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
                 <table className="min-w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -172,7 +172,7 @@ export function TrashClient({ banks, accounts }: Props) {
               <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Accounts ({accounts.length})
               </h2>
-              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
                 <table className="min-w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -196,7 +196,7 @@ export function TrashClient({ banks, accounts }: Props) {
                           {a.bankName}
                         </td>
                         <td className="px-4 py-3 text-slate-500">
-                          {a.account_type ?? "—"}
+                          {a.account_type ? ACCOUNT_TYPE_LABELS[a.account_type] : "—"}
                         </td>
                         <td className="px-4 py-3 text-slate-400">
                           {a.deleted_at

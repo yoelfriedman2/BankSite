@@ -374,13 +374,14 @@ export function WalkthroughModal({
           {card}
         </div>
       ) : (
-        /* Welcome step — centered (shifted right on desktop to clear 240px sidebar) */
+        /* Welcome step — centered. On desktop, shift right 120px to clear the 240px sidebar.
+           Clamped so the card never overflows the viewport on narrow phones. */
         <div
           style={{
             position: "fixed",
             top: "50%",
-            left: "50%",
-            transform: "translate(calc(-50% + 120px), -50%)",
+            left: "clamp(146px, calc(50% + 120px), calc(100vw - 146px))",
+            transform: "translateY(-50%) translateX(-50%)",
             zIndex: 50,
           }}
         >

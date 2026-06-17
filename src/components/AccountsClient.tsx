@@ -129,58 +129,59 @@ export function AccountsClient({
         </div>
       )}
 
-      {/* Filters */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <button
-          onClick={() => setAttentionOnly((v) => !v)}
-          className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-            attentionOnly
-              ? "border-amber-300 bg-amber-50 text-amber-700"
-              : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
-          }`}
-        >
-          <AlertTriangle className="h-4 w-4" />
-          Needs attention
-          <span className={attentionOnly ? "text-amber-500" : "text-slate-400"}>
-            {attentionCount}
-          </span>
-        </button>
-
-        <div className="relative ml-auto">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search accounts…"
-            className="w-52 rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-          />
+      {/* Filters — stacked on mobile, row on sm+ */}
+      <div className="mb-4 space-y-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setAttentionOnly((v) => !v)}
+            className={`flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+              attentionOnly
+                ? "border-amber-300 bg-amber-50 text-amber-700"
+                : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            <AlertTriangle className="h-4 w-4" />
+            Needs attention
+            <span className={attentionOnly ? "text-amber-500" : "text-slate-400"}>
+              {attentionCount}
+            </span>
+          </button>
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search accounts…"
+              className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+            />
+          </div>
         </div>
-
-        <select
-          value={holderFilter}
-          onChange={(e) => setHolderFilter(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500"
-        >
-          <option value="all">All holders</option>
-          {knownHolders.map((h) => (
-            <option key={h} value={h}>
-              {h}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500"
-        >
-          <option value="all">All types</option>
-          {(Object.keys(ACCOUNT_TYPE_LABELS) as AccountType[]).map((t) => (
-            <option key={t} value={t}>
-              {ACCOUNT_TYPE_LABELS[t]}
-            </option>
-          ))}
-        </select>
+        <div className="flex gap-2">
+          <select
+            value={holderFilter}
+            onChange={(e) => setHolderFilter(e.target.value)}
+            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500"
+          >
+            <option value="all">All holders</option>
+            {knownHolders.map((h) => (
+              <option key={h} value={h}>
+                {h}
+              </option>
+            ))}
+          </select>
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500"
+          >
+            <option value="all">All types</option>
+            {(Object.keys(ACCOUNT_TYPE_LABELS) as AccountType[]).map((t) => (
+              <option key={t} value={t}>
+                {ACCOUNT_TYPE_LABELS[t]}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Mobile cards */}

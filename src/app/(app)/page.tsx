@@ -113,7 +113,7 @@ export default async function DashboardPage() {
   const attention: AttentionItem[] = [];
 
   for (const a of accounts) {
-    if (a.balance) totalBalance += a.balance;
+    if (a.balance != null) totalBalance += a.balance;
     const bankName = bankMap.get(a.bank_id) ?? "—";
 
     const level = getActivityLevel(a, defaultMonths, now);
