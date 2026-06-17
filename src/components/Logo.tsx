@@ -1,7 +1,3 @@
-/**
- * App logo: a deep indigo→violet→fuchsia badge with a geometric "F" and a small
- * gold rising-bars accent (a quiet nod to finance + "tracking up").
- */
 export function Logo({ className = "h-9 w-9" }: { className?: string }) {
   return (
     <svg
@@ -12,37 +8,32 @@ export function Logo({ className = "h-9 w-9" }: { className?: string }) {
       aria-hidden
     >
       <defs>
-        <linearGradient
-          id="logoGrad"
-          x1="2"
-          y1="2"
-          x2="46"
-          y2="46"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop stopColor="#4338CA" />
-          <stop offset="0.55" stopColor="#7C3AED" />
-          <stop offset="1" stopColor="#C026D3" />
+        <linearGradient id="logoDepth" x1="0" y1="0" x2="0" y2="48" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#ffffff" stopOpacity="0.05" />
+          <stop offset="1" stopColor="#000000" stopOpacity="0.18" />
         </linearGradient>
       </defs>
-      <rect width="48" height="48" rx="13" fill="url(#logoGrad)" />
-      {/* subtle top gloss */}
-      <rect width="48" height="22" rx="13" fill="#ffffff" fillOpacity="0.08" />
-      {/* F */}
-      <rect x="14" y="12" width="5.5" height="24" rx="2.75" fill="#fff" />
-      <rect x="14" y="12" width="18" height="5.5" rx="2.75" fill="#fff" />
-      <rect
-        x="14"
-        y="20.5"
-        width="12"
-        height="5.5"
-        rx="2.75"
-        fill="#fff"
-        fillOpacity="0.95"
-      />
-      {/* gold rising-bars accent */}
-      <rect x="28.6" y="29" width="3.4" height="6.5" rx="1.7" fill="#FCD34D" />
-      <rect x="33.5" y="25" width="3.4" height="10.5" rx="1.7" fill="#FBBF24" />
+
+      {/* Background */}
+      <rect width="48" height="48" rx="12" fill="#0f172a" />
+      <rect width="48" height="48" rx="12" fill="url(#logoDepth)" />
+      {/* Top-edge rim light */}
+      <rect x="0" y="0" width="48" height="1.5" rx="0.75" fill="#ffffff" fillOpacity="0.07" />
+
+      {/* Baseline */}
+      <rect x="9" y="37.5" width="30" height="1.25" rx="0.625" fill="#ffffff" fillOpacity="0.18" />
+
+      {/* Left bar — shortest */}
+      <rect x="11" y="26.5" width="7.5" height="11" rx="3.75" fill="#ffffff" fillOpacity="0.4" />
+
+      {/* Middle bar */}
+      <rect x="20.25" y="20" width="7.5" height="17.5" rx="3.75" fill="#ffffff" fillOpacity="0.65" />
+
+      {/* Right bar — tallest */}
+      <rect x="29.5" y="13.5" width="7.5" height="24" rx="3.75" fill="#ffffff" />
+
+      {/* Gold cap on right bar */}
+      <rect x="29.5" y="10" width="7.5" height="4.5" rx="2.25" fill="#F59E0B" />
     </svg>
   );
 }

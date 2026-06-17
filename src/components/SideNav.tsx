@@ -32,7 +32,7 @@ export function SideNav({ displayName }: { displayName: string }) {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-800 bg-slate-900 text-slate-300 md:flex">
+    <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-800 bg-slate-900 text-slate-300 md:flex md:sticky md:top-0 md:h-screen md:overflow-y-auto">
       <div className="flex items-center gap-2.5 px-5 py-5">
         <Logo className="h-9 w-9 shadow-sm" />
         <div className="leading-tight">
