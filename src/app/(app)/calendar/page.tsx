@@ -86,6 +86,41 @@ export default async function CalendarPage() {
   for (const a of accounts) {
     const bn = bankMap.get(a.bank_id) ?? "Bank";
     const who = a.holder ? ` (${a.holder})` : "";
+
+    // Account opened date
+    if (a.date_opened)
+      events.push({
+        date: a.date_opened,
+        type: "opened",
+        label: `${bn}: account opened${who}`,
+        href: "/accounts",
+      });
+
+    // Last activity recorded
+    if (a.last_activity_date)
+      events.push({
+        date: a.last_activity_date,
+        type: "last_activity",
+        label: `${bn}: last activity${who}`,
+        href: "/accounts",
+      });
+
+    // Individual activity log entries
+    if (Array.isArray(a.activity_log)) {
+      for (const entry of a.activity_log as { date: string; note?: string }[]) {
+        if (entry.date)
+          events.push({
+            date: entry.date,
+            type: "activity_log",
+            label: entry.note
+              ? `${bn}${who}: ${entry.note}`
+              : `${bn}: activity${who}`,
+            href: "/accounts",
+          });
+      }
+    }
+
+    // CD maturity
     if (a.account_type === "cd" && a.cd_maturity_date)
       events.push({
         date: a.cd_maturity_date,
@@ -93,16 +128,12 @@ export default async function CalendarPage() {
         label: `${bn}: CD matures${who}`,
         href: "/accounts",
       });
-    if (
-      a.account_type &&
-      DORMANCY_TYPES.includes(a.account_type) &&
-      a.last_activity_date
-    )
+
+    // Dormancy due date — fall back to date_opened if no last_activity_date
+    const dormancyRef = a.last_activity_date ?? a.date_opened;
+    if (a.account_type && DORMANCY_TYPES.includes(a.account_type) && dormancyRef)
       events.push({
-        date: addMonths(
-          a.last_activity_date,
-          effectiveDormancyMonths(a, defaultMonths),
-        ),
+        date: addMonths(dormancyRef, effectiveDormancyMonths(a, defaultMonths)),
         type: "activity",
         label: `${bn}: activity due${who}`,
         href: "/accounts",

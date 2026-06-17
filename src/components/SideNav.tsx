@@ -7,6 +7,7 @@ import {
   Landmark,
   CreditCard,
   CalendarDays,
+  Printer,
   Settings,
   Trash2,
   LogOut,
@@ -19,6 +20,7 @@ const LINKS = [
   { href: "/banks", label: "Banks", icon: Landmark, tour: "banks" },
   { href: "/accounts", label: "Accounts", icon: CreditCard, tour: "accounts" },
   { href: "/calendar", label: "Calendar", icon: CalendarDays, tour: "calendar" },
+  { href: "/checks", label: "Print Checks", icon: Printer, tour: "checks" },
   { href: "/settings", label: "Settings", icon: Settings, tour: "settings" },
   { href: "/trash", label: "Trash", icon: Trash2, tour: "trash" },
 ] as const;

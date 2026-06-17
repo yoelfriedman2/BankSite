@@ -73,15 +73,17 @@ function buildPrintHTML(fields: {
 <head>
 <meta charset="UTF-8">
 <style>
-  @page { size: 8.5in 11in; margin: 0.5in 0.75in 0.5in 0.75in; }
+  /* Standard business check: 8.5" wide × 3.5" tall on letter paper.
+     Printer non-printable area is typically 0.2" so we subtract that. */
+  @page { size: 8.5in 11in; margin: 0.2in; }
   * { box-sizing: border-box; }
   body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; }
   .check {
-    width: 7in;
-    height: 3.25in;
+    width: 8.1in;   /* 8.5 − 2 × 0.2 printer margin */
+    height: 3.1in;  /* 3.5 − 2 × 0.2 printer margin */
     border: 1.5px solid #8ab4d4;
     background: linear-gradient(to bottom, #eef5fb 0%, #f5f9fd 60%, #eef5fb 100%);
-    padding: 0.2in 0.3in 0.15in 0.3in;
+    padding: 0.18in 0.28in 0.65in 0.28in; /* extra bottom padding reserves space for MICR */
     position: relative;
     page-break-inside: avoid;
   }
@@ -112,9 +114,9 @@ function buildPrintHTML(fields: {
   .sig-block .field-line { min-width: 1.8in; }
   .micr-row {
     position: absolute;
-    bottom: 0.1in;
-    left: 0.3in;
-    right: 0.3in;
+    bottom: 0.2in;   /* ANSI X9.27: MICR band 3/16"–9/16" from bottom edge */
+    left: 0.28in;
+    right: 0.28in;
     font-family: 'Courier New', Courier, monospace;
     font-size: 11pt;
     letter-spacing: 0.08em;

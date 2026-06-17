@@ -6,7 +6,9 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export type CalEvent = {
   date: string; // YYYY-MM-DD
-  type: "sub_start" | "sub_end" | "pricing" | "eligibility" | "cd" | "activity";
+  type:
+    | "sub_start" | "sub_end" | "pricing" | "eligibility"
+    | "cd" | "activity" | "opened" | "last_activity" | "activity_log";
   label: string;
   href: string;
 };
@@ -18,6 +20,9 @@ const TYPE_STYLES: Record<CalEvent["type"], string> = {
   eligibility: "bg-slate-100 text-slate-600",
   cd: "bg-amber-100 text-amber-800",
   activity: "bg-emerald-100 text-emerald-700",
+  opened: "bg-blue-100 text-blue-700",
+  last_activity: "bg-sky-100 text-sky-700",
+  activity_log: "bg-indigo-50 text-indigo-600",
 };
 
 const TYPE_LABELS: Record<CalEvent["type"], string> = {
@@ -27,6 +32,9 @@ const TYPE_LABELS: Record<CalEvent["type"], string> = {
   eligibility: "Eligibility date",
   cd: "CD maturity",
   activity: "Activity due",
+  opened: "Account opened",
+  last_activity: "Last activity",
+  activity_log: "Activity entry",
 };
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];

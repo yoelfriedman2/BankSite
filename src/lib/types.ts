@@ -3,6 +3,8 @@ export type BankStatus =
   | "want_to_open"
   | "applied"
   | "open"
+  | "open_add_account"
+  | "open_add_funds"
   | "cannot_open";
 export type AccountType =
   | "checking"
@@ -118,12 +120,16 @@ export const STATUS_LABELS: Record<BankStatus, string> = {
   want_to_open: "Want to open",
   applied: "Applied",
   open: "Open",
+  open_add_account: "Open · Add account",
+  open_add_funds: "Open · Add funds",
   cannot_open: "Can't open",
 };
 
 /** Order used for status tabs/filters. */
 export const STATUS_ORDER: BankStatus[] = [
   "open",
+  "open_add_account",
+  "open_add_funds",
   "applied",
   "want_to_open",
   "cannot_open",
@@ -136,6 +142,8 @@ export const ASSIGNABLE_STATUSES: BankStatus[] = [
   "want_to_open",
   "applied",
   "open",
+  "open_add_account",
+  "open_add_funds",
   "cannot_open",
 ];
 

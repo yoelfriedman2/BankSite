@@ -142,11 +142,18 @@ export async function upsertAccount(
       .from("accounts")
       .insert({ ...patch, user_id: user.id, bank_id: values.bank_id });
     if (error) return { error: error.message };
-    // Having an account means the bank is open.
-    await supabase
+    // Auto-promote to "open" only when the bank isn't already tracked as open.
+    const { data: bank } = await supabase
       .from("banks")
-      .update({ status: "open" })
-      .eq("id", values.bank_id);
+      .select("status")
+      .eq("id", values.bank_id)
+      .maybeSingle();
+    if (bank && !["open", "open_add_account", "open_add_funds"].includes(bank.status)) {
+      await supabase
+        .from("banks")
+        .update({ status: "open" })
+        .eq("id", values.bank_id);
+    }
   }
 
   revalidate();

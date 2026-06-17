@@ -56,10 +56,11 @@ export function getActivityLevel(
   if (!account.account_type || !DORMANCY_TYPES.has(account.account_type)) {
     return "none";
   }
-  if (!account.last_activity_date) return "none";
+  const activityDate = account.last_activity_date ?? account.date_opened;
+  if (!activityDate) return "none";
 
   const windowMonths = Math.max(3, effectiveDormancyMonths(account, defaultMonths));
-  const elapsed = monthsSince(account.last_activity_date, now);
+  const elapsed = monthsSince(activityDate, now);
 
   if (elapsed >= windowMonths - 1) return "red";
   if (elapsed >= windowMonths - 3) return "orange";
