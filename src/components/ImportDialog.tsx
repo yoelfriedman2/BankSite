@@ -509,7 +509,8 @@ export function ImportDialog({
             <button
               type="button"
               onClick={() => setStage("upload")}
-              className="text-sm text-slate-500 hover:text-slate-700"
+              disabled={isPending}
+              className="text-sm text-slate-500 hover:text-slate-700 disabled:opacity-40"
             >
               ← Change file
             </button>

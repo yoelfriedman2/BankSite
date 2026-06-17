@@ -387,7 +387,7 @@ export async function importBanks(
       if (row.phone != null) upd.phone = row.phone;
       if (row.requirements != null) upd.requirements = row.requirements;
       if (row.bank_notes != null) upd.notes = row.bank_notes;
-      if (row.status || acct) upd.status = row.status ?? "open";
+      if (row.status) upd.status = row.status;
       const { error } = await supabase
         .from("banks")
         .update(upd)

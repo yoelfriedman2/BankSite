@@ -58,7 +58,7 @@ export function getActivityLevel(
   }
   if (!account.last_activity_date) return "none";
 
-  const windowMonths = effectiveDormancyMonths(account, defaultMonths);
+  const windowMonths = Math.max(3, effectiveDormancyMonths(account, defaultMonths));
   const elapsed = monthsSince(account.last_activity_date, now);
 
   if (elapsed >= windowMonths - 1) return "red";

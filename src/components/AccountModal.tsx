@@ -122,7 +122,7 @@ export function AccountModal({
   return (
     <div
       className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4"
-      onMouseDown={onClose}
+      onMouseDown={(e) => { e.stopPropagation(); onClose(); }}
     >
       <form
         onSubmit={handleSubmit}

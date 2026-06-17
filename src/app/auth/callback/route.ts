@@ -5,7 +5,9 @@ import { sendWelcomeEmail, sendNewUserNotification } from "@/lib/email";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/";
+  // Only allow same-origin relative paths to prevent open redirect attacks
+  const rawNext = searchParams.get("next") ?? "/";
+  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/";
   const providerError =
     searchParams.get("error_description") || searchParams.get("error");
 
