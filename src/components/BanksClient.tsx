@@ -128,6 +128,8 @@ export function BanksClient({
     const c = {
       all: banks.length,
       open: 0,
+      open_add_account: 0,
+      open_add_funds: 0,
       applied: 0,
       want_to_open: 0,
       cannot_open: 0,
@@ -214,8 +216,7 @@ export function BanksClient({
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Banks</h1>
           <p className="text-sm text-slate-500">
-            {counts.all} banks · {counts.open} open · {counts.want_to_open} to
-            open · {counts.cannot_open} can&apos;t
+            {counts.all} banks · {counts.open + counts.open_add_account + counts.open_add_funds} open · {counts.want_to_open} to open · {counts.cannot_open} can&apos;t
           </p>
         </div>
         <div className="flex gap-2">
