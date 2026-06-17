@@ -15,12 +15,12 @@ import { Logo } from "@/components/Logo";
 import { GlobalSearch } from "@/components/GlobalSearch";
 
 const LINKS = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/banks", label: "Banks", icon: Landmark },
-  { href: "/accounts", label: "Accounts", icon: CreditCard },
-  { href: "/calendar", label: "Calendar", icon: CalendarDays },
-  { href: "/settings", label: "Settings", icon: Settings },
-  { href: "/trash", label: "Trash", icon: Trash2 },
+  { href: "/", label: "Dashboard", icon: LayoutDashboard, tour: "dashboard" },
+  { href: "/banks", label: "Banks", icon: Landmark, tour: "banks" },
+  { href: "/accounts", label: "Accounts", icon: CreditCard, tour: "accounts" },
+  { href: "/calendar", label: "Calendar", icon: CalendarDays, tour: "calendar" },
+  { href: "/settings", label: "Settings", icon: Settings, tour: "settings" },
+  { href: "/trash", label: "Trash", icon: Trash2, tour: "trash" },
 ] as const;
 
 function isActive(pathname: string, href: string) {
@@ -46,12 +46,13 @@ export function SideNav({ displayName }: { displayName: string }) {
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-2">
-        {LINKS.map(({ href, label, icon: Icon }) => {
+        {LINKS.map(({ href, label, icon: Icon, tour }) => {
           const active = isActive(pathname, href);
           return (
             <Link
               key={href}
               href={href}
+              data-tour={tour}
               className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                 active
                   ? "bg-slate-800 text-white"

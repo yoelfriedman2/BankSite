@@ -1,232 +1,362 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import {
-  X,
-  ChevronLeft,
-  ChevronRight,
-  LayoutDashboard,
-  Building2,
-  CreditCard,
-  CalendarDays,
-  Settings,
-  Trash2,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { Logo } from "@/components/Logo";
+import { useState, useEffect, useCallback } from "react";
+import { X, ChevronLeft, ChevronRight } from "lucide-react";
 
-const TOUR_KEY = "bt_tour_v1";
+const BASE = "bt_tour_v1";
 
-type Step = {
-  Icon: LucideIcon | null;
-  badge: string | null;
-  title: string;
-  desc: string;
-};
-
-const STEPS: Step[] = [
+const STEPS = [
   {
-    Icon: null,
-    badge: null,
-    title: "Welcome to Bank Tracker",
-    desc: "Everything in one place for tracking your mutual bank accounts, dormancy, and conversion activity. Let me show you around — it takes less than a minute.",
+    id: null,
+    badge: "Quick Tour",
+    title: "Welcome to Bank Tracker!",
+    desc: "Everything for tracking your mutual bank accounts in one place. Click Next for a 30-second tour of the main sections.",
   },
   {
-    Icon: LayoutDashboard,
+    id: "dashboard",
     badge: "Dashboard",
     title: "Your overview at a glance",
-    desc: "See every account that needs activity, upcoming CD maturities, and a total count of everything you're tracking — all on one screen.",
+    desc: "See every account that needs activity, upcoming CD maturities, and a full summary of what you're tracking — all on one screen.",
   },
   {
-    Icon: Building2,
+    id: "banks",
     badge: "Banks",
-    title: "Banks — your main workspace",
-    desc: "Add banks, open multiple accounts under each one, log activity dates, watch conversion status, and store access credentials securely.",
+    title: "Your main workspace",
+    desc: "Add banks, open multiple accounts under each one, log activity dates, track conversion status, and store access credentials.",
   },
   {
-    Icon: CreditCard,
+    id: "accounts",
     badge: "Accounts",
     title: "All accounts in one flat list",
-    desc: "Every account across every bank in one place. Filter by holder, sort by dormancy status, and export the whole list to Excel in one click.",
+    desc: "Every account across every bank in one place. Filter by holder, sort by dormancy status, and export to Excel in one click.",
   },
   {
-    Icon: CalendarDays,
+    id: "calendar",
     badge: "Calendar",
-    title: "Upcoming events at a glance",
+    title: "Upcoming events",
     desc: "CD maturities, dormancy warnings, and activity dates shown month by month — so nothing sneaks up on you.",
   },
   {
-    Icon: Settings,
+    id: "settings",
     badge: "Settings",
-    title: "Configure your preferences",
-    desc: "Set your display name, default dormancy threshold, and email reminder preferences — including which inactivity thresholds should trigger an alert.",
+    title: "Your preferences",
+    desc: "Set your display name, default dormancy threshold, and email reminder thresholds — configure when you get notified.",
   },
   {
-    Icon: Trash2,
+    id: "trash",
     badge: "Trash",
-    title: "Nothing is permanently gone",
+    title: "Nothing is permanent",
     desc: "Deleted banks and accounts land here first. You have 30 days to restore anything before it's removed for good.",
   },
 ];
 
-export function WalkthroughModal({ isDemo }: { isDemo: boolean }) {
+export function WalkthroughModal({
+  isDemo,
+  userId,
+}: {
+  isDemo: boolean;
+  userId: string;
+}) {
+  const key = `${BASE}_${userId}`;
   const [step, setStep] = useState(0);
-  const [visible, setVisible] = useState(false);
+  const [show, setShow] = useState(false);
+  const [tipPos, setTipPos] = useState<{ top: number; left: number } | null>(null);
+  const [ringRect, setRingRect] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+  } | null>(null);
 
   useEffect(() => {
-    if (isDemo) return;
+    if (isDemo || !userId) return;
     try {
-      if (!localStorage.getItem(TOUR_KEY)) setVisible(true);
+      if (!localStorage.getItem(key)) setShow(true);
     } catch {
       /* storage blocked */
     }
-  }, [isDemo]);
+  }, [isDemo, key, userId]);
+
+  const reposition = useCallback(() => {
+    const sid = STEPS[step].id;
+    if (!sid) {
+      setTipPos(null);
+      setRingRect(null);
+      return;
+    }
+    const el = document.querySelector(`[data-tour="${sid}"]`);
+    if (!el) {
+      setTipPos(null);
+      setRingRect(null);
+      return;
+    }
+    const r = el.getBoundingClientRect();
+    setRingRect({ top: r.top, left: r.left, width: r.width, height: r.height });
+    setTipPos({ top: r.top + r.height / 2, left: r.right + 14 });
+  }, [step]);
+
+  useEffect(() => {
+    if (!show) return;
+    reposition();
+    window.addEventListener("resize", reposition);
+    return () => window.removeEventListener("resize", reposition);
+  }, [show, reposition]);
 
   function dismiss() {
     try {
-      localStorage.setItem(TOUR_KEY, "1");
+      localStorage.setItem(key, "1");
     } catch {
       /* storage blocked */
     }
-    setVisible(false);
+    setShow(false);
   }
 
-  if (!visible) return null;
+  if (!show) return null;
 
   const cur = STEPS[step];
   const isFirst = step === 0;
   const isLast = step === STEPS.length - 1;
-  const { Icon } = cur;
 
-  return (
+  const card = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(3,7,18,0.82)", backdropFilter: "blur(6px)" }}
+      style={{
+        width: 276,
+        background: "#0a111f",
+        border: "1px solid rgba(255,255,255,0.09)",
+        borderRadius: 14,
+        boxShadow:
+          "0 12px 40px rgba(0,0,0,0.75), 0 2px 8px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)",
+        overflow: "hidden",
+      }}
     >
-      <div
-        className="relative w-full max-w-md overflow-hidden rounded-2xl"
-        style={{
-          background: "#0a111f",
-          border: "1px solid rgba(255,255,255,0.07)",
-          boxShadow:
-            "0 0 0 1px rgba(255,255,255,0.03), 0 32px 80px rgba(0,0,0,0.9), inset 0 1px 0 rgba(255,255,255,0.06)",
-        }}
-      >
-        {/* Gold top bar */}
-        <div style={{ height: 3, background: "linear-gradient(90deg,#D97706,#F59E0B,#FBBF24)" }} />
+      {/* Gold top bar */}
+      <div style={{ height: 3, background: "#F59E0B" }} />
 
-        {/* Header row */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-0">
+      <div style={{ padding: "13px 15px 11px" }}>
+        {/* Badge + close */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 9,
+          }}
+        >
           <span
-            className="text-[10px] font-bold uppercase tracking-widest"
-            style={{ color: "rgba(245,158,11,0.60)" }}
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              color: "#F59E0B",
+              textTransform: "uppercase",
+              letterSpacing: "0.18em",
+            }}
           >
-            {isFirst ? "Quick tour" : `Step ${step} of ${STEPS.length - 1}`}
+            {cur.badge}
           </span>
           <button
             onClick={dismiss}
-            className="flex h-7 w-7 items-center justify-center rounded-full transition"
-            style={{ background: "rgba(255,255,255,0.05)", color: "rgba(148,163,184,0.7)" }}
-            onMouseEnter={(e) =>
-              ((e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.9)")
-            }
-            onMouseLeave={(e) =>
-              ((e.currentTarget as HTMLButtonElement).style.color = "rgba(148,163,184,0.7)")
-            }
             aria-label="Skip tour"
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "rgba(148,163,184,0.65)",
+              padding: 2,
+              display: "flex",
+              alignItems: "center",
+            }}
           >
-            <X className="h-3.5 w-3.5" />
+            <X size={13} />
           </button>
         </div>
 
-        {/* Icon area */}
-        <div className="flex justify-center pt-7 pb-5">
-          <div
-            className="flex h-[88px] w-[88px] items-center justify-center rounded-2xl"
-            style={{
-              background: "rgba(245,158,11,0.10)",
-              border: "1px solid rgba(245,158,11,0.20)",
-            }}
-          >
-            {isFirst ? (
-              <Logo className="h-14 w-14" />
-            ) : (
-              Icon && <Icon className="h-10 w-10" style={{ color: "#F59E0B" }} strokeWidth={1.5} />
-            )}
-          </div>
+        <div
+          style={{
+            fontSize: 14,
+            fontWeight: 700,
+            color: "#ffffff",
+            marginBottom: 5,
+            lineHeight: 1.3,
+          }}
+        >
+          {cur.title}
         </div>
-
-        {/* Text */}
-        <div className="px-8 pb-5 text-center">
-          {cur.badge && (
-            <div
-              className="mb-2.5 inline-flex items-center rounded-full px-3 py-0.5 text-[11px] font-semibold uppercase tracking-wider"
-              style={{ background: "rgba(245,158,11,0.12)", color: "#F59E0B" }}
-            >
-              {cur.badge}
-            </div>
-          )}
-          <h2 className="mb-2.5 text-[17px] font-bold leading-snug text-white">{cur.title}</h2>
-          <p
-            className="text-[13px] leading-relaxed"
-            style={{ color: "rgba(148,163,184,0.88)" }}
-          >
-            {cur.desc}
-          </p>
+        <div
+          style={{
+            fontSize: 12.5,
+            color: "rgba(148,163,184,0.88)",
+            lineHeight: 1.55,
+            marginBottom: 12,
+          }}
+        >
+          {cur.desc}
         </div>
 
         {/* Progress dots */}
-        <div className="flex justify-center gap-1.5 pb-5">
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            gap: 4,
+            marginBottom: 10,
+          }}
+        >
           {STEPS.map((_, i) => (
             <button
               key={i}
               onClick={() => setStep(i)}
-              className="rounded-full transition-all duration-200"
+              aria-label={`Step ${i + 1}`}
               style={{
-                width: i === step ? 22 : 6,
-                height: 6,
-                background: i === step ? "#F59E0B" : "rgba(255,255,255,0.14)",
+                width: i === step ? 18 : 5,
+                height: 5,
+                borderRadius: 99,
+                background:
+                  i === step ? "#F59E0B" : "rgba(255,255,255,0.14)",
+                border: "none",
+                cursor: "pointer",
+                padding: 0,
+                transition: "width 0.2s ease",
               }}
-              aria-label={`Go to step ${i + 1}`}
             />
           ))}
         </div>
 
         {/* Navigation */}
         <div
-          className="flex items-center justify-between px-6 py-4"
-          style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
         >
           <button
             onClick={() => setStep((s) => s - 1)}
             disabled={isFirst}
-            className="flex items-center gap-1 text-[13px] font-medium transition disabled:pointer-events-none disabled:opacity-0"
-            style={{ color: "rgba(148,163,184,0.80)" }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+              fontSize: 12,
+              fontWeight: 500,
+              color: "rgba(148,163,184,0.8)",
+              background: "none",
+              border: "none",
+              cursor: isFirst ? "default" : "pointer",
+              opacity: isFirst ? 0 : 1,
+              padding: "3px 4px",
+            }}
           >
-            <ChevronLeft className="h-4 w-4" />
-            Back
+            <ChevronLeft size={13} /> Back
           </button>
 
           {isLast ? (
             <button
               onClick={dismiss}
-              className="rounded-xl px-5 py-2 text-[13px] font-bold text-black transition hover:brightness-110 active:scale-95"
-              style={{ background: "#F59E0B" }}
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: "#000",
+                background: "#F59E0B",
+                border: "none",
+                borderRadius: 8,
+                padding: "6px 14px",
+                cursor: "pointer",
+              }}
             >
               Get started →
             </button>
           ) : (
             <button
               onClick={() => setStep((s) => s + 1)}
-              className="flex items-center gap-1 rounded-xl px-5 py-2 text-[13px] font-bold text-black transition hover:brightness-110 active:scale-95"
-              style={{ background: "#F59E0B" }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 3,
+                fontSize: 12,
+                fontWeight: 700,
+                color: "#000",
+                background: "#F59E0B",
+                border: "none",
+                borderRadius: 8,
+                padding: "6px 14px",
+                cursor: "pointer",
+              }}
             >
-              Next
-              <ChevronRight className="h-4 w-4" />
+              Next <ChevronRight size={13} />
             </button>
           )}
         </div>
       </div>
     </div>
+  );
+
+  return (
+    <>
+      {/* Pulsing amber ring around current nav item */}
+      {ringRect && (
+        <div
+          style={{
+            position: "fixed",
+            top: ringRect.top - 4,
+            left: ringRect.left - 4,
+            width: ringRect.width + 8,
+            height: ringRect.height + 8,
+            borderRadius: 10,
+            border: "2px solid #F59E0B",
+            pointerEvents: "none",
+            zIndex: 49,
+            animation: "tourPulse 1.8s ease-in-out infinite",
+          }}
+        />
+      )}
+
+      {/* Tooltip — next to nav item, or centered for welcome step */}
+      {tipPos ? (
+        <div
+          style={{
+            position: "fixed",
+            top: tipPos.top,
+            left: tipPos.left,
+            transform: "translateY(-50%)",
+            zIndex: 50,
+          }}
+        >
+          {/* Arrow pointing left toward nav item */}
+          <div
+            style={{
+              position: "absolute",
+              left: -8,
+              top: "50%",
+              transform: "translateY(-50%)",
+              width: 0,
+              height: 0,
+              borderTop: "7px solid transparent",
+              borderBottom: "7px solid transparent",
+              borderRight: "8px solid #0a111f",
+            }}
+          />
+          {card}
+        </div>
+      ) : (
+        <div
+          style={{
+            position: "fixed",
+            top: "50%",
+            left: "50%",
+            transform: "translate(calc(-50% + 120px), -50%)",
+            zIndex: 50,
+          }}
+        >
+          {card}
+        </div>
+      )}
+
+      <style>{`
+        @keyframes tourPulse {
+          0%,100% { box-shadow: 0 0 0 3px rgba(245,158,11,0.20); }
+          50%      { box-shadow: 0 0 0 7px rgba(245,158,11,0.08), 0 0 20px rgba(245,158,11,0.18); }
+        }
+      `}</style>
+    </>
   );
 }

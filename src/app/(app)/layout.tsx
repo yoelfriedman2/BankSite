@@ -12,6 +12,8 @@ export default async function AppLayout({
 }) {
   let displayName: string;
 
+  let userId = "";
+
   if (DEMO_MODE) {
     displayName = getDemoProfile().display_name ?? "Demo User";
   } else {
@@ -21,6 +23,8 @@ export default async function AppLayout({
     } = await supabase.auth.getUser();
 
     if (!user) redirect("/login");
+
+    userId = user.id;
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -38,7 +42,7 @@ export default async function AppLayout({
 
   return (
     <div className="flex min-h-screen bg-slate-50">
-      <WalkthroughModal isDemo={DEMO_MODE} />
+      <WalkthroughModal isDemo={DEMO_MODE} userId={userId} />
       <SideNav displayName={displayName} />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopNav />
