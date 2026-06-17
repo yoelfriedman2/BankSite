@@ -39,6 +39,8 @@ const SORT_LABELS: Record<SortKey, string> = {
 const STATUS_SELECT_STYLES: Record<BankStatus, string> = {
   untracked: "border-slate-200 bg-slate-50 text-slate-500",
   open: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  open_add_account: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  open_add_funds: "border-emerald-200 bg-emerald-50 text-emerald-700",
   applied: "border-amber-200 bg-amber-50 text-amber-700",
   want_to_open: "border-violet-200 bg-violet-50 text-violet-700",
   cannot_open: "border-rose-200 bg-rose-50 text-rose-700",
