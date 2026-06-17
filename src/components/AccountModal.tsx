@@ -360,12 +360,12 @@ export function AccountModal({
             <div className="flex items-center gap-2">
               <input
                 type="date"
-                className={`${inputClass} w-40 flex-shrink-0`}
+                className="w-36 shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
                 value={newDate}
                 onChange={(e) => setNewDate(e.target.value)}
               />
               <input
-                className={inputClass}
+                className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
                 placeholder="note (optional)"
                 value={newNote}
                 onChange={(e) => setNewNote(e.target.value)}
