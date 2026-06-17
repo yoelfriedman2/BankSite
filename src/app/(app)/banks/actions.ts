@@ -346,19 +346,29 @@ export async function importBanks(
     .is("deleted_at", null);
   const byCert = new Map<number, { id: string; status: string }>();
   const byName = new Map<string, { id: string; status: string }>();
+  const byId = new Map<string, { id: string; status: string }>();
   for (const b of existing ?? []) {
     const entry = { id: b.id as string, status: b.status as string };
     if (b.cert != null) byCert.set(b.cert as number, entry);
     byName.set((b.name as string).toLowerCase(), entry);
+    byId.set(b.id as string, entry);
   }
 
   const accountInserts: Record<string, unknown>[] = [];
   let banksTouched = 0;
 
   for (const row of rows) {
-    const found =
-      (row.cert != null ? byCert.get(row.cert) : undefined) ??
-      byName.get(row.name.toLowerCase());
+    // Client review step may have pre-resolved a bank ID
+    let found: { id: string; status: string } | undefined;
+    if (row.matched_bank_id === "CREATE_NEW") {
+      found = undefined; // explicitly force new bank creation
+    } else if (row.matched_bank_id) {
+      found = byId.get(row.matched_bank_id);
+    } else {
+      found =
+        (row.cert != null ? byCert.get(row.cert) : undefined) ??
+        byName.get(row.name.toLowerCase());
+    }
     const acct = rowHasAccount(row);
 
     let bankId: string;

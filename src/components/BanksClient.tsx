@@ -242,21 +242,22 @@ export function BanksClient({
       </div>
 
       {/* Filters */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-white p-1">
+      <div className="mb-4 space-y-2">
+        {/* Status tabs — horizontally scrollable on mobile */}
+        <div className="flex gap-1.5 overflow-x-auto pb-1">
           {tabs.map((t) => (
             <button
               key={t.key}
               onClick={() => setStatusFilter(t.key)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`flex-shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                 statusFilter === t.key
                   ? "bg-amber-500 text-white"
-                  : "text-slate-600 hover:bg-slate-100"
+                  : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
               }`}
             >
-              {t.label}
+              {t.label}{" "}
               <span
-                className={`ml-1.5 ${
+                className={`${
                   statusFilter === t.key ? "text-amber-100" : "text-slate-400"
                 }`}
               >
@@ -266,40 +267,44 @@ export function BanksClient({
           ))}
         </div>
 
-        <div className="relative ml-auto">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search banks or holders…"
-            className="w-56 rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-          />
+        {/* Search + sort — stack on mobile, row on desktop */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search banks or holders…"
+              className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+            />
+          </div>
+          <div className="flex gap-2">
+            <select
+              value={stateFilter}
+              onChange={(e) => setStateFilter(e.target.value)}
+              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500 sm:flex-none"
+            >
+              <option value="all">All states</option>
+              {states.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as SortKey)}
+              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500 sm:flex-none"
+            >
+              {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+                <option key={k} value={k}>
+                  {SORT_LABELS[k]}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-
-        <select
-          value={stateFilter}
-          onChange={(e) => setStateFilter(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500"
-        >
-          <option value="all">All states</option>
-          {states.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={sort}
-          onChange={(e) => setSort(e.target.value as SortKey)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500"
-        >
-          {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
-            <option key={k} value={k}>
-              {SORT_LABELS[k]}
-            </option>
-          ))}
-        </select>
       </div>
 
       {/* Mobile cards */}
@@ -533,6 +538,7 @@ export function BanksClient({
       )}
       {importOpen && (
         <ImportDialog
+          existingBanks={banks.map((b) => ({ id: b.id, name: b.name, cert: b.cert ?? null }))}
           onClose={() => setImportOpen(false)}
           onImported={() => router.refresh()}
         />

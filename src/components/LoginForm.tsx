@@ -95,9 +95,12 @@ export function LoginForm({ initialError }: { initialError?: string }) {
   const [error, setError] = useState<string | null>(initialError ?? null);
   const [pending, setPending] = useState<"google" | "azure" | null>(null);
   const [mouse, setMouse] = useState({ x: 0.5, y: 0.5 });
+  const [mousePos, setMousePos] = useState({ x: -100, y: -100 });
+  const [insideCard, setInsideCard] = useState(false);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     setMouse({ x: e.clientX / window.innerWidth, y: e.clientY / window.innerHeight });
+    setMousePos({ x: e.clientX, y: e.clientY });
   }, []);
 
   useEffect(() => {
@@ -128,8 +131,28 @@ export function LoginForm({ initialError }: { initialError?: string }) {
   return (
     <div
       className="relative flex min-h-screen items-center justify-center overflow-hidden px-4"
-      style={{ backgroundColor: "#030712" }}
+      style={{ backgroundColor: "#030712", cursor: insideCard ? "auto" : "none" }}
     >
+      {/* ─── Custom dollar cursor ─── */}
+      {!insideCard && (
+        <div
+          className="pointer-events-none fixed z-50 select-none"
+          style={{
+            left: mousePos.x,
+            top: mousePos.y,
+            transform: "translate(-50%, -50%)",
+            fontSize: 26,
+            fontWeight: 800,
+            color: "rgba(255,255,255,0.92)",
+            lineHeight: 1,
+            textShadow:
+              "0 0 10px rgba(245,158,11,0.9), 0 0 22px rgba(245,158,11,0.5)",
+          }}
+        >
+          $
+        </div>
+      )}
+
       {/* ─── Dense symbol layer ─── */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden select-none">
 
@@ -377,7 +400,9 @@ export function LoginForm({ initialError }: { initialError?: string }) {
       {/* ─── Card ─── */}
       <div
         className="login-card relative z-10 w-full max-w-[380px]"
-        style={{ transform: cardTransform, transition: "transform 0.08s ease-out" }}
+        onMouseEnter={() => setInsideCard(true)}
+        onMouseLeave={() => setInsideCard(false)}
+        style={{ transform: cardTransform, transition: "transform 0.08s ease-out", cursor: "auto" }}
       >
         <div className="login-card-line mb-px h-px w-full rounded-full" />
 

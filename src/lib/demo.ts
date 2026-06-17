@@ -53,6 +53,8 @@ export type ImportRow = {
   last_activity_date: string | null;
   cd_maturity_date: string | null;
   account_notes: string | null;
+  // set by the client-side import review step; "CREATE_NEW" forces a new bank
+  matched_bank_id?: string | null;
 };
 
 function monthsAgo(n: number): string {

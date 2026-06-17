@@ -38,10 +38,10 @@ export default async function SettingsPage() {
       displayName={profile?.display_name ?? ""}
       defaultDormancyMonths={profile?.default_dormancy_months ?? 12}
       holders={profile?.holders ?? []}
-      notifyEmail={profile?.notify_email ?? false}
+      notifyEmail={profile?.notify_email ?? true}
       activityReminderMonths={profile?.activity_reminder_months ?? [9, 12]}
-      notifyNewComments={profile?.notify_new_comments ?? false}
-      notifyProductUpdates={profile?.notify_product_updates ?? false}
+      notifyNewComments={profile?.notify_new_comments ?? true}
+      notifyProductUpdates={profile?.notify_product_updates ?? true}
     />
   );
 }

@@ -50,6 +50,8 @@ const STEPS = [
   },
 ];
 
+type TipPos = { top: number; left: number; arrowDir: "left" | "up" };
+
 export function WalkthroughModal({
   isDemo,
   userId,
@@ -60,7 +62,7 @@ export function WalkthroughModal({
   const key = `${BASE}_${userId}`;
   const [step, setStep] = useState(0);
   const [show, setShow] = useState(false);
-  const [tipPos, setTipPos] = useState<{ top: number; left: number } | null>(null);
+  const [tipPos, setTipPos] = useState<TipPos | null>(null);
   const [ringRect, setRingRect] = useState<{
     top: number;
     left: number;
@@ -84,15 +86,38 @@ export function WalkthroughModal({
       setRingRect(null);
       return;
     }
-    const el = document.querySelector(`[data-tour="${sid}"]`);
+
+    // Find the VISIBLE element — sidebar on desktop, top nav on mobile
+    let el: Element | null = null;
+    const candidates = document.querySelectorAll(`[data-tour="${sid}"]`);
+    for (const c of candidates) {
+      const r = c.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        el = c;
+        break;
+      }
+    }
+
     if (!el) {
       setTipPos(null);
       setRingRect(null);
       return;
     }
+
     const r = el.getBoundingClientRect();
     setRingRect({ top: r.top, left: r.left, width: r.width, height: r.height });
-    setTipPos({ top: r.top + r.height / 2, left: r.right + 14 });
+
+    // Top nav (mobile) — element is in the horizontal bar near top of screen
+    if (r.top < 150) {
+      const tipLeft = Math.min(
+        Math.max(r.left, 8),
+        window.innerWidth - 292,
+      );
+      setTipPos({ top: r.bottom + 10, left: tipLeft, arrowDir: "up" });
+    } else {
+      // Sidebar (desktop) — tooltip to the right
+      setTipPos({ top: r.top + r.height / 2, left: r.right + 14, arrowDir: "left" });
+    }
   }, [step]);
 
   useEffect(() => {
@@ -129,11 +154,9 @@ export function WalkthroughModal({
         overflow: "hidden",
       }}
     >
-      {/* Gold top bar */}
       <div style={{ height: 3, background: "#F59E0B" }} />
 
       <div style={{ padding: "13px 15px 11px" }}>
-        {/* Badge + close */}
         <div
           style={{
             display: "flex",
@@ -192,7 +215,6 @@ export function WalkthroughModal({
           {cur.desc}
         </div>
 
-        {/* Progress dots */}
         <div
           style={{
             display: "flex",
@@ -210,8 +232,7 @@ export function WalkthroughModal({
                 width: i === step ? 18 : 5,
                 height: 5,
                 borderRadius: 99,
-                background:
-                  i === step ? "#F59E0B" : "rgba(255,255,255,0.14)",
+                background: i === step ? "#F59E0B" : "rgba(255,255,255,0.14)",
                 border: "none",
                 cursor: "pointer",
                 padding: 0,
@@ -221,7 +242,6 @@ export function WalkthroughModal({
           ))}
         </div>
 
-        {/* Navigation */}
         <div
           style={{
             display: "flex",
@@ -310,34 +330,51 @@ export function WalkthroughModal({
         />
       )}
 
-      {/* Tooltip — next to nav item, or centered for welcome step */}
       {tipPos ? (
         <div
           style={{
             position: "fixed",
             top: tipPos.top,
             left: tipPos.left,
-            transform: "translateY(-50%)",
+            transform: tipPos.arrowDir === "left" ? "translateY(-50%)" : "none",
             zIndex: 50,
           }}
         >
-          {/* Arrow pointing left toward nav item */}
-          <div
-            style={{
-              position: "absolute",
-              left: -8,
-              top: "50%",
-              transform: "translateY(-50%)",
-              width: 0,
-              height: 0,
-              borderTop: "7px solid transparent",
-              borderBottom: "7px solid transparent",
-              borderRight: "8px solid #0a111f",
-            }}
-          />
+          {/* Arrow pointing left — sidebar tooltip */}
+          {tipPos.arrowDir === "left" && (
+            <div
+              style={{
+                position: "absolute",
+                left: -8,
+                top: "50%",
+                transform: "translateY(-50%)",
+                width: 0,
+                height: 0,
+                borderTop: "7px solid transparent",
+                borderBottom: "7px solid transparent",
+                borderRight: "8px solid #0a111f",
+              }}
+            />
+          )}
+          {/* Arrow pointing up — top nav tooltip */}
+          {tipPos.arrowDir === "up" && (
+            <div
+              style={{
+                position: "absolute",
+                top: -8,
+                left: 20,
+                width: 0,
+                height: 0,
+                borderLeft: "7px solid transparent",
+                borderRight: "7px solid transparent",
+                borderBottom: "8px solid #0a111f",
+              }}
+            />
+          )}
           {card}
         </div>
       ) : (
+        /* Welcome step — centered (shifted right on desktop to clear 240px sidebar) */
         <div
           style={{
             position: "fixed",

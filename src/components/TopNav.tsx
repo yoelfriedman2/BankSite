@@ -15,12 +15,12 @@ import { Logo } from "@/components/Logo";
 import { GlobalSearch } from "@/components/GlobalSearch";
 
 const LINKS = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/banks", label: "Banks", icon: Landmark },
-  { href: "/accounts", label: "Accounts", icon: CreditCard },
-  { href: "/calendar", label: "Calendar", icon: CalendarDays },
-  { href: "/settings", label: "Settings", icon: Settings },
-  { href: "/trash", label: "Trash", icon: Trash2 },
+  { href: "/", label: "Dashboard", icon: LayoutDashboard, tour: "dashboard" },
+  { href: "/banks", label: "Banks", icon: Landmark, tour: "banks" },
+  { href: "/accounts", label: "Accounts", icon: CreditCard, tour: "accounts" },
+  { href: "/calendar", label: "Calendar", icon: CalendarDays, tour: "calendar" },
+  { href: "/settings", label: "Settings", icon: Settings, tour: "settings" },
+  { href: "/trash", label: "Trash", icon: Trash2, tour: "trash" },
 ] as const;
 
 function isActive(pathname: string, href: string) {
@@ -50,12 +50,13 @@ export function TopNav() {
         <GlobalSearch />
       </div>
       <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
-        {LINKS.map(({ href, label, icon: Icon }) => {
+        {LINKS.map(({ href, label, icon: Icon, tour }) => {
           const active = isActive(pathname, href);
           return (
             <Link
               key={href}
               href={href}
+              data-tour={tour}
               className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium ${
                 active
                   ? "bg-amber-50 text-amber-700"
