@@ -19,6 +19,14 @@ export function formatDate(dateStr: string | null | undefined): string {
   });
 }
 
+/** Format a date without the year — e.g. "Jun 16". */
+export function formatDateShort(dateStr: string | null | undefined): string {
+  if (!dateStr) return "—";
+  const d = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 /** Convert ALL-CAPS or lower text to Title Case (for city names, etc.). */
 export function titleCase(value: string | null | undefined): string {
   if (!value) return "";

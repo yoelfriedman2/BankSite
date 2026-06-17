@@ -21,7 +21,7 @@ import {
   monthsSince,
   daysUntil,
 } from "@/lib/dormancy";
-import { formatCurrency, formatDate, maskAccountNumber, titleCase } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateShort, maskAccountNumber, titleCase } from "@/lib/format";
 import { ActivityDot } from "@/components/badges";
 import { AccountModal } from "@/components/AccountModal";
 import { logActivityToday } from "@/app/(app)/accounts/actions";
@@ -55,23 +55,28 @@ function CdMaturityCell({ account }: { account: AccountRow }) {
   const textColor = matured ? "text-slate-400" : days <= 30 ? "text-rose-600 font-medium" : days <= 90 ? "text-amber-700 font-medium" : "text-slate-600";
 
   return (
-    <div className="min-w-[120px]">
+    <div className="min-w-[9rem]">
       {pct !== null && (
-        <div className="mb-1 flex items-center gap-2">
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+        <div className="mb-1.5">
+          <div className="mb-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
             <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
           </div>
-          <span className={`shrink-0 text-xs tabular-nums ${textColor}`}>
-            {formatDate(cd_maturity_date)}
-          </span>
+          <div className="flex items-center justify-between gap-2">
+            <span className={`text-xs tabular-nums ${textColor}`}>
+              {formatDateShort(cd_maturity_date)}
+            </span>
+            <span className="text-xs text-slate-400">
+              {matured ? "Matured" : `${days}d left`}
+            </span>
+          </div>
         </div>
       )}
       {pct === null && (
-        <div className={`text-sm tabular-nums ${textColor}`}>{formatDate(cd_maturity_date)}</div>
+        <div>
+          <div className={`text-sm tabular-nums ${textColor}`}>{formatDateShort(cd_maturity_date)}</div>
+          <div className="text-xs text-slate-400">{matured ? "Matured" : `${days}d left`}</div>
+        </div>
       )}
-      <div className="text-xs text-slate-400">
-        {matured ? "Matured" : `${days}d left`}
-      </div>
     </div>
   );
 }
@@ -312,7 +317,7 @@ export function AccountsClient({
               <th className="px-4 py-3 font-medium">Account #</th>
               <th className="px-4 py-3 text-right font-medium">Balance</th>
               <th className="px-4 py-3 font-medium">Last activity</th>
-              <th className="px-4 py-3 font-medium">CD maturity</th>
+              <th className="w-44 px-4 py-3 font-medium">CD maturity</th>
               <th className="px-4 py-3 text-right font-medium"></th>
             </tr>
           </thead>
@@ -359,24 +364,26 @@ export function AccountsClient({
                     <td className="px-4 py-3 text-right tabular-nums text-slate-600">
                       {formatCurrency(r.balance)}
                     </td>
-                    <td className="px-4 py-3 text-slate-600">
+                    <td className="px-4 py-3">
                       {(() => {
                         const activityDate = r.last_activity_date ?? r.date_opened;
                         const fromOpen = !r.last_activity_date && !!r.date_opened;
                         if (level !== "none" && activityDate) {
+                          const mo = monthsSince(activityDate);
                           return (
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-start gap-2">
                               <ActivityDot level={level} />
                               <div>
-                                <div className="text-slate-700">{formatDate(activityDate)}</div>
+                                <div className="text-sm text-slate-700">{formatDateShort(activityDate)}</div>
                                 <div className="text-xs text-slate-400">
-                                  {monthsSince(activityDate)} mo{fromOpen ? " · from open date" : ""}
+                                  {mo === 0 ? "This month" : `${mo} mo ago`}
+                                  {fromOpen && <span className="ml-1 text-slate-300">· opened</span>}
                                 </div>
                               </div>
                             </div>
                           );
                         }
-                        if (level !== "none") return <span className="text-amber-600">Not recorded</span>;
+                        if (level !== "none") return <span className="text-xs text-amber-500">Not recorded</span>;
                         return <span className="text-slate-300">—</span>;
                       })()}
                     </td>

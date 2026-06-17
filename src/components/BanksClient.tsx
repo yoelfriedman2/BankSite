@@ -452,22 +452,25 @@ export function BanksClient({
                       </div>
                     </td>
                     <td className="px-4 py-3 text-slate-600">
-                      {accts.length > 0 ? (
-                        <div className="flex items-center gap-2">
-                          <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-amber-100 px-1.5 text-xs font-semibold text-amber-700">
-                            {accts.length}
-                          </span>
-                          {holders && (
-                            <span className="max-w-[10rem] truncate text-xs text-slate-400">
-                              {holders}
+                      <div className="flex flex-col gap-1">
+                        {accts.length > 0 && (
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-amber-100 px-1.5 text-xs font-semibold text-amber-700">
+                              {accts.length}
                             </span>
-                          )}
-                        </div>
-                      ) : b.priority ? (
-                        <PriorityBadge priority={b.priority} />
-                      ) : (
-                        <span className="text-slate-300">—</span>
-                      )}
+                            {holders && (
+                              <span className="max-w-[10rem] truncate text-xs text-slate-400">
+                                {holders}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {b.priority ? (
+                          <PriorityBadge priority={b.priority} />
+                        ) : accts.length === 0 ? (
+                          <span className="text-slate-300">—</span>
+                        ) : null}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-slate-600">
                       {accts.length > 0 ? (
