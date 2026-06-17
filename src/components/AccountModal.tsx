@@ -143,11 +143,11 @@ export function AccountModal({
         </div>
         <p className="mb-5 text-sm text-slate-500">{bankName}</p>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {/* Single-column field stack — works correctly on every screen size */}
+        <div className="flex flex-col gap-4">
+
           <div>
-            <label className={labelClass} htmlFor="holder">
-              Account holder
-            </label>
+            <label className={labelClass} htmlFor="holder">Account holder</label>
             <input
               id="holder"
               list="known-holders"
@@ -158,15 +158,12 @@ export function AccountModal({
               autoFocus
             />
             <datalist id="known-holders">
-              {knownHolders.map((h) => (
-                <option key={h} value={h} />
-              ))}
+              {knownHolders.map((h) => <option key={h} value={h} />)}
             </datalist>
           </div>
+
           <div>
-            <label className={labelClass} htmlFor="account_type">
-              Account type
-            </label>
+            <label className={labelClass} htmlFor="account_type">Account type</label>
             <select
               id="account_type"
               className={inputClass}
@@ -174,22 +171,14 @@ export function AccountModal({
               onChange={(e) => set("account_type", e.target.value)}
             >
               <option value="">—</option>
-              {(
-                Object.keys(ACCOUNT_TYPE_LABELS) as Array<
-                  keyof typeof ACCOUNT_TYPE_LABELS
-                >
-              ).map((t) => (
-                <option key={t} value={t}>
-                  {ACCOUNT_TYPE_LABELS[t]}
-                </option>
+              {(Object.keys(ACCOUNT_TYPE_LABELS) as Array<keyof typeof ACCOUNT_TYPE_LABELS>).map((t) => (
+                <option key={t} value={t}>{ACCOUNT_TYPE_LABELS[t]}</option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className={labelClass} htmlFor="account_number">
-              Account number
-            </label>
+            <label className={labelClass} htmlFor="account_number">Account number</label>
             <input
               id="account_number"
               className={inputClass}
@@ -197,10 +186,9 @@ export function AccountModal({
               onChange={(e) => set("account_number", e.target.value)}
             />
           </div>
+
           <div>
-            <label className={labelClass} htmlFor="routing_number">
-              Routing number
-            </label>
+            <label className={labelClass} htmlFor="routing_number">Routing number</label>
             <input
               id="routing_number"
               className={inputClass}
@@ -210,9 +198,7 @@ export function AccountModal({
           </div>
 
           <div>
-            <label className={labelClass} htmlFor="balance">
-              Balance (USD)
-            </label>
+            <label className={labelClass} htmlFor="balance">Balance (USD)</label>
             <input
               id="balance"
               type="number"
@@ -223,10 +209,9 @@ export function AccountModal({
               onChange={(e) => set("balance", e.target.value)}
             />
           </div>
+
           <div>
-            <label className={labelClass} htmlFor="date_opened">
-              Date opened
-            </label>
+            <label className={labelClass} htmlFor="date_opened">Date opened</label>
             <input
               id="date_opened"
               type="date"
@@ -239,9 +224,7 @@ export function AccountModal({
           {showActivity && (
             <>
               <div>
-                <label className={labelClass} htmlFor="last_activity_date">
-                  Last activity date
-                </label>
+                <label className={labelClass} htmlFor="last_activity_date">Last activity date</label>
                 <input
                   id="last_activity_date"
                   type="date"
@@ -261,9 +244,7 @@ export function AccountModal({
                   className={inputClass}
                   placeholder={`Default: ${defaultDormancyMonths}`}
                   value={values.dormancy_months_override}
-                  onChange={(e) =>
-                    set("dormancy_months_override", e.target.value)
-                  }
+                  onChange={(e) => set("dormancy_months_override", e.target.value)}
                 />
               </div>
             </>
@@ -271,9 +252,7 @@ export function AccountModal({
 
           {showCd && (
             <div>
-              <label className={labelClass} htmlFor="cd_maturity_date">
-                CD maturity date
-              </label>
+              <label className={labelClass} htmlFor="cd_maturity_date">CD maturity date</label>
               <input
                 id="cd_maturity_date"
                 type="date"
@@ -284,10 +263,8 @@ export function AccountModal({
             </div>
           )}
 
-          <div className="col-span-2">
-            <label className={labelClass} htmlFor="acct_notes">
-              Notes
-            </label>
+          <div>
+            <label className={labelClass} htmlFor="acct_notes">Notes</label>
             <textarea
               id="acct_notes"
               rows={2}
@@ -297,13 +274,11 @@ export function AccountModal({
             />
           </div>
 
-          <div className="col-span-2 mt-1 border-t border-slate-100 pt-4">
+          <div className="mt-1 border-t border-slate-100 pt-4">
             <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
               Online access
             </h3>
-            <label className={labelClass} htmlFor="online_url">
-              Login URL
-            </label>
+            <label className={labelClass} htmlFor="online_url">Login URL</label>
             <input
               id="online_url"
               className={inputClass}
@@ -312,49 +287,44 @@ export function AccountModal({
               onChange={(e) => set("online_url", e.target.value)}
             />
           </div>
-          <div>
-            <label className={labelClass} htmlFor="acct_username">
-              Username
-            </label>
-            <input
-              id="acct_username"
-              autoComplete="off"
-              className={inputClass}
-              value={values.username}
-              onChange={(e) => set("username", e.target.value)}
-            />
-          </div>
-          <div>
-            <label className={labelClass} htmlFor="acct_password">
-              Password
-            </label>
-            <div className="relative">
+
+          {/* Username + password stay side-by-side — short values, naturally paired */}
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className={labelClass} htmlFor="acct_username">Username</label>
               <input
-                id="acct_password"
-                type={showPassword ? "text" : "password"}
+                id="acct_username"
                 autoComplete="off"
-                className={`${inputClass} pr-10`}
-                value={values.password}
-                onChange={(e) => set("password", e.target.value)}
+                className={inputClass}
+                value={values.username}
+                onChange={(e) => set("username", e.target.value)}
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword((s) => !s)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                title={showPassword ? "Hide" : "Show"}
-              >
-                {showPassword ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </button>
+            </div>
+            <div className="flex-1">
+              <label className={labelClass} htmlFor="acct_password">Password</label>
+              <div className="relative">
+                <input
+                  id="acct_password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="off"
+                  className={`${inputClass} pr-10`}
+                  value={values.password}
+                  onChange={(e) => set("password", e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((s) => !s)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  title={showPassword ? "Hide" : "Show"}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
           </div>
-          <div className="col-span-2">
-            <label className={labelClass} htmlFor="access_notes">
-              Access notes
-            </label>
+
+          <div>
+            <label className={labelClass} htmlFor="access_notes">Access notes</label>
             <textarea
               id="access_notes"
               rows={2}
@@ -365,7 +335,7 @@ export function AccountModal({
             />
           </div>
 
-          <div className="col-span-2">
+          <div>
             <label className={labelClass}>Activity history</label>
             {sortedLog.length > 0 && (
               <ul className="mb-2 space-y-1">
@@ -374,12 +344,8 @@ export function AccountModal({
                     key={i}
                     className="flex items-center gap-2 rounded-md bg-slate-50 px-2 py-1 text-sm"
                   >
-                    <span className="w-24 shrink-0 text-slate-500">
-                      {formatDate(e.date)}
-                    </span>
-                    <span className="flex-1 truncate text-slate-700">
-                      {e.note}
-                    </span>
+                    <span className="w-24 shrink-0 text-slate-500">{formatDate(e.date)}</span>
+                    <span className="flex-1 truncate text-slate-700">{e.note}</span>
                     <button
                       type="button"
                       onClick={() => removeEntry(i)}
@@ -394,7 +360,7 @@ export function AccountModal({
             <div className="flex gap-2">
               <input
                 type="date"
-                className={`${inputClass} w-40`}
+                className={`${inputClass} w-40 flex-shrink-0`}
                 value={newDate}
                 onChange={(e) => setNewDate(e.target.value)}
               />
@@ -413,6 +379,7 @@ export function AccountModal({
               </button>
             </div>
           </div>
+
         </div>
 
         {error && (
