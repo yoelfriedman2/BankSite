@@ -163,6 +163,59 @@ export async function sendNewUserNotification(userName: string, userEmail: strin
   );
 }
 
+/* ── Community note broadcast ── */
+export async function sendCommunityNoteEmail(
+  to: string,
+  authorName: string,
+  bankName: string,
+  noteBody: string,
+) {
+  if (!to) return {};
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f1f5f9;">
+<tr><td align="center" style="padding:40px 16px;">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:540px;">
+
+<tr><td bgcolor="#0f172a" style="border-radius:16px 16px 0 0;padding:28px 40px 24px;">
+  <div style="font-size:18px;font-weight:700;color:#ffffff;margin-bottom:2px;">Bank Tracker</div>
+  <div style="font-size:11px;font-weight:600;color:#F59E0B;letter-spacing:0.2em;text-transform:uppercase;">Community Note</div>
+</td></tr>
+
+<tr><td bgcolor="#ffffff" style="padding:32px 40px 28px;">
+  <p style="margin:0 0 6px;font-size:15px;font-weight:700;color:#0f172a;">${bankName}</p>
+  <p style="margin:0 0 20px;font-size:13px;color:#64748b;">${authorName} posted a community note:</p>
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:28px;">
+    <tr><td bgcolor="#f8fafc" style="border-left:3px solid #F59E0B;border-radius:0 8px 8px 0;padding:14px 18px;">
+      <p style="margin:0;font-size:14px;color:#1e293b;line-height:1.6;white-space:pre-wrap;">${noteBody}</p>
+    </td></tr>
+  </table>
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:0;">
+    <tr><td align="center">
+      <a href="${APP_URL}" style="display:inline-block;background:#F59E0B;color:#000000;font-size:13px;font-weight:700;text-decoration:none;padding:11px 28px;border-radius:9px;">View in Bank Tracker &rarr;</a>
+    </td></tr>
+  </table>
+</td></tr>
+
+<tr><td bgcolor="#f8fafc" style="border-radius:0 0 16px 16px;padding:16px 40px;border-top:1px solid #e2e8f0;text-align:center;">
+  <p style="margin:0;font-size:11px;color:#94a3b8;">Bank Tracker &middot; <a href="${APP_URL}/settings" style="color:#94a3b8;">manage notifications</a></p>
+</td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+
+  return sendEmail(
+    to,
+    `Bank Tracker — New note on ${bankName}`,
+    html,
+  );
+}
+
 /* ── Activity reminders (sent by daily cron) ── */
 export async function sendActivityReminderEmail(
   to: string,

@@ -116,7 +116,7 @@ export function BankForm({
     setCommentBusy(true);
     setCommentError(null);
     startTransition(async () => {
-      const result = await addBankComment(cert, commentBody, notifyAll);
+      const result = await addBankComment(cert, commentBody, notifyAll, initial?.name);
       if (result.error) {
         setCommentError(result.error);
         setCommentBusy(false);
@@ -676,7 +676,7 @@ export function BankForm({
                     onChange={(e) => setNotifyAll(e.target.checked)}
                     className="h-4 w-4 rounded border-slate-300 accent-amber-600"
                   />
-                  Email everyone (once email is set up)
+                  Email everyone
                 </label>
                 <button
                   type="button"

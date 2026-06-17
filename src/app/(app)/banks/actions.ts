@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { sendCommunityNoteEmail } from "@/lib/email";
 import {
   DEMO_MODE,
   addDemoBank,
@@ -579,6 +581,7 @@ export async function addBankComment(
   cert: number,
   body: string,
   notify: boolean,
+  bankName?: string,
 ): Promise<{ error?: string }> {
   const text = body.trim();
   if (!text) return { error: "Comment can't be empty." };
@@ -604,7 +607,7 @@ export async function addBankComment(
     profile?.display_name ||
     (user.user_metadata?.full_name as string | undefined) ||
     user.email ||
-    null;
+    "Someone";
 
   const { error } = await supabase
     .from("bank_comments")
@@ -617,8 +620,33 @@ export async function addBankComment(
     { onConflict: "user_id,cert" },
   );
 
-  // `notify` (email everyone) is wired once the email service is connected.
-  void notify;
+  if (notify) {
+    try {
+      const admin = createAdminClient();
+      const { data: profiles } = await admin
+        .from("profiles")
+        .select("id")
+        .eq("notify_email", true)
+        .neq("id", user.id);
+
+      if (profiles?.length) {
+        const { data: authData } = await admin.auth.admin.listUsers({ perPage: 1000 });
+        const emailMap = Object.fromEntries(
+          (authData?.users ?? []).map((u) => [u.id, u.email ?? ""]),
+        );
+        const label = bankName ?? `cert #${cert}`;
+        await Promise.all(
+          profiles.map((p) => {
+            const email = emailMap[p.id];
+            if (!email) return Promise.resolve();
+            return sendCommunityNoteEmail(email, authorName, label, text);
+          }),
+        );
+      }
+    } catch (err) {
+      console.error("[addBankComment] email broadcast failed:", err);
+    }
+  }
 
   revalidate();
   return {};
