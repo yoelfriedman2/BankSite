@@ -28,6 +28,54 @@ import { logActivityToday } from "@/app/(app)/accounts/actions";
 
 const ACTIVITY_TYPES = ["checking", "savings", "money_market"];
 
+function CdMaturityCell({ account }: { account: AccountRow }) {
+  const { cd_maturity_date, date_opened } = account;
+  if (!cd_maturity_date) return <span className="text-slate-300">—</span>;
+
+  const days = daysUntil(cd_maturity_date);
+  const matured = days < 0;
+
+  // Progress bar — needs date_opened to calculate elapsed %
+  let pct: number | null = null;
+  if (date_opened) {
+    const start = new Date(`${date_opened}T00:00:00`).getTime();
+    const end = new Date(`${cd_maturity_date}T00:00:00`).getTime();
+    const now = Date.now();
+    if (end > start) pct = Math.min(100, Math.max(0, ((now - start) / (end - start)) * 100));
+  }
+
+  const barColor = matured
+    ? "bg-slate-300"
+    : days <= 30
+    ? "bg-rose-400"
+    : days <= 90
+    ? "bg-amber-400"
+    : "bg-blue-400";
+
+  const textColor = matured ? "text-slate-400" : days <= 30 ? "text-rose-600 font-medium" : days <= 90 ? "text-amber-700 font-medium" : "text-slate-600";
+
+  return (
+    <div className="min-w-[120px]">
+      {pct !== null && (
+        <div className="mb-1 flex items-center gap-2">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+            <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+          </div>
+          <span className={`shrink-0 text-xs tabular-nums ${textColor}`}>
+            {formatDate(cd_maturity_date)}
+          </span>
+        </div>
+      )}
+      {pct === null && (
+        <div className={`text-sm tabular-nums ${textColor}`}>{formatDate(cd_maturity_date)}</div>
+      )}
+      <div className="text-xs text-slate-400">
+        {matured ? "Matured" : `${days}d left`}
+      </div>
+    </div>
+  );
+}
+
 export type AccountRow = Account & {
   bankName: string;
   bankState: string | null;
@@ -312,34 +360,29 @@ export function AccountsClient({
                       {formatCurrency(r.balance)}
                     </td>
                     <td className="px-4 py-3 text-slate-600">
-                      {level !== "none" && r.last_activity_date ? (
-                        <div className="flex items-center gap-2">
-                          <ActivityDot level={level} />
-                          <span>{formatDate(r.last_activity_date)}</span>
-                          <span className="text-slate-400">
-                            ({monthsSince(r.last_activity_date)} mo)
-                          </span>
-                        </div>
-                      ) : level !== "none" ? (
-                        <span className="text-amber-600">Not recorded</span>
-                      ) : (
-                        <span className="text-slate-300">—</span>
-                      )}
+                      {(() => {
+                        const activityDate = r.last_activity_date ?? r.date_opened;
+                        const fromOpen = !r.last_activity_date && !!r.date_opened;
+                        if (level !== "none" && activityDate) {
+                          return (
+                            <div className="flex items-center gap-2">
+                              <ActivityDot level={level} />
+                              <div>
+                                <div className="text-slate-700">{formatDate(activityDate)}</div>
+                                <div className="text-xs text-slate-400">
+                                  {monthsSince(activityDate)} mo{fromOpen ? " · from open date" : ""}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        if (level !== "none") return <span className="text-amber-600">Not recorded</span>;
+                        return <span className="text-slate-300">—</span>;
+                      })()}
                     </td>
-                    <td className="px-4 py-3 text-slate-600">
+                    <td className="px-4 py-3">
                       {r.account_type === "cd" && r.cd_maturity_date ? (
-                        <span
-                          className={
-                            isCdMaturingSoon(r) ? "font-medium text-amber-700" : ""
-                          }
-                        >
-                          {formatDate(r.cd_maturity_date)}{" "}
-                          <span className="text-slate-400">
-                            {daysUntil(r.cd_maturity_date) >= 0
-                              ? `(${daysUntil(r.cd_maturity_date)}d)`
-                              : "(matured)"}
-                          </span>
-                        </span>
+                        <CdMaturityCell account={r} />
                       ) : (
                         <span className="text-slate-300">—</span>
                       )}
