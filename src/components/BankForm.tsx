@@ -9,8 +9,6 @@ import {
   ACCOUNT_TYPE_LABELS,
   OPEN_METHOD_LABELS,
   ELIGIBILITY_LABELS,
-  CONVERSION_STAGE_LABELS,
-  CONVERSION_STAGE_ORDER,
   APPLICATION_STEPS,
   type Account,
   type Bank,
@@ -230,26 +228,50 @@ export function BankForm({
         </header>
 
         <div className="flex-1 space-y-6 overflow-y-auto p-6">
-          {/* Status */}
-          <section className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Your status
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {ASSIGNABLE_STATUSES.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => set("status", s)}
-                  className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-                    values.status === s
-                      ? "border-amber-500 bg-amber-500 text-white"
-                      : "border-slate-300 text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  {STATUS_LABELS[s]}
-                </button>
-              ))}
+          {/* Status + Priority */}
+          <section className="space-y-4">
+            <div className="space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Your status
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {ASSIGNABLE_STATUSES.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => set("status", s)}
+                    className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                      values.status === s
+                        ? "border-amber-500 bg-amber-500 text-white"
+                        : "border-slate-300 text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {STATUS_LABELS[s]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className={labelClass} htmlFor="priority">
+                Priority
+              </label>
+              <select
+                id="priority"
+                className={inputClass}
+                value={values.priority}
+                onChange={(e) => set("priority", e.target.value)}
+              >
+                <option value="">—</option>
+                {(
+                  Object.keys(PRIORITY_LABELS) as Array<
+                    keyof typeof PRIORITY_LABELS
+                  >
+                ).map((p) => (
+                  <option key={p} value={p}>
+                    {PRIORITY_LABELS[p]}
+                  </option>
+                ))}
+              </select>
             </div>
           </section>
 
@@ -277,73 +299,6 @@ export function BankForm({
               </div>
             </section>
           )}
-
-          {/* Conversion / IPO */}
-          <section className="space-y-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Conversion / IPO
-            </h3>
-            <div>
-              <label className={labelClass} htmlFor="conversion_stage">
-                Stage
-              </label>
-              <select
-                id="conversion_stage"
-                className={inputClass}
-                value={values.conversion_stage}
-                onChange={(e) =>
-                  set(
-                    "conversion_stage",
-                    e.target.value as BankFormValues["conversion_stage"],
-                  )
-                }
-              >
-                {CONVERSION_STAGE_ORDER.map((s) => (
-                  <option key={s} value={s}>
-                    {CONVERSION_STAGE_LABELS[s]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label className={labelClass} htmlFor="subscription_start">
-                  Subscription opens
-                </label>
-                <input
-                  id="subscription_start"
-                  type="date"
-                  className={inputClass}
-                  value={values.subscription_start}
-                  onChange={(e) => set("subscription_start", e.target.value)}
-                />
-              </div>
-              <div>
-                <label className={labelClass} htmlFor="subscription_end">
-                  Subscription deadline
-                </label>
-                <input
-                  id="subscription_end"
-                  type="date"
-                  className={inputClass}
-                  value={values.subscription_end}
-                  onChange={(e) => set("subscription_end", e.target.value)}
-                />
-              </div>
-              <div>
-                <label className={labelClass} htmlFor="pricing_date">
-                  Expected pricing
-                </label>
-                <input
-                  id="pricing_date"
-                  type="date"
-                  className={inputClass}
-                  value={values.pricing_date}
-                  onChange={(e) => set("pricing_date", e.target.value)}
-                />
-              </div>
-            </div>
-          </section>
 
           {/* Accounts */}
           {initial ? (
@@ -519,30 +474,6 @@ export function BankForm({
                   onChange={(e) => set("holding_company", e.target.value)}
                 />
               </div>
-              <div>
-                <label className={labelClass} htmlFor="min_to_open">
-                  Minimum to open ($)
-                </label>
-                <input
-                  id="min_to_open"
-                  type="number"
-                  className={inputClass}
-                  value={values.min_to_open}
-                  onChange={(e) => set("min_to_open", e.target.value)}
-                />
-              </div>
-              <div>
-                <label className={labelClass} htmlFor="target_balance">
-                  Target balance ($)
-                </label>
-                <input
-                  id="target_balance"
-                  type="number"
-                  className={inputClass}
-                  value={values.target_balance}
-                  onChange={(e) => set("target_balance", e.target.value)}
-                />
-              </div>
             </div>
           </section>
 
@@ -574,21 +505,6 @@ export function BankForm({
               </select>
             </div>
             <div>
-              <label className={labelClass} htmlFor="eligibility_date">
-                Eligibility / record date
-              </label>
-              <input
-                id="eligibility_date"
-                type="date"
-                className={inputClass}
-                value={values.eligibility_date}
-                onChange={(e) => set("eligibility_date", e.target.value)}
-              />
-              <p className="mt-1 text-xs text-slate-400">
-                Deposit date that sets your IPO subscription priority, if known.
-              </p>
-            </div>
-            <div>
               <span className={labelClass}>Open methods</span>
               <div className="flex flex-wrap gap-2">
                 {(Object.keys(OPEN_METHOD_LABELS) as OpenMethod[]).map((m) => (
@@ -609,15 +525,15 @@ export function BankForm({
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className={labelClass} htmlFor="branch_location">
-                  Branch location
+                <label className={labelClass} htmlFor="min_to_open">
+                  Minimum to open ($)
                 </label>
                 <input
-                  id="branch_location"
+                  id="min_to_open"
+                  type="number"
                   className={inputClass}
-                  placeholder="address to call / visit"
-                  value={values.branch_location}
-                  onChange={(e) => set("branch_location", e.target.value)}
+                  value={values.min_to_open}
+                  onChange={(e) => set("min_to_open", e.target.value)}
                 />
               </div>
               <div>
@@ -631,6 +547,33 @@ export function BankForm({
                   onChange={(e) => set("phone", e.target.value)}
                 />
               </div>
+              <div className="col-span-2">
+                <label className={labelClass} htmlFor="branch_location">
+                  Preferred branch / address
+                </label>
+                <input
+                  id="branch_location"
+                  className={inputClass}
+                  placeholder="address to call / visit"
+                  value={values.branch_location}
+                  onChange={(e) => set("branch_location", e.target.value)}
+                />
+              </div>
+              <div className="col-span-2">
+                <label className={labelClass} htmlFor="eligibility_date">
+                  Eligibility / record date
+                </label>
+                <input
+                  id="eligibility_date"
+                  type="date"
+                  className={inputClass}
+                  value={values.eligibility_date}
+                  onChange={(e) => set("eligibility_date", e.target.value)}
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  Deposit date that sets your IPO subscription priority, if known.
+                </p>
+              </div>
             </div>
           </section>
 
@@ -639,28 +582,6 @@ export function BankForm({
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
               Notes
             </h3>
-            <div>
-              <label className={labelClass} htmlFor="priority">
-                Priority
-              </label>
-              <select
-                id="priority"
-                className={inputClass}
-                value={values.priority}
-                onChange={(e) => set("priority", e.target.value)}
-              >
-                <option value="">—</option>
-                {(
-                  Object.keys(PRIORITY_LABELS) as Array<
-                    keyof typeof PRIORITY_LABELS
-                  >
-                ).map((p) => (
-                  <option key={p} value={p}>
-                    {PRIORITY_LABELS[p]}
-                  </option>
-                ))}
-              </select>
-            </div>
             <div>
               <label className={labelClass} htmlFor="requirements">
                 Requirements / how to open
