@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition, type FormEvent } from "react";
-import { X, Loader2, Plus, Copy, Pencil, Trash2 } from "lucide-react";
+import { X, Loader2, Plus, Copy, Pencil, Printer, Trash2 } from "lucide-react";
 import {
   ASSIGNABLE_STATUSES,
   PRIORITY_LABELS,
@@ -19,6 +19,7 @@ import { getActivityLevel } from "@/lib/dormancy";
 import { formatCurrency, formatDate, maskAccountNumber } from "@/lib/format";
 import { ActivityDot } from "@/components/badges";
 import { AccountModal } from "@/components/AccountModal";
+import { CheckPrintModal } from "@/components/CheckPrintModal";
 import {
   upsertBank,
   getBankComments,
@@ -90,6 +91,7 @@ export function BankForm({
   const [acctModal, setAcctModal] = useState<{ account: Account | null } | null>(
     null,
   );
+  const [printCheck, setPrintCheck] = useState<Account | null>(null);
   const [busyAcctId, setBusyAcctId] = useState<string | null>(null);
   const [comments, setComments] = useState<BankComment[]>([]);
   const [commentBody, setCommentBody] = useState("");
@@ -362,6 +364,14 @@ export function BankForm({
                             title="Edit"
                           >
                             <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPrintCheck(a)}
+                            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                            title="Print check"
+                          >
+                            <Printer className="h-4 w-4" />
                           </button>
                           <button
                             type="button"
@@ -730,6 +740,15 @@ export function BankForm({
             setAcctModal(null);
             onChanged();
           }}
+        />
+      )}
+
+      {printCheck && initial && (
+        <CheckPrintModal
+          account={printCheck}
+          bankName={initial.name}
+          bankCity={[initial.city, initial.state].filter(Boolean).join(", ")}
+          onClose={() => setPrintCheck(null)}
         />
       )}
     </div>
