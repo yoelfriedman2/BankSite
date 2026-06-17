@@ -1,8 +1,18 @@
 <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="48" height="48" rx="12" fill="#0f172a"/>
-  <rect x="9" y="37.5" width="30" height="1.25" rx="0.625" fill="#ffffff" fill-opacity="0.18"/>
-  <rect x="11" y="26.5" width="7.5" height="11" rx="3.75" fill="#ffffff" fill-opacity="0.4"/>
-  <rect x="20.25" y="20" width="7.5" height="17.5" rx="3.75" fill="#ffffff" fill-opacity="0.65"/>
-  <rect x="29.5" y="13.5" width="7.5" height="24" rx="3.75" fill="#ffffff"/>
-  <rect x="29.5" y="10" width="7.5" height="4.5" rx="2.25" fill="#F59E0B"/>
+  <rect x="0" y="0" width="48" height="1.5" rx="0.75" fill="#ffffff" fill-opacity="0.08"/>
+  <!-- Vertical spine -->
+  <rect x="8" y="8" width="6" height="32" rx="3" fill="#ffffff" fill-opacity="0.82"/>
+  <!-- Top bar (gold) -->
+  <rect x="8" y="8" width="30" height="7" rx="3.5" fill="#F59E0B"/>
+  <!-- Middle crossbar -->
+  <rect x="8" y="20.5" width="20" height="7" rx="3.5" fill="#ffffff" fill-opacity="0.68"/>
+  <!-- Gauge track -->
+  <path d="M 29.9 38.5 A 7 7 0 0 1 42.1 38.5" stroke="#ffffff" stroke-opacity="0.13" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <!-- Gauge active -->
+  <path d="M 29.9 38.5 A 7 7 0 0 1 40.7 36.8" stroke="#F59E0B" stroke-opacity="0.9" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <!-- Gauge needle -->
+  <line x1="36" y1="42" x2="38" y2="36.5" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Gauge center pin -->
+  <circle cx="36" cy="42" r="1.5" fill="#F59E0B"/>
 </svg>

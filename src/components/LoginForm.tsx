@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Logo } from "@/components/Logo";
@@ -27,9 +27,52 @@ function MicrosoftIcon() {
   );
 }
 
+/* Floating data fragments — positioned at (x%, y%) of the viewport */
+type Fragment = { text: string; x: number; y: number; layer: 1 | 2 | 3; size: "xs" | "sm" };
+const FRAGMENTS: Fragment[] = [
+  { text: "FDIC #4182", x: 7, y: 14, layer: 3, size: "xs" },
+  { text: "$47.2M Assets", x: 74, y: 8, layer: 1, size: "sm" },
+  { text: "Savings · 18mo", x: 17, y: 73, layer: 2, size: "xs" },
+  { text: "Cert #8891", x: 87, y: 40, layer: 3, size: "xs" },
+  { text: "Last Activity: 9mo", x: 63, y: 80, layer: 1, size: "sm" },
+  { text: "$1,250.00", x: 34, y: 22, layer: 2, size: "sm" },
+  { text: "Eligibility: In-state", x: 4, y: 48, layer: 1, size: "xs" },
+  { text: "CD Maturity: Mar 2027", x: 79, y: 64, layer: 2, size: "xs" },
+  { text: "Nationwide", x: 22, y: 89, layer: 3, size: "xs" },
+  { text: "Open · Checking", x: 56, y: 17, layer: 3, size: "sm" },
+  { text: "$250M Assets", x: 11, y: 34, layer: 2, size: "sm" },
+  { text: "Priority: High", x: 91, y: 21, layer: 1, size: "xs" },
+  { text: "Conversion: Filed", x: 48, y: 90, layer: 2, size: "sm" },
+  { text: "FDIC Insured", x: 69, y: 31, layer: 1, size: "xs" },
+  { text: "$500 Min. Balance", x: 29, y: 57, layer: 3, size: "xs" },
+  { text: "Routing #021000021", x: 83, y: 82, layer: 2, size: "xs" },
+  { text: "Applied · In Review", x: 14, y: 62, layer: 1, size: "sm" },
+  { text: "Cert #14021", x: 43, y: 11, layer: 3, size: "xs" },
+  { text: "Target: $1,000", x: 71, y: 51, layer: 2, size: "sm" },
+  { text: "Dormancy: 24mo", x: 38, y: 43, layer: 3, size: "xs" },
+  { text: "$8,400.00", x: 6, y: 80, layer: 3, size: "sm" },
+  { text: "Subscription Open", x: 55, y: 6, layer: 2, size: "xs" },
+];
+
+/* How many px each layer shifts for a full ±0.5 mouse offset */
+const LAYER_PX: Record<1 | 2 | 3, number> = { 1: 55, 2: 32, 3: 16 };
+/* Opacity per layer */
+const LAYER_OP: Record<1 | 2 | 3, number> = { 1: 0.09, 2: 0.065, 3: 0.045 };
+
 export function LoginForm({ initialError }: { initialError?: string }) {
   const [error, setError] = useState<string | null>(initialError ?? null);
   const [pending, setPending] = useState<"google" | "azure" | null>(null);
+  /* normalized mouse position 0→1 */
+  const [mouse, setMouse] = useState({ x: 0.5, y: 0.5 });
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    setMouse({ x: e.clientX / window.innerWidth, y: e.clientY / window.innerHeight });
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("mousemove", handleMouseMove, { passive: true });
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, [handleMouseMove]);
 
   async function handleOAuth(provider: "google" | "azure") {
     setError(null);
@@ -45,6 +88,16 @@ export function LoginForm({ initialError }: { initialError?: string }) {
     }
   }
 
+  const mx = mouse.x - 0.5; // -0.5 → 0.5
+  const my = mouse.y - 0.5;
+
+  /* 3-D card tilt — perspective applied to wrapper div */
+  const cardTransform = `perspective(900px) rotateX(${-my * 10}deg) rotateY(${mx * 14}deg)`;
+
+  /* Cursor-following gold glow */
+  const glowLeft = `${mouse.x * 100}%`;
+  const glowTop = `${mouse.y * 100}%`;
+
   return (
     <div
       className="relative flex min-h-screen items-center justify-center overflow-hidden px-4"
@@ -53,35 +106,78 @@ export function LoginForm({ initialError }: { initialError?: string }) {
       {/* Dot-grid texture */}
       <div className="login-dot-grid pointer-events-none absolute inset-0" />
 
-      {/* Single ambient glow — upper right */}
+      {/* Static ambient glow — upper right */}
       <div
         className="login-ambient pointer-events-none absolute"
         style={{
-          width: "55vw",
-          height: "55vw",
-          maxWidth: 680,
-          maxHeight: 680,
-          top: "-15%",
-          right: "-10%",
+          width: "50vw",
+          height: "50vw",
+          maxWidth: 600,
+          maxHeight: 600,
+          top: "-12%",
+          right: "-8%",
           background:
-            "radial-gradient(ellipse at center, rgba(51,65,137,0.55) 0%, rgba(30,41,90,0.3) 50%, transparent 70%)",
+            "radial-gradient(ellipse at center, rgba(160,100,0,0.3) 0%, rgba(100,60,0,0.15) 50%, transparent 70%)",
         }}
       />
 
-      {/* Card */}
-      <div className="login-card relative z-10 w-full max-w-[380px]">
-        {/* Thin animated data-line at very top of card */}
+      {/* Cursor-following gold glow */}
+      <div
+        className="pointer-events-none absolute"
+        style={{
+          width: 480,
+          height: 480,
+          left: glowLeft,
+          top: glowTop,
+          transform: "translate(-50%, -50%)",
+          background:
+            "radial-gradient(circle, rgba(245,158,11,0.11) 0%, rgba(245,158,11,0.04) 40%, transparent 70%)",
+          transition: "left 0.08s ease-out, top 0.08s ease-out",
+        }}
+      />
+
+      {/* Parallax data fragments */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden select-none">
+        {FRAGMENTS.map((f, i) => {
+          const shift = LAYER_PX[f.layer];
+          const tx = mx * -shift;
+          const ty = my * -shift;
+          return (
+            <span
+              key={i}
+              className={`absolute font-mono ${f.size === "xs" ? "text-[10px]" : "text-[11px]"} tracking-tight whitespace-nowrap`}
+              style={{
+                left: `${f.x}%`,
+                top: `${f.y}%`,
+                color: "#F59E0B",
+                opacity: LAYER_OP[f.layer],
+                transform: `translate(${tx}px, ${ty}px)`,
+                transition: "transform 0.12s ease-out",
+              }}
+            >
+              {f.text}
+            </span>
+          );
+        })}
+      </div>
+
+      {/* Card wrapper — tilt perspective applied here */}
+      <div
+        className="login-card relative z-10 w-full max-w-[380px]"
+        style={{ transform: cardTransform, transition: "transform 0.08s ease-out" }}
+      >
+        {/* Thin animated gold line at very top of card */}
         <div className="login-card-line mb-px h-px w-full rounded-full" />
 
         {/* Glass panel */}
         <div
           className="rounded-2xl px-8 py-9"
           style={{
-            background: "rgba(9, 14, 28, 0.92)",
+            background: "rgba(9, 14, 28, 0.93)",
             border: "1px solid rgba(255,255,255,0.06)",
             boxShadow:
-              "0 0 0 1px rgba(255,255,255,0.03), 0 40px 90px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.07)",
-            backdropFilter: "blur(20px)",
+              "0 0 0 1px rgba(255,255,255,0.03), 0 40px 90px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.07)",
+            backdropFilter: "blur(24px)",
           }}
         >
           {/* Logo + wordmark */}
@@ -93,7 +189,7 @@ export function LoginForm({ initialError }: { initialError?: string }) {
               </h1>
               <p
                 className="mt-0.5 text-[11px] font-medium uppercase tracking-[0.18em]"
-                style={{ color: "rgba(148,163,184,0.5)" }}
+                style={{ color: "rgba(245,158,11,0.55)" }}
               >
                 Mutual Conversion Intelligence
               </p>
@@ -119,9 +215,9 @@ export function LoginForm({ initialError }: { initialError?: string }) {
               }}
               onMouseEnter={(e) => {
                 (e.currentTarget as HTMLButtonElement).style.background =
-                  "rgba(255,255,255,0.07)";
+                  "rgba(245,158,11,0.06)";
                 (e.currentTarget as HTMLButtonElement).style.borderColor =
-                  "rgba(255,255,255,0.14)";
+                  "rgba(245,158,11,0.2)";
               }}
               onMouseLeave={(e) => {
                 (e.currentTarget as HTMLButtonElement).style.background =
@@ -149,9 +245,9 @@ export function LoginForm({ initialError }: { initialError?: string }) {
               }}
               onMouseEnter={(e) => {
                 (e.currentTarget as HTMLButtonElement).style.background =
-                  "rgba(255,255,255,0.07)";
+                  "rgba(245,158,11,0.06)";
                 (e.currentTarget as HTMLButtonElement).style.borderColor =
-                  "rgba(255,255,255,0.14)";
+                  "rgba(245,158,11,0.2)";
               }}
               onMouseLeave={(e) => {
                 (e.currentTarget as HTMLButtonElement).style.background =

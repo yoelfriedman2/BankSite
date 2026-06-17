@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useTransition, type FormEvent } from "react";
-import { Loader2, Check, Plus, X } from "lucide-react";
+import { Loader2, Check, Plus, X, Bell, MessageSquare, Megaphone } from "lucide-react";
 import { updateSettings } from "@/app/(app)/settings/actions";
 
 const inputClass =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
+  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
 const labelClass = "mb-1 block text-sm font-medium text-slate-700";
 
 export function SettingsForm({
@@ -14,12 +14,18 @@ export function SettingsForm({
   defaultDormancyMonths,
   holders,
   notifyEmail,
+  activityReminderMonths,
+  notifyNewComments,
+  notifyProductUpdates,
 }: {
   email: string;
   displayName: string;
   defaultDormancyMonths: number;
   holders: string[];
   notifyEmail: boolean;
+  activityReminderMonths: number[];
+  notifyNewComments: boolean;
+  notifyProductUpdates: boolean;
 }) {
   const [name, setName] = useState(displayName);
   const [months, setMonths] = useState(String(defaultDormancyMonths));
@@ -27,6 +33,12 @@ export function SettingsForm({
     holders.length ? holders : [""],
   );
   const [notify, setNotify] = useState(notifyEmail);
+  const [reminderMonths, setReminderMonths] = useState<number[]>(
+    activityReminderMonths.length ? activityReminderMonths : [9, 12],
+  );
+  const [newReminderMonth, setNewReminderMonth] = useState("");
+  const [notifyComments, setNotifyComments] = useState(notifyNewComments);
+  const [notifyUpdates, setNotifyUpdates] = useState(notifyProductUpdates);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -41,6 +53,17 @@ export function SettingsForm({
     setHoldersList((list) => [...list, ""]);
   }
 
+  function addReminderMonth() {
+    const n = parseInt(newReminderMonth, 10);
+    if (!Number.isFinite(n) || n < 1 || n > 120) return;
+    if (reminderMonths.includes(n)) return;
+    setReminderMonths((prev) => [...prev, n].sort((a, b) => a - b));
+    setNewReminderMonth("");
+  }
+  function removeReminderMonth(m: number) {
+    setReminderMonths((prev) => prev.filter((x) => x !== m));
+  }
+
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
@@ -51,6 +74,9 @@ export function SettingsForm({
         default_dormancy_months: months,
         holders: holdersList,
         notify_email: notify,
+        activity_reminder_months: reminderMonths,
+        notify_new_comments: notifyComments,
+        notify_product_updates: notifyUpdates,
       });
       if (result.error) {
         setError(result.error);
@@ -113,8 +139,8 @@ export function SettingsForm({
         <div>
           <label className={labelClass}>Account holder names</label>
           <p className="mb-2 text-xs text-slate-400">
-            These show up as suggestions — and the default — whenever you add an
-            account (e.g. yourself, your spouse).
+            These show up as suggestions whenever you add an account (e.g.
+            yourself, your spouse). The first name is used as the default.
           </p>
           <div className="space-y-2">
             {holdersList.map((h, i) => (
@@ -146,22 +172,124 @@ export function SettingsForm({
           </button>
         </div>
 
-        <div className="flex items-start gap-3 rounded-lg border border-slate-200 p-3">
-          <input
-            id="notify"
-            type="checkbox"
-            checked={notify}
-            onChange={(e) => setNotify(e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-indigo-900"
-          />
-          <label htmlFor="notify" className="text-sm">
-            <span className="font-medium text-slate-700">
-              Email me reminders
-            </span>
-            <span className="block text-xs text-slate-400">
-              A periodic summary of accounts going dormant and CDs maturing
-              soon. Sending turns on once the app is deployed with email set up.
-            </span>
+        {/* ── Notification preferences ── */}
+        <div className="border-t border-slate-100 pt-5">
+          <div className="mb-4 flex items-center gap-2">
+            <Bell className="h-4 w-4 text-amber-500" />
+            <h2 className="text-sm font-semibold text-slate-800">
+              Notification preferences
+            </h2>
+          </div>
+          <p className="mb-4 text-xs text-slate-400">
+            Configure what emails you receive once the app is wired to Resend.
+          </p>
+
+          {/* Master email toggle */}
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3">
+            <input
+              type="checkbox"
+              checked={notify}
+              onChange={(e) => setNotify(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-amber-600"
+            />
+            <div className="text-sm">
+              <span className="font-medium text-slate-700">Enable email notifications</span>
+              <span className="block text-xs text-slate-400">
+                Master switch — individual toggles below take effect only when this is on.
+              </span>
+            </div>
+          </label>
+
+          {/* Activity reminder thresholds */}
+          <div className="mt-4 space-y-2 rounded-lg border border-slate-200 p-3">
+            <div className="flex items-center gap-2">
+              <Bell className="h-3.5 w-3.5 text-slate-400" />
+              <span className="text-sm font-medium text-slate-700">
+                Account inactivity reminders
+              </span>
+            </div>
+            <p className="text-xs text-slate-400">
+              Get a reminder when an account has had no activity for each
+              threshold below. Default is 9 and 12 months.
+            </p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              {reminderMonths.map((m) => (
+                <span
+                  key={m}
+                  className="flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-200"
+                >
+                  {m} mo
+                  <button
+                    type="button"
+                    onClick={() => removeReminderMonth(m)}
+                    className="ml-1 rounded-full text-amber-500 hover:text-amber-700"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+              {reminderMonths.length === 0 && (
+                <span className="text-xs text-slate-400">No thresholds — add one below.</span>
+              )}
+            </div>
+            <div className="flex gap-2 pt-1">
+              <input
+                type="number"
+                min="1"
+                max="120"
+                placeholder="months"
+                className="w-28 rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                value={newReminderMonth}
+                onChange={(e) => setNewReminderMonth(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addReminderMonth())}
+              />
+              <button
+                type="button"
+                onClick={addReminderMonth}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add
+              </button>
+            </div>
+          </div>
+
+          {/* Community comments */}
+          <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3">
+            <input
+              type="checkbox"
+              checked={notifyComments}
+              onChange={(e) => setNotifyComments(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-amber-600"
+            />
+            <div className="flex-1 text-sm">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-3.5 w-3.5 text-slate-400" />
+                <span className="font-medium text-slate-700">New community notes</span>
+              </div>
+              <span className="block text-xs text-slate-400">
+                Email me when someone posts a community note on any bank in the tracker.
+              </span>
+            </div>
+          </label>
+
+          {/* Product updates */}
+          <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3">
+            <input
+              type="checkbox"
+              checked={notifyUpdates}
+              onChange={(e) => setNotifyUpdates(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-amber-600"
+            />
+            <div className="flex-1 text-sm">
+              <div className="flex items-center gap-2">
+                <Megaphone className="h-3.5 w-3.5 text-slate-400" />
+                <span className="font-medium text-slate-700">Product &amp; feature updates</span>
+              </div>
+              <span className="block text-xs text-slate-400">
+                Occasional emails about new features and improvements to Bank Tracker.
+              </span>
+            </div>
           </label>
         </div>
 
@@ -175,7 +303,7 @@ export function SettingsForm({
           <button
             type="submit"
             disabled={isPending}
-            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+            className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
           >
             {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
             Save settings

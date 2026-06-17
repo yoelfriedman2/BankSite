@@ -12,6 +12,9 @@ export default async function SettingsPage() {
         defaultDormancyMonths={p.default_dormancy_months}
         holders={p.holders}
         notifyEmail={p.notify_email}
+        activityReminderMonths={p.activity_reminder_months ?? [9, 12]}
+        notifyNewComments={p.notify_new_comments ?? false}
+        notifyProductUpdates={p.notify_product_updates ?? false}
       />
     );
   }
@@ -23,7 +26,9 @@ export default async function SettingsPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("display_name, default_dormancy_months, holders, notify_email")
+    .select(
+      "display_name, default_dormancy_months, holders, notify_email, activity_reminder_months, notify_new_comments, notify_product_updates",
+    )
     .eq("id", user!.id)
     .maybeSingle();
 
@@ -34,6 +39,9 @@ export default async function SettingsPage() {
       defaultDormancyMonths={profile?.default_dormancy_months ?? 12}
       holders={profile?.holders ?? []}
       notifyEmail={profile?.notify_email ?? false}
+      activityReminderMonths={profile?.activity_reminder_months ?? [9, 12]}
+      notifyNewComments={profile?.notify_new_comments ?? false}
+      notifyProductUpdates={profile?.notify_product_updates ?? false}
     />
   );
 }

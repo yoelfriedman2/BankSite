@@ -35,12 +35,14 @@ export default async function BanksPage({
 
   if (DEMO_MODE) {
     const unreadCerts = await getUnreadCommentCerts();
+    const demoProfile = getDemoProfile();
     return (
       <BanksClient
         banks={getDemoBanks()}
         accounts={getDemoAccounts()}
         knownHolders={getKnownHolders()}
-        defaultDormancyMonths={getDemoProfile().default_dormancy_months}
+        defaultDormancyMonths={demoProfile.default_dormancy_months}
+        userDisplayName={demoProfile.display_name ?? ""}
         currentUserId={DEMO_USER.id}
         unreadCerts={unreadCerts}
         initialStatus={initialStatus}
@@ -77,7 +79,7 @@ export default async function BanksPage({
     .is("deleted_at", null);
   const { data: profile } = await supabase
     .from("profiles")
-    .select("default_dormancy_months, holders")
+    .select("display_name, default_dormancy_months, holders")
     .eq("id", user!.id)
     .maybeSingle();
 
@@ -97,6 +99,7 @@ export default async function BanksPage({
       accounts={accountList}
       knownHolders={knownHolders}
       defaultDormancyMonths={profile?.default_dormancy_months ?? 12}
+      userDisplayName={profile?.display_name ?? ""}
       currentUserId={user?.id ?? null}
       unreadCerts={unreadCerts}
       initialStatus={initialStatus}

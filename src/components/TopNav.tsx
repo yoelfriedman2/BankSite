@@ -58,7 +58,7 @@ export function TopNav() {
               href={href}
               className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium ${
                 active
-                  ? "bg-indigo-50 text-indigo-700"
+                  ? "bg-amber-50 text-amber-700"
                   : "text-slate-600 hover:bg-slate-100"
               }`}
             >

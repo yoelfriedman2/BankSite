@@ -9,6 +9,9 @@ export async function updateSettings(values: {
   default_dormancy_months: string;
   holders: string[];
   notify_email: boolean;
+  activity_reminder_months: number[];
+  notify_new_comments: boolean;
+  notify_product_updates: boolean;
 }): Promise<{ error?: string }> {
   const months = parseInt(values.default_dormancy_months, 10);
   if (!Number.isFinite(months) || months < 1) {
@@ -18,6 +21,9 @@ export async function updateSettings(values: {
   const holders = Array.from(
     new Set((values.holders ?? []).map((h) => h.trim()).filter(Boolean)),
   );
+  const reminderMonths = (values.activity_reminder_months ?? [])
+    .filter((n) => Number.isFinite(n) && n >= 1)
+    .sort((a, b) => a - b);
 
   if (DEMO_MODE) {
     setDemoProfile({
@@ -25,6 +31,9 @@ export async function updateSettings(values: {
       default_dormancy_months: months,
       holders,
       notify_email: values.notify_email,
+      activity_reminder_months: reminderMonths,
+      notify_new_comments: values.notify_new_comments,
+      notify_product_updates: values.notify_product_updates,
     });
     revalidatePath("/settings");
     revalidatePath("/banks");
@@ -46,6 +55,9 @@ export async function updateSettings(values: {
       default_dormancy_months: months,
       holders,
       notify_email: values.notify_email,
+      activity_reminder_months: reminderMonths,
+      notify_new_comments: values.notify_new_comments,
+      notify_product_updates: values.notify_product_updates,
     })
     .eq("id", user.id);
 

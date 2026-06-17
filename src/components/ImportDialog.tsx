@@ -237,15 +237,15 @@ export function ImportDialog({
         <button
           type="button"
           onClick={() => downloadImportTemplate()}
-          className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:underline"
+          className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-amber-600 hover:underline"
         >
           <Download className="h-4 w-4" />
           Download a template
         </button>
 
-        <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 px-4 py-8 text-center hover:border-indigo-400 hover:bg-indigo-50/40">
+        <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 px-4 py-8 text-center hover:border-amber-400 hover:bg-amber-50/40">
           {isPending ? (
-            <Loader2 className="h-7 w-7 animate-spin text-indigo-500" />
+            <Loader2 className="h-7 w-7 animate-spin text-amber-500" />
           ) : (
             <UploadCloud className="h-7 w-7 text-slate-400" />
           )}

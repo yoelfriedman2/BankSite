@@ -32,7 +32,7 @@ import {
 import { deleteAccount, duplicateAccount } from "@/app/(app)/accounts/actions";
 
 const inputClass =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
+  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
 const labelClass = "mb-1 block text-sm font-medium text-slate-700";
 
 function toFormValues(b: Bank | null): BankFormValues {
@@ -68,6 +68,7 @@ export function BankForm({
   accounts,
   defaultDormancyMonths,
   knownHolders,
+  userDisplayName,
   currentUserId,
   onClose,
   onSaved,
@@ -77,6 +78,7 @@ export function BankForm({
   accounts: Account[];
   defaultDormancyMonths: number;
   knownHolders: string[];
+  userDisplayName: string;
   currentUserId: string | null;
   onClose: () => void;
   onSaved: () => void;
@@ -202,7 +204,7 @@ export function BankForm({
   const defaultHolder =
     accounts.length > 0
       ? accounts[accounts.length - 1].holder ?? ""
-      : knownHolders[0] ?? "";
+      : userDisplayName || knownHolders[0] || "";
 
   return (
     <div
@@ -241,7 +243,7 @@ export function BankForm({
                   onClick={() => set("status", s)}
                   className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
                     values.status === s
-                      ? "border-indigo-600 bg-indigo-600 text-white"
+                      ? "border-amber-500 bg-amber-500 text-white"
                       : "border-slate-300 text-slate-600 hover:bg-slate-100"
                   }`}
                 >
@@ -267,7 +269,7 @@ export function BankForm({
                       type="checkbox"
                       checked={!!values.application_steps[step.key]}
                       onChange={() => toggleStep(step.key)}
-                      className="h-4 w-4 rounded border-slate-300 accent-indigo-900"
+                      className="h-4 w-4 rounded border-slate-300 accent-amber-600"
                     />
                     {step.label}
                   </label>
@@ -353,7 +355,7 @@ export function BankForm({
                 <button
                   type="button"
                   onClick={() => setAcctModal({ account: null })}
-                  className="flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+                  className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-700 hover:bg-amber-100"
                 >
                   <Plus className="h-4 w-4" />
                   Add account
@@ -596,7 +598,7 @@ export function BankForm({
                     onClick={() => toggleMethod(m)}
                     className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
                       values.open_methods.includes(m)
-                        ? "border-indigo-600 bg-indigo-600 text-white"
+                        ? "border-amber-500 bg-amber-500 text-white"
                         : "border-slate-300 text-slate-600 hover:bg-slate-100"
                     }`}
                   >
@@ -751,7 +753,7 @@ export function BankForm({
                     type="checkbox"
                     checked={notifyAll}
                     onChange={(e) => setNotifyAll(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 accent-indigo-900"
+                    className="h-4 w-4 rounded border-slate-300 accent-amber-600"
                   />
                   Email everyone (once email is set up)
                 </label>
@@ -759,7 +761,7 @@ export function BankForm({
                   type="button"
                   onClick={handlePostComment}
                   disabled={commentBusy || !commentBody.trim()}
-                  className="flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                  className="flex items-center gap-2 rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
                 >
                   {commentBusy && <Loader2 className="h-4 w-4 animate-spin" />}
                   Post
@@ -786,7 +788,7 @@ export function BankForm({
           <button
             type="submit"
             disabled={isPending}
-            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+            className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
           >
             {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
             Save bank

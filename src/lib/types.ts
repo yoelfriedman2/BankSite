@@ -107,6 +107,9 @@ export interface Profile {
   default_dormancy_months: number;
   holders: string[];
   notify_email: boolean;
+  activity_reminder_months: number[];
+  notify_new_comments: boolean;
+  notify_product_updates: boolean;
   created_at: string;
 }
 

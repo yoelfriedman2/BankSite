@@ -264,6 +264,9 @@ function createInitialStore(): DemoStore {
     default_dormancy_months: 12,
     holders: ["John", "Jane", "Joint"],
     notify_email: false,
+    activity_reminder_months: [9, 12],
+    notify_new_comments: false,
+    notify_product_updates: false,
     created_at: new Date().toISOString(),
   };
 

@@ -53,7 +53,7 @@ function StatCard({
   return (
     <Link
       href={href}
-      className="rounded-2xl border border-slate-200 bg-white p-5 transition-colors hover:border-indigo-300 hover:bg-indigo-50/30"
+      className="rounded-2xl border border-slate-200 bg-white p-5 transition-colors hover:border-amber-300 hover:bg-amber-50/30"
     >
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-slate-500">{label}</span>
@@ -185,8 +185,8 @@ export default async function DashboardPage() {
         <StatCard
           label="Total balance"
           value={formatCurrency(totalBalance)}
-          icon={<Wallet className="h-5 w-5 text-indigo-600" />}
-          accent="bg-indigo-50"
+          icon={<Wallet className="h-5 w-5 text-amber-600" />}
+          accent="bg-amber-50"
           href="/accounts"
         />
         <StatCard
@@ -207,7 +207,7 @@ export default async function DashboardPage() {
             </h2>
             <Link
               href="/banks"
-              className="flex items-center gap-1 text-sm font-medium text-indigo-600 hover:underline"
+              className="flex items-center gap-1 text-sm font-medium text-amber-600 hover:underline"
             >
               All banks
               <ArrowRight className="h-4 w-4" />
@@ -256,7 +256,7 @@ export default async function DashboardPage() {
           <h2 className="font-semibold text-slate-900">Needs attention</h2>
           <Link
             href="/accounts?attention=1"
-            className="flex items-center gap-1 text-sm font-medium text-indigo-600 hover:underline"
+            className="flex items-center gap-1 text-sm font-medium text-amber-600 hover:underline"
           >
             View all
             <ArrowRight className="h-4 w-4" />

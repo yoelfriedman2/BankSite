@@ -10,7 +10,7 @@ import {
 } from "@/app/(app)/accounts/actions";
 
 const inputClass =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
+  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
 const labelClass = "mb-1 block text-sm font-medium text-slate-700";
 
 const DORMANCY_TYPES = ["checking", "savings", "money_market"];
@@ -432,7 +432,7 @@ export function AccountModal({
           <button
             type="submit"
             disabled={isPending}
-            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+            className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
           >
             {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
             {initial ? "Save account" : "Add account"}

@@ -13,7 +13,7 @@ export type CalEvent = {
 
 const TYPE_STYLES: Record<CalEvent["type"], string> = {
   sub_end: "bg-rose-100 text-rose-700",
-  sub_start: "bg-indigo-100 text-indigo-700",
+  sub_start: "bg-amber-100 text-amber-700",
   pricing: "bg-violet-100 text-violet-700",
   eligibility: "bg-slate-100 text-slate-600",
   cd: "bg-amber-100 text-amber-800",
@@ -143,7 +143,7 @@ export function CalendarClient({ events }: { events: CalEvent[] }) {
                   <div
                     className={`mb-1 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
                       isToday
-                        ? "bg-indigo-600 font-semibold text-white"
+                        ? "bg-amber-500 font-semibold text-white"
                         : "text-slate-500"
                     }`}
                   >

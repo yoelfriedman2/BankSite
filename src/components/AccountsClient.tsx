@@ -152,14 +152,14 @@ export function AccountsClient({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search accounts…"
-            className="w-52 rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            className="w-52 rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
           />
         </div>
 
         <select
           value={holderFilter}
           onChange={(e) => setHolderFilter(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-500"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500"
         >
           <option value="all">All holders</option>
           {knownHolders.map((h) => (
@@ -172,7 +172,7 @@ export function AccountsClient({
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-500"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500"
         >
           <option value="all">All types</option>
           {(Object.keys(ACCOUNT_TYPE_LABELS) as AccountType[]).map((t) => (

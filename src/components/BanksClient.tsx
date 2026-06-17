@@ -40,7 +40,7 @@ const STATUS_SELECT_STYLES: Record<BankStatus, string> = {
   untracked: "border-slate-200 bg-slate-50 text-slate-500",
   open: "border-emerald-200 bg-emerald-50 text-emerald-700",
   applied: "border-amber-200 bg-amber-50 text-amber-700",
-  want_to_open: "border-indigo-200 bg-indigo-50 text-indigo-700",
+  want_to_open: "border-violet-200 bg-violet-50 text-violet-700",
   cannot_open: "border-rose-200 bg-rose-50 text-rose-700",
 };
 
@@ -85,6 +85,7 @@ export function BanksClient({
   accounts,
   defaultDormancyMonths,
   knownHolders,
+  userDisplayName,
   currentUserId,
   unreadCerts,
   initialStatus,
@@ -94,6 +95,7 @@ export function BanksClient({
   accounts: Account[];
   defaultDormancyMonths: number;
   knownHolders: string[];
+  userDisplayName: string;
   currentUserId: string | null;
   unreadCerts: number[];
   initialStatus?: BankStatus | "all";
@@ -231,7 +233,7 @@ export function BanksClient({
           </button>
           <button
             onClick={openAdd}
-            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+            className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
           >
             <Plus className="h-4 w-4" />
             Add bank
@@ -248,14 +250,14 @@ export function BanksClient({
               onClick={() => setStatusFilter(t.key)}
               className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                 statusFilter === t.key
-                  ? "bg-indigo-600 text-white"
+                  ? "bg-amber-500 text-white"
                   : "text-slate-600 hover:bg-slate-100"
               }`}
             >
               {t.label}
               <span
                 className={`ml-1.5 ${
-                  statusFilter === t.key ? "text-indigo-100" : "text-slate-400"
+                  statusFilter === t.key ? "text-amber-100" : "text-slate-400"
                 }`}
               >
                 {t.count}
@@ -270,14 +272,14 @@ export function BanksClient({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search banks or holders…"
-            className="w-56 rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            className="w-56 rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
           />
         </div>
 
         <select
           value={stateFilter}
           onChange={(e) => setStateFilter(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-500"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500"
         >
           <option value="all">All states</option>
           {states.map((s) => (
@@ -290,7 +292,7 @@ export function BanksClient({
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-500"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500"
         >
           {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
             <option key={k} value={k}>
@@ -329,7 +331,7 @@ export function BanksClient({
                     </span>
                     {b.cert != null && unreadSet.has(b.cert) && (
                       <span
-                        className="h-2 w-2 shrink-0 rounded-full bg-indigo-600"
+                        className="h-2 w-2 shrink-0 rounded-full bg-amber-500"
                         title="Unread note"
                       />
                     )}
@@ -394,7 +396,7 @@ export function BanksClient({
                         </span>
                         {b.cert != null && unreadSet.has(b.cert) && (
                           <span
-                            className="h-2 w-2 shrink-0 rounded-full bg-indigo-600"
+                            className="h-2 w-2 shrink-0 rounded-full bg-amber-500"
                             title="Unread note"
                           />
                         )}
@@ -444,7 +446,7 @@ export function BanksClient({
                     <td className="px-4 py-3 text-slate-600">
                       {accts.length > 0 ? (
                         <div className="flex items-center gap-2">
-                          <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-indigo-100 px-1.5 text-xs font-semibold text-indigo-700">
+                          <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-amber-100 px-1.5 text-xs font-semibold text-amber-700">
                             {accts.length}
                           </span>
                           {holders && (
@@ -519,6 +521,7 @@ export function BanksClient({
           accounts={editingAccounts}
           defaultDormancyMonths={defaultDormancyMonths}
           knownHolders={knownHolders}
+          userDisplayName={userDisplayName}
           currentUserId={currentUserId}
           onClose={closeDrawer}
           onSaved={() => {
