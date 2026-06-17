@@ -27,42 +27,46 @@ function MicrosoftIcon() {
   );
 }
 
-/* Floating data fragments — positioned at (x%, y%) of the viewport */
-type Fragment = { text: string; x: number; y: number; layer: 1 | 2 | 3; size: "xs" | "sm" };
-const FRAGMENTS: Fragment[] = [
-  { text: "FDIC #4182", x: 7, y: 14, layer: 3, size: "xs" },
-  { text: "$47.2M Assets", x: 74, y: 8, layer: 1, size: "sm" },
-  { text: "Savings · 18mo", x: 17, y: 73, layer: 2, size: "xs" },
-  { text: "Cert #8891", x: 87, y: 40, layer: 3, size: "xs" },
-  { text: "Last Activity: 9mo", x: 63, y: 80, layer: 1, size: "sm" },
-  { text: "$1,250.00", x: 34, y: 22, layer: 2, size: "sm" },
-  { text: "Eligibility: In-state", x: 4, y: 48, layer: 1, size: "xs" },
-  { text: "CD Maturity: Mar 2027", x: 79, y: 64, layer: 2, size: "xs" },
-  { text: "Nationwide", x: 22, y: 89, layer: 3, size: "xs" },
-  { text: "Open · Checking", x: 56, y: 17, layer: 3, size: "sm" },
-  { text: "$250M Assets", x: 11, y: 34, layer: 2, size: "sm" },
-  { text: "Priority: High", x: 91, y: 21, layer: 1, size: "xs" },
-  { text: "Conversion: Filed", x: 48, y: 90, layer: 2, size: "sm" },
-  { text: "FDIC Insured", x: 69, y: 31, layer: 1, size: "xs" },
-  { text: "$500 Min. Balance", x: 29, y: 57, layer: 3, size: "xs" },
-  { text: "Routing #021000021", x: 83, y: 82, layer: 2, size: "xs" },
-  { text: "Applied · In Review", x: 14, y: 62, layer: 1, size: "sm" },
-  { text: "Cert #14021", x: 43, y: 11, layer: 3, size: "xs" },
-  { text: "Target: $1,000", x: 71, y: 51, layer: 2, size: "sm" },
-  { text: "Dormancy: 24mo", x: 38, y: 43, layer: 3, size: "xs" },
-  { text: "$8,400.00", x: 6, y: 80, layer: 3, size: "sm" },
-  { text: "Subscription Open", x: 55, y: 6, layer: 2, size: "xs" },
+/* ── Background symbols revealed by cursor spotlight ── */
+const GLYPHS = [
+  { text: "$",  x:  5, y:  7, size: 72, rot: -10 },
+  { text: "%",  x: 79, y:  9, size: 52, rot:  10 },
+  { text: "$",  x: 48, y: 22, size: 88, rot:   5 },
+  { text: "#",  x: 23, y: 50, size: 46, rot:  -6 },
+  { text: "$",  x: 74, y: 58, size: 44, rot:  14 },
+  { text: "%",  x:  9, y: 76, size: 60, rot: -10 },
+  { text: "$",  x: 86, y: 78, size: 36, rot:   7 },
+  { text: "¢",  x: 36, y: 80, size: 58, rot:  -4 },
+  { text: "$",  x: 61, y: 40, size: 40, rot:   9 },
+  { text: "%",  x: 32, y: 5,  size: 34, rot:  -7 },
 ];
 
-/* How many px each layer shifts for a full ±0.5 mouse offset */
-const LAYER_PX: Record<1 | 2 | 3, number> = { 1: 55, 2: 32, 3: 16 };
-/* Opacity per layer */
-const LAYER_OP: Record<1 | 2 | 3, number> = { 1: 0.09, 2: 0.065, 3: 0.045 };
+const DATA_TAGS = [
+  { text: "FDIC #4182",           x:  7, y: 24 },
+  { text: "$47.2M Assets",        x: 71, y:  7 },
+  { text: "Savings · 18mo",       x: 17, y: 72 },
+  { text: "Cert #8891",           x: 83, y: 37 },
+  { text: "Last Activity: 9mo",   x: 60, y: 76 },
+  { text: "$1,250.00",            x: 30, y: 18 },
+  { text: "Eligibility: In-state",x:  4, y: 45 },
+  { text: "CD Maturity: Mar 2027",x: 72, y: 52 },
+  { text: "Open · Checking",      x: 54, y: 15 },
+  { text: "Priority: High",       x: 87, y: 23 },
+  { text: "Conversion: Filed",    x: 44, y: 91 },
+  { text: "FDIC Insured",         x: 65, y: 29 },
+  { text: "$500 Min. Balance",    x: 27, y: 57 },
+  { text: "Routing #021000021",   x: 77, y: 85 },
+  { text: "Applied · In Review",  x: 11, y: 62 },
+  { text: "Target: $1,000",       x: 65, y: 46 },
+  { text: "Dormancy: 24mo",       x: 35, y: 43 },
+  { text: "$8,400.00",            x:  4, y: 86 },
+  { text: "Subscription Open",    x: 51, y:  4 },
+  { text: "$250M Assets",         x:  9, y: 35 },
+];
 
 export function LoginForm({ initialError }: { initialError?: string }) {
   const [error, setError] = useState<string | null>(initialError ?? null);
   const [pending, setPending] = useState<"google" | "azure" | null>(null);
-  /* normalized mouse position 0→1 */
   const [mouse, setMouse] = useState({ x: 0.5, y: 0.5 });
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
@@ -88,85 +92,122 @@ export function LoginForm({ initialError }: { initialError?: string }) {
     }
   }
 
-  const mx = mouse.x - 0.5; // -0.5 → 0.5
+  const mx = mouse.x - 0.5;
   const my = mouse.y - 0.5;
-
-  /* 3-D card tilt — perspective applied to wrapper div */
   const cardTransform = `perspective(900px) rotateX(${-my * 10}deg) rotateY(${mx * 14}deg)`;
-
-  /* Cursor-following gold glow */
-  const glowLeft = `${mouse.x * 100}%`;
-  const glowTop = `${mouse.y * 100}%`;
+  const sx = `${mouse.x * 100}%`;
+  const sy = `${mouse.y * 100}%`;
 
   return (
     <div
       className="relative flex min-h-screen items-center justify-center overflow-hidden px-4"
       style={{ backgroundColor: "#030712" }}
     >
-      {/* Dot-grid texture */}
-      <div className="login-dot-grid pointer-events-none absolute inset-0" />
-
-      {/* Static ambient glow — upper right */}
-      <div
-        className="login-ambient pointer-events-none absolute"
-        style={{
-          width: "50vw",
-          height: "50vw",
-          maxWidth: 600,
-          maxHeight: 600,
-          top: "-12%",
-          right: "-8%",
-          background:
-            "radial-gradient(ellipse at center, rgba(160,100,0,0.3) 0%, rgba(100,60,0,0.15) 50%, transparent 70%)",
-        }}
-      />
-
-      {/* Cursor-following gold glow */}
-      <div
-        className="pointer-events-none absolute"
-        style={{
-          width: 480,
-          height: 480,
-          left: glowLeft,
-          top: glowTop,
-          transform: "translate(-50%, -50%)",
-          background:
-            "radial-gradient(circle, rgba(245,158,11,0.11) 0%, rgba(245,158,11,0.04) 40%, transparent 70%)",
-          transition: "left 0.08s ease-out, top 0.08s ease-out",
-        }}
-      />
-
-      {/* Parallax data fragments */}
+      {/* ── Gold symbol layer (hidden under mask until cursor reveals) ── */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden select-none">
-        {FRAGMENTS.map((f, i) => {
-          const shift = LAYER_PX[f.layer];
-          const tx = mx * -shift;
-          const ty = my * -shift;
-          return (
-            <span
-              key={i}
-              className={`absolute font-mono ${f.size === "xs" ? "text-[10px]" : "text-[11px]"} tracking-tight whitespace-nowrap`}
-              style={{
-                left: `${f.x}%`,
-                top: `${f.y}%`,
-                color: "#F59E0B",
-                opacity: LAYER_OP[f.layer],
-                transform: `translate(${tx}px, ${ty}px)`,
-                transition: "transform 0.12s ease-out",
-              }}
-            >
-              {f.text}
-            </span>
-          );
-        })}
+        {/* Large decorative glyphs */}
+        {GLYPHS.map((g, i) => (
+          <span
+            key={i}
+            className="absolute font-bold leading-none"
+            style={{
+              left: `${g.x}%`,
+              top: `${g.y}%`,
+              fontSize: g.size,
+              color: "#F59E0B",
+              opacity: 0.75,
+              transform: `rotate(${g.rot}deg)`,
+            }}
+          >
+            {g.text}
+          </span>
+        ))}
+
+        {/* Financial data tags */}
+        {DATA_TAGS.map((d, i) => (
+          <span
+            key={i}
+            className="absolute font-mono text-[11px] whitespace-nowrap tracking-tight"
+            style={{ left: `${d.x}%`, top: `${d.y}%`, color: "#F59E0B", opacity: 0.75 }}
+          >
+            {d.text}
+          </span>
+        ))}
+
+        {/* SVG: Gauge — left-center */}
+        <svg className="absolute" style={{ left: "13%", top: "15%" }} width="92" height="56" viewBox="0 0 92 56">
+          <path d="M 4 52 A 40 40 0 0 1 84 52" stroke="#F59E0B" strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.32" />
+          <path d="M 4 52 A 40 40 0 0 1 63 16" stroke="#F59E0B" strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.85" />
+          <line x1="44" y1="52" x2="61" y2="18" stroke="white" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+          <circle cx="44" cy="52" r="3" fill="#F59E0B" />
+        </svg>
+
+        {/* SVG: Bar chart — right-lower */}
+        <svg className="absolute" style={{ left: "67%", top: "67%" }} width="66" height="56" viewBox="0 0 66 56">
+          <rect x="2"  y="40" width="11" height="16" fill="#F59E0B" rx="1.5" opacity="0.55" />
+          <rect x="17" y="24" width="11" height="32" fill="#F59E0B" rx="1.5" opacity="0.78" />
+          <rect x="32" y="8"  width="11" height="48" fill="#F59E0B" rx="1.5" />
+          <rect x="47" y="30" width="11" height="26" fill="#F59E0B" rx="1.5" opacity="0.7" />
+        </svg>
+
+        {/* SVG: Bank building — center-lower */}
+        <svg className="absolute" style={{ left: "40%", top: "59%" }} width="68" height="60" viewBox="0 0 68 60">
+          <polygon points="34,4 2,20 66,20" fill="#F59E0B" opacity="0.72" />
+          <rect x="7"  y="22" width="7" height="28" fill="#F59E0B" rx="1" opacity="0.85" />
+          <rect x="19" y="22" width="7" height="28" fill="#F59E0B" rx="1" opacity="0.85" />
+          <rect x="31" y="22" width="7" height="28" fill="#F59E0B" rx="1" opacity="0.85" />
+          <rect x="43" y="22" width="7" height="28" fill="#F59E0B" rx="1" opacity="0.85" />
+          <rect x="55" y="22" width="7" height="28" fill="#F59E0B" rx="1" opacity="0.85" />
+          <rect x="2"  y="51" width="64" height="6" fill="#F59E0B" rx="1" opacity="0.9" />
+        </svg>
+
+        {/* SVG: Gauge — upper-right */}
+        <svg className="absolute" style={{ left: "75%", top: "26%" }} width="76" height="48" viewBox="0 0 76 48">
+          <path d="M 4 46 A 34 34 0 0 1 72 46" stroke="#F59E0B" strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.32" />
+          <path d="M 4 46 A 34 34 0 0 1 56 14" stroke="#F59E0B" strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.85" />
+          <line x1="38" y1="46" x2="54" y2="16" stroke="white" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+          <circle cx="38" cy="46" r="2.5" fill="#F59E0B" />
+        </svg>
+
+        {/* SVG: Bar chart — left-lower */}
+        <svg className="absolute" style={{ left: "2%", top: "54%" }} width="52" height="46" viewBox="0 0 52 46">
+          <rect x="2"  y="26" width="9" height="20" fill="#F59E0B" rx="1.5" opacity="0.6" />
+          <rect x="15" y="14" width="9" height="32" fill="#F59E0B" rx="1.5" opacity="0.8" />
+          <rect x="28" y="6"  width="9" height="40" fill="#F59E0B" rx="1.5" />
+          <rect x="41" y="20" width="9" height="26" fill="#F59E0B" rx="1.5" opacity="0.7" />
+        </svg>
+
+        {/* SVG: Gauge — bottom area */}
+        <svg className="absolute" style={{ left: "55%", top: "82%" }} width="80" height="48" viewBox="0 0 80 48">
+          <path d="M 4 46 A 36 36 0 0 1 76 46" stroke="#F59E0B" strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.32" />
+          <path d="M 4 46 A 36 36 0 0 1 40 10" stroke="#F59E0B" strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.85" />
+          <line x1="40" y1="46" x2="40" y2="12" stroke="white" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+          <circle cx="40" cy="46" r="3" fill="#F59E0B" />
+        </svg>
       </div>
 
-      {/* Card wrapper — tilt perspective applied here */}
+      {/* ── Dark spotlight mask — transparent at cursor, opaque everywhere else ── */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: `radial-gradient(circle 240px at ${sx} ${sy}, transparent 0%, rgba(3,7,18,0.88) 150px, rgba(3,7,18,0.97) 240px)`,
+        }}
+      />
+
+      {/* Warm gold cast inside the spotlight */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: `radial-gradient(circle 120px at ${sx} ${sy}, rgba(245,158,11,0.07) 0%, transparent 100%)`,
+        }}
+      />
+
+      {/* ── Card ── */}
       <div
         className="login-card relative z-10 w-full max-w-[380px]"
         style={{ transform: cardTransform, transition: "transform 0.08s ease-out" }}
       >
-        {/* Thin animated gold line at very top of card */}
+        {/* Thin animated gold line at card top */}
         <div className="login-card-line mb-px h-px w-full rounded-full" />
 
         {/* Glass panel */}
@@ -184,9 +225,7 @@ export function LoginForm({ initialError }: { initialError?: string }) {
           <div className="mb-8 flex flex-col items-center gap-3 text-center">
             <Logo className="h-12 w-12" />
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-white">
-                Bank Tracker
-              </h1>
+              <h1 className="text-xl font-bold tracking-tight text-white">Bank Tracker</h1>
               <p
                 className="mt-0.5 text-[11px] font-medium uppercase tracking-[0.18em]"
                 style={{ color: "rgba(245,158,11,0.55)" }}
@@ -197,72 +236,37 @@ export function LoginForm({ initialError }: { initialError?: string }) {
           </div>
 
           {/* Divider */}
-          <div
-            className="mb-6 h-px w-full"
-            style={{ background: "rgba(255,255,255,0.05)" }}
-          />
+          <div className="mb-6 h-px w-full" style={{ background: "rgba(255,255,255,0.05)" }} />
 
           {/* SSO buttons */}
           <div className="space-y-2.5">
-            <button
-              type="button"
-              onClick={() => handleOAuth("google")}
-              disabled={pending !== null}
-              className="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50"
-              style={{
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.background =
-                  "rgba(245,158,11,0.06)";
-                (e.currentTarget as HTMLButtonElement).style.borderColor =
-                  "rgba(245,158,11,0.2)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.background =
-                  "rgba(255,255,255,0.04)";
-                (e.currentTarget as HTMLButtonElement).style.borderColor =
-                  "rgba(255,255,255,0.08)";
-              }}
-            >
-              {pending === "google" ? (
-                <Loader2 className="h-4 w-4 animate-spin opacity-60" />
-              ) : (
-                <GoogleIcon />
-              )}
-              <span>Continue with Google</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleOAuth("azure")}
-              disabled={pending !== null}
-              className="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50"
-              style={{
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.background =
-                  "rgba(245,158,11,0.06)";
-                (e.currentTarget as HTMLButtonElement).style.borderColor =
-                  "rgba(245,158,11,0.2)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.background =
-                  "rgba(255,255,255,0.04)";
-                (e.currentTarget as HTMLButtonElement).style.borderColor =
-                  "rgba(255,255,255,0.08)";
-              }}
-            >
-              {pending === "azure" ? (
-                <Loader2 className="h-4 w-4 animate-spin opacity-60" />
-              ) : (
-                <MicrosoftIcon />
-              )}
-              <span>Continue with Microsoft</span>
-            </button>
+            {(["google", "azure"] as const).map((provider) => (
+              <button
+                key={provider}
+                type="button"
+                onClick={() => handleOAuth(provider)}
+                disabled={pending !== null}
+                className="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = "rgba(245,158,11,0.06)";
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(245,158,11,0.2)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.04)";
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.08)";
+                }}
+              >
+                {pending === provider ? (
+                  <Loader2 className="h-4 w-4 animate-spin opacity-60" />
+                ) : provider === "google" ? (
+                  <GoogleIcon />
+                ) : (
+                  <MicrosoftIcon />
+                )}
+                <span>Continue with {provider === "google" ? "Google" : "Microsoft"}</span>
+              </button>
+            ))}
           </div>
 
           {error && (
@@ -278,11 +282,7 @@ export function LoginForm({ initialError }: { initialError?: string }) {
             </div>
           )}
 
-          {/* Footer */}
-          <p
-            className="mt-7 text-center text-[11px]"
-            style={{ color: "rgba(100,116,139,0.7)" }}
-          >
+          <p className="mt-7 text-center text-[11px]" style={{ color: "rgba(100,116,139,0.7)" }}>
             Invite-only · We never see your password
           </p>
         </div>
