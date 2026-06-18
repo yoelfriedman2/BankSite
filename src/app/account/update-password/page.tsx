@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { Logo } from "@/components/Logo";
 
 export default function UpdatePasswordPage() {
   const router = useRouter();
@@ -43,9 +44,7 @@ export default function UpdatePasswordPage() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
         <div className="mb-6 flex flex-col items-center text-center">
-          <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 text-2xl font-bold text-white">
-            F
-          </span>
+          <Logo className="mb-3 h-12 w-12" />
           <h1 className="text-xl font-semibold text-slate-900">
             Set your password
           </h1>

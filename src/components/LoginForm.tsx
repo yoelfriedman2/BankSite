@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Logo } from "@/components/Logo";
@@ -98,14 +98,25 @@ export function LoginForm({ initialError }: { initialError?: string }) {
   const [mousePos, setMousePos] = useState({ x: -100, y: -100 });
   const [insideCard, setInsideCard] = useState(false);
 
+  // Coalesce mousemove updates to one per animation frame — otherwise every
+  // pixel of movement re-renders the whole form (50+ glyphs and SVGs).
+  const frame = useRef<number | null>(null);
   const handleMouseMove = useCallback((e: MouseEvent) => {
-    setMouse({ x: e.clientX / window.innerWidth, y: e.clientY / window.innerHeight });
-    setMousePos({ x: e.clientX, y: e.clientY });
+    if (frame.current !== null) return;
+    const { clientX, clientY } = e;
+    frame.current = requestAnimationFrame(() => {
+      frame.current = null;
+      setMouse({ x: clientX / window.innerWidth, y: clientY / window.innerHeight });
+      setMousePos({ x: clientX, y: clientY });
+    });
   }, []);
 
   useEffect(() => {
     window.addEventListener("mousemove", handleMouseMove, { passive: true });
-    return () => window.removeEventListener("mousemove", handleMouseMove);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      if (frame.current !== null) cancelAnimationFrame(frame.current);
+    };
   }, [handleMouseMove]);
 
   async function handleOAuth(provider: "google" | "azure") {

@@ -12,7 +12,12 @@
 import type { Account, Bank, BankComment, Profile } from "./types";
 import { BANKS_SEED } from "./banks-seed";
 
-export const DEMO_MODE = process.env.DEMO_MODE === "true";
+// Demo mode bypasses auth entirely, so it must never be active on the live
+// production deployment — even if DEMO_MODE=true is left set there by mistake.
+// Vercel sets VERCEL_ENV to "production" only for the production deployment;
+// preview deployments ("preview") and local dev (undefined) can still demo.
+export const DEMO_MODE =
+  process.env.DEMO_MODE === "true" && process.env.VERCEL_ENV !== "production";
 
 export const DEMO_USER = {
   id: "00000000-0000-0000-0000-000000000000",

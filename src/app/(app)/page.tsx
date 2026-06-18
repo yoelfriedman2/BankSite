@@ -103,8 +103,17 @@ export default async function DashboardPage() {
   const now = new Date();
   const counts = { open: 0, want_to_open: 0, cannot_open: 0 };
   for (const b of banks) {
-    if (b.status === "open" || b.status === "want_to_open" || b.status === "cannot_open") {
-      counts[b.status]++;
+    // "Open" covers all three open variants, matching the Banks page tally.
+    if (
+      b.status === "open" ||
+      b.status === "open_add_account" ||
+      b.status === "open_add_funds"
+    ) {
+      counts.open++;
+    } else if (b.status === "want_to_open") {
+      counts.want_to_open++;
+    } else if (b.status === "cannot_open") {
+      counts.cannot_open++;
     }
   }
 

@@ -17,6 +17,8 @@ const VALID_STATUSES: Array<BankStatus | "all"> = [
   "want_to_open",
   "applied",
   "open",
+  "open_add_account",
+  "open_add_funds",
   "cannot_open",
 ];
 

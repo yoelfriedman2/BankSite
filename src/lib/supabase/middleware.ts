@@ -18,8 +18,13 @@ function isPublicPath(pathname: string) {
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
-  // Demo/preview mode: skip auth entirely.
-  if (process.env.DEMO_MODE === "true") {
+  // Demo/preview mode: skip auth entirely. Never honored on the live production
+  // deployment (VERCEL_ENV==="production"), so a stray DEMO_MODE=true there
+  // can't disable authentication. Mirrors the guard in lib/demo.ts.
+  if (
+    process.env.DEMO_MODE === "true" &&
+    process.env.VERCEL_ENV !== "production"
+  ) {
     return supabaseResponse;
   }
 

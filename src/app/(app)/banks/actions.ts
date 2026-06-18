@@ -525,8 +525,9 @@ export async function searchAll(query: string): Promise<SearchResults> {
   } = await supabase.auth.getUser();
   if (!user) return { banks: [], accounts: [] };
 
-  // Strip characters that would break the PostgREST or-filter syntax.
-  const safe = q.replace(/[%,()]/g, " ");
+  // Strip characters that would break (or be abused in) the PostgREST or-filter
+  // syntax: , and () delimit/group filters; % and * are ilike wildcards; \ escapes.
+  const safe = q.replace(/[%,()*\\]/g, " ");
 
   const { data: banks } = await supabase
     .from("banks")
