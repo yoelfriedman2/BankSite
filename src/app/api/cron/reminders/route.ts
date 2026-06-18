@@ -29,6 +29,9 @@ export async function GET(req: NextRequest) {
   );
 
   const today = new Date();
+  // Don't re-remind the same account more than once per cooldown window —
+  // otherwise an account past its threshold gets emailed every single day.
+  const COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
   let sent = 0;
 
   for (const profile of profiles) {
@@ -40,7 +43,7 @@ export async function GET(req: NextRequest) {
 
     const { data: accounts } = await admin
       .from("accounts")
-      .select("id, bank_id, holder, account_type, last_activity_date")
+      .select("id, bank_id, holder, account_type, last_activity_date, last_reminded_at")
       .eq("user_id", profile.id)
       .is("deleted_at", null)
       .not("last_activity_date", "is", null);
@@ -48,7 +51,14 @@ export async function GET(req: NextRequest) {
     if (!accounts?.length) continue;
 
     const alerts: string[] = [];
+    const remindedIds: string[] = [];
     for (const a of accounts) {
+      // Skip accounts reminded within the cooldown window.
+      const remindedAt = a.last_reminded_at
+        ? new Date(a.last_reminded_at).getTime()
+        : 0;
+      if (remindedAt && today.getTime() - remindedAt < COOLDOWN_MS) continue;
+
       const lastActivity = new Date(a.last_activity_date!);
       const monthsInactive =
         (today.getFullYear() - lastActivity.getFullYear()) * 12 +
@@ -58,6 +68,7 @@ export async function GET(req: NextRequest) {
           alerts.push(
             `<li><strong>${escapeHtml(a.holder ?? "Account")}</strong> — ${escapeHtml(a.account_type ?? "account")} — inactive ${monthsInactive} months (threshold: ${threshold} mo)</li>`,
           );
+          remindedIds.push(a.id as string);
           break;
         }
       }
@@ -66,7 +77,15 @@ export async function GET(req: NextRequest) {
     if (!alerts.length) continue;
 
     const name = profile.display_name ?? "there";
-    await sendActivityReminderEmail(email, name, alerts);
+    const { error: sendErr } = await sendActivityReminderEmail(email, name, alerts);
+    // Only stamp the cooldown if the email actually went out, so a transient
+    // send failure doesn't silently suppress the reminder for 30 days.
+    if (!sendErr && remindedIds.length) {
+      await admin
+        .from("accounts")
+        .update({ last_reminded_at: new Date().toISOString() })
+        .in("id", remindedIds);
+    }
     sent++;
   }
 
