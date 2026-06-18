@@ -1,18 +1,28 @@
 import { createClient } from "@/lib/supabase/server";
 import { ChecksClient, type AccountWithBank } from "@/components/ChecksClient";
+import { DEMO_MODE, getDemoBanks, getDemoAccounts } from "@/lib/demo";
 import type { Account, Bank } from "@/lib/types";
 
 export default async function ChecksPage() {
-  const supabase = await createClient();
+  let accounts: AccountWithBank[];
 
-  const { data } = await supabase
-    .from("accounts")
-    .select("*, bank:banks(*)")
-    .is("deleted_at", null)
-    .order("bank_id");
+  if (DEMO_MODE) {
+    const bankMap = new Map(getDemoBanks().map((b) => [b.id, b]));
+    accounts = getDemoAccounts()
+      .map((a) => ({ ...a, bank: bankMap.get(a.bank_id) }))
+      .filter((a): a is AccountWithBank => !!a.bank);
+  } else {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("accounts")
+      .select("*, bank:banks(*)")
+      .is("deleted_at", null)
+      .order("bank_id");
 
-  const accounts = ((data ?? []) as (Account & { bank: Bank | null })[])
-    .filter((a) => a.bank && !a.bank.deleted_at) as AccountWithBank[];
+    accounts = ((data ?? []) as (Account & { bank: Bank | null })[]).filter(
+      (a) => a.bank && !a.bank.deleted_at,
+    ) as AccountWithBank[];
+  }
 
   return (
     <div>

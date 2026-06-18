@@ -395,7 +395,15 @@ export function BanksClient({
                   <tr
                     key={b.id}
                     onClick={() => openBank(b)}
-                    className="cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50/70"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        openBank(b);
+                      }
+                    }}
+                    tabIndex={0}
+                    aria-label={`Manage ${b.name}`}
+                    className="cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400"
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
@@ -435,6 +443,7 @@ export function BanksClient({
                         <select
                           value={b.status}
                           disabled={statusPendingId === b.id}
+                          aria-label={`Status for ${b.name}`}
                           onChange={(e) =>
                             handleStatusChange(b, e.target.value as BankStatus)
                           }
@@ -503,6 +512,7 @@ export function BanksClient({
                           disabled={deletePendingId === b.id}
                           className="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
                           title="Remove bank"
+                          aria-label={`Remove ${b.name}`}
                         >
                           {deletePendingId === b.id ? (
                             <Loader2 className="h-4 w-4 animate-spin" />

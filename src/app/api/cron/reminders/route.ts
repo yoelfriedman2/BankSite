@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendActivityReminderEmail } from "@/lib/email";
+import { sendActivityReminderEmail, escapeHtml } from "@/lib/email";
 
 /* Called once daily by Vercel Cron (see vercel.json).
    Checks every user who has notify_email=true and sends activity reminders. */
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
       for (const threshold of months) {
         if (monthsInactive >= threshold) {
           alerts.push(
-            `<li><strong>${a.holder ?? "Account"}</strong> — ${a.account_type ?? "account"} — inactive ${monthsInactive} months (threshold: ${threshold} mo)</li>`,
+            `<li><strong>${escapeHtml(a.holder ?? "Account")}</strong> — ${escapeHtml(a.account_type ?? "account")} — inactive ${monthsInactive} months (threshold: ${threshold} mo)</li>`,
           );
           break;
         }

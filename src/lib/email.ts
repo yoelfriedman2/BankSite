@@ -3,6 +3,21 @@ import { Resend } from "resend";
 const FROM = process.env.RESEND_FROM ?? "Bank Tracker <notifications@banktracker.app>";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://banktracker.app";
 
+/**
+ * Escape user-supplied text before interpolating it into an HTML email body.
+ * Community notes, display names, etc. are user-controlled and some emails are
+ * broadcast to other users, so unescaped values are an injection vector
+ * (phishing links, tracking pixels, spoofed markup) in recipients' inboxes.
+ */
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export async function sendEmail(
   to: string,
   subject: string,
@@ -23,7 +38,7 @@ export async function sendEmail(
 export async function sendWelcomeEmail(to: string, name: string) {
   if (!to) return {};
   const first = name ? name.split(" ")[0] : "";
-  const greeting = first ? `Hi ${first},` : "Hi there,";
+  const greeting = first ? `Hi ${escapeHtml(first)},` : "Hi there,";
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -114,7 +129,8 @@ export async function sendNewUserNotification(userName: string, userEmail: strin
     return {};
   }
 
-  const displayName = userName || userEmail || "Unknown";
+  const displayName = escapeHtml(userName || userEmail || "Unknown");
+  const safeEmail = escapeHtml(userEmail);
   const timestamp = new Date().toLocaleString("en-US", {
     timeZone: "America/New_York",
     dateStyle: "medium",
@@ -139,7 +155,7 @@ export async function sendNewUserNotification(userName: string, userEmail: strin
           </tr>
           <tr>
             <td style="font-size:13px;color:#64748b;padding-bottom:8px;">Email</td>
-            <td style="font-size:14px;font-weight:600;color:#0f172a;text-align:right;padding-bottom:8px;">${userEmail}</td>
+            <td style="font-size:14px;font-weight:600;color:#0f172a;text-align:right;padding-bottom:8px;">${safeEmail}</td>
           </tr>
           <tr>
             <td style="font-size:13px;color:#64748b;">Joined</td>
@@ -158,7 +174,7 @@ export async function sendNewUserNotification(userName: string, userEmail: strin
 
   return sendEmail(
     adminEmail,
-    `Bank Tracker — New user: ${displayName}`,
+    `Bank Tracker — New user: ${userName || userEmail || "Unknown"}`,
     html,
   );
 }
@@ -171,6 +187,9 @@ export async function sendCommunityNoteEmail(
   noteBody: string,
 ) {
   if (!to) return {};
+  const safeBank = escapeHtml(bankName);
+  const safeAuthor = escapeHtml(authorName);
+  const safeBody = escapeHtml(noteBody);
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -185,11 +204,11 @@ export async function sendCommunityNoteEmail(
 </td></tr>
 
 <tr><td bgcolor="#ffffff" style="padding:32px 40px 28px;">
-  <p style="margin:0 0 6px;font-size:15px;font-weight:700;color:#0f172a;">${bankName}</p>
-  <p style="margin:0 0 20px;font-size:13px;color:#64748b;">${authorName} posted a community note:</p>
+  <p style="margin:0 0 6px;font-size:15px;font-weight:700;color:#0f172a;">${safeBank}</p>
+  <p style="margin:0 0 20px;font-size:13px;color:#64748b;">${safeAuthor} posted a community note:</p>
   <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:28px;">
     <tr><td bgcolor="#f8fafc" style="border-left:3px solid #F59E0B;border-radius:0 8px 8px 0;padding:14px 18px;">
-      <p style="margin:0;font-size:14px;color:#1e293b;line-height:1.6;white-space:pre-wrap;">${noteBody}</p>
+      <p style="margin:0;font-size:14px;color:#1e293b;line-height:1.6;white-space:pre-wrap;">${safeBody}</p>
     </td></tr>
   </table>
   <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:0;">
@@ -225,7 +244,7 @@ export async function sendActivityReminderEmail(
   if (!to || !alerts.length) return {};
   const appUrl = APP_URL;
   const html = `
-<p style="font-family:sans-serif;">Hi ${name},</p>
+<p style="font-family:sans-serif;">Hi ${escapeHtml(name)},</p>
 <p style="font-family:sans-serif;">The following accounts in your Bank Tracker are approaching or past their dormancy threshold:</p>
 <ul style="font-family:sans-serif;">${alerts.join("")}</ul>
 <p style="font-family:sans-serif;">Log in and record some activity to keep them active.</p>

@@ -181,7 +181,7 @@ export function SettingsForm({
             </h2>
           </div>
           <p className="mb-4 text-xs text-slate-400">
-            Configure what emails you receive once the app is wired to Resend.
+            Choose which emails you&apos;d like to receive.
           </p>
 
           {/* Master email toggle */}

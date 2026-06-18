@@ -627,7 +627,8 @@ export function BankForm({
               </h3>
               <p className="-mt-1 text-xs text-slate-400">
                 Shared with everyone using the app — how you opened it,
-                requirements, who to call, etc.
+                requirements, who to call, etc. Posted publicly under your
+                display name ({userDisplayName || "your name"}).
               </p>
               {comments.length > 0 && (
                 <ul className="space-y-2">
