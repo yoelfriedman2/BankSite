@@ -10,6 +10,7 @@ import {
   restoreDemoAccount,
   permanentlyDeleteDemoAccount,
   updateDemoBank,
+  getDemoBanks,
   getDemoAccounts,
   type AccountFields,
 } from "@/lib/demo";
@@ -108,6 +109,8 @@ function revalidate() {
   revalidatePath("/");
 }
 
+const PROMOTE_FROM = new Set<string>(["untracked", "want_to_open", "applied", "cannot_open"]);
+
 export async function upsertAccount(
   values: AccountFormValues,
 ): Promise<{ error?: string }> {
@@ -115,10 +118,13 @@ export async function upsertAccount(
   const patch = buildPatch(values);
 
   if (DEMO_MODE) {
+    const demoBank = getDemoBanks().find((b) => b.id === values.bank_id);
     if (values.id) {
       updateDemoAccount(values.id, patch);
     } else {
       addDemoAccount(values.bank_id, { ...patch, deleted_at: null });
+    }
+    if (demoBank && PROMOTE_FROM.has(demoBank.status)) {
       updateDemoBank(values.bank_id, { status: "open" });
     }
     revalidate();
@@ -142,18 +148,19 @@ export async function upsertAccount(
       .from("accounts")
       .insert({ ...patch, user_id: user.id, bank_id: values.bank_id });
     if (error) return { error: error.message };
-    // Auto-promote to "open" only when the bank isn't already tracked as open.
-    const { data: bank } = await supabase
+  }
+
+  // Auto-promote to "open" on insert or edit if the bank status warrants it.
+  const { data: bank } = await supabase
+    .from("banks")
+    .select("status")
+    .eq("id", values.bank_id)
+    .maybeSingle();
+  if (bank && PROMOTE_FROM.has(bank.status)) {
+    await supabase
       .from("banks")
-      .select("status")
-      .eq("id", values.bank_id)
-      .maybeSingle();
-    if (bank && !["open", "open_add_account", "open_add_funds"].includes(bank.status)) {
-      await supabase
-        .from("banks")
-        .update({ status: "open" })
-        .eq("id", values.bank_id);
-    }
+      .update({ status: "open" })
+      .eq("id", values.bank_id);
   }
 
   revalidate();
@@ -236,12 +243,16 @@ export async function duplicateAccount(
   if (DEMO_MODE) {
     const source = getDemoAccounts().find((a) => a.id === id);
     if (!source) return { error: "Account not found." };
+    const demoBank = getDemoBanks().find((b) => b.id === source.bank_id);
     addDemoAccount(source.bank_id, {
       ...fieldsFromAccount(source),
       account_number: null,
       activity_log: [],
       deleted_at: null,
     });
+    if (demoBank && PROMOTE_FROM.has(demoBank.status)) {
+      updateDemoBank(source.bank_id, { status: "open" });
+    }
     revalidate();
     return {};
   }
@@ -260,14 +271,24 @@ export async function duplicateAccount(
   if (readError || !source) return { error: readError?.message ?? "Not found." };
 
   const copy = fieldsFromAccount(source as Account);
+  const bankId = (source as Account).bank_id;
   const { error } = await supabase.from("accounts").insert({
     ...copy,
     account_number: null,
     activity_log: [],
     user_id: user.id,
-    bank_id: (source as Account).bank_id,
+    bank_id: bankId,
   });
   if (error) return { error: error.message };
+
+  const { data: bank } = await supabase
+    .from("banks")
+    .select("status")
+    .eq("id", bankId)
+    .maybeSingle();
+  if (bank && PROMOTE_FROM.has(bank.status)) {
+    await supabase.from("banks").update({ status: "open" }).eq("id", bankId);
+  }
 
   revalidate();
   return {};
