@@ -182,7 +182,11 @@ export function BanksClient({
   initialStatus?: BankStatus | "all";
   initialQuery?: string;
 }) {
-  const unreadSet = useMemo(() => new Set(unreadCerts), [unreadCerts]);
+  const [localReadCerts, setLocalReadCerts] = useState<Set<number>>(() => new Set());
+  const unreadSet = useMemo(
+    () => new Set(unreadCerts.filter((c) => !localReadCerts.has(c))),
+    [unreadCerts, localReadCerts],
+  );
   const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<BankStatus | "all">(
     initialStatus ?? "all",
@@ -321,6 +325,9 @@ export function BanksClient({
   function openBank(b: Bank) {
     setEditingBankId(b.id);
     setDrawerOpen(true);
+    if (b.cert != null) {
+      setLocalReadCerts((prev) => new Set([...prev, b.cert!]));
+    }
   }
   function openAdd() {
     setEditingBankId(null);
