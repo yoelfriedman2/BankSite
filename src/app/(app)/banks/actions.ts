@@ -140,6 +140,33 @@ export async function upsertBank(
     if (error) return { error: error.message };
   }
 
+  // Propagate shared ("global") fields to all other users' copies of the same bank.
+  if (patch.cert != null) {
+    const sharedPatch = {
+      priority: patch.priority,
+      open_methods: patch.open_methods,
+      eligibility: patch.eligibility,
+      eligibility_date: patch.eligibility_date,
+      branch_location: patch.branch_location,
+      phone: patch.phone,
+      requirements: patch.requirements,
+      min_to_open: patch.min_to_open,
+      target_balance: patch.target_balance,
+      application_steps: patch.application_steps,
+      conversion_stage: patch.conversion_stage,
+      subscription_start: patch.subscription_start,
+      subscription_end: patch.subscription_end,
+      pricing_date: patch.pricing_date,
+    };
+    const admin = createAdminClient();
+    await admin
+      .from("banks")
+      .update(sharedPatch)
+      .eq("cert", patch.cert)
+      .neq("user_id", user.id)
+      .is("deleted_at", null);
+  }
+
   revalidate();
   return {};
 }
