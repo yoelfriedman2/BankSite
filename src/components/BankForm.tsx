@@ -27,6 +27,7 @@ import { DateInput } from "@/components/DateInput";
 import {
   upsertBank,
   getBankComments,
+  getCommentReadAt,
   addBankComment,
   deleteBankComment,
   markCommentsRead,
@@ -98,6 +99,7 @@ export function BankForm({
   const [printCheck, setPrintCheck] = useState<Account | null>(null);
   const [busyAcctId, setBusyAcctId] = useState<string | null>(null);
   const [comments, setComments] = useState<BankComment[]>([]);
+  const [readAt, setReadAt] = useState<string | null>(null);
   const [commentBody, setCommentBody] = useState("");
   const [notifyAll, setNotifyAll] = useState(false);
   const [commentBusy, setCommentBusy] = useState(false);
@@ -107,9 +109,14 @@ export function BankForm({
   );
 
   useEffect(() => {
+    setReadAt(null);
     if (initial?.cert != null) {
       const cert = initial.cert;
-      getBankComments(cert)
+      getCommentReadAt(cert)
+        .then((ra) => {
+          setReadAt(ra);
+          return getBankComments(cert);
+        })
         .then(setComments)
         .catch(() => {});
       markCommentsRead(cert).catch(() => {});
@@ -464,6 +471,9 @@ export function BankForm({
                   value={values.cert}
                   onChange={(e) => set("cert", e.target.value)}
                 />
+                <p className="mt-1 text-xs text-slate-400">
+                  Required for this bank to appear for all users and enable community notes.
+                </p>
               </div>
               <div>
                 <label className={labelClass} htmlFor="assets">
@@ -712,39 +722,47 @@ export function BankForm({
               </p>
               {comments.length > 0 && (
                 <ul className="space-y-2">
-                  {comments.map((c) => (
-                    <li
-                      key={c.id}
-                      className="rounded-lg bg-slate-50 px-3 py-2 text-sm"
-                    >
-                      <div className="mb-0.5 flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 text-xs text-slate-400">
-                          <span className="font-medium text-slate-600">
-                            {c.author_name || "Someone"}
-                          </span>
-                          <span>{formatDate(c.created_at.slice(0, 10))}</span>
-                        </div>
-                        {c.author_id === currentUserId && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteComment(c.id)}
-                            disabled={commentDeletingId === c.id}
-                            className="rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
-                            title="Delete note"
-                          >
-                            {commentDeletingId === c.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-3.5 w-3.5" />
+                  {comments.map((c) => {
+                    const isUnread = readAt == null || c.created_at > readAt;
+                    return (
+                      <li
+                        key={c.id}
+                        className={`rounded-lg px-3 py-2 text-sm ${isUnread ? "bg-amber-50" : "bg-slate-50"}`}
+                      >
+                        <div className="mb-0.5 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 text-xs text-slate-400">
+                            <span className={`${isUnread ? "font-semibold text-slate-800" : "font-medium text-slate-600"}`}>
+                              {c.author_name || "Someone"}
+                            </span>
+                            <span>{formatDate(c.created_at.slice(0, 10))}</span>
+                            {isUnread && (
+                              <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                                New
+                              </span>
                             )}
-                          </button>
-                        )}
-                      </div>
-                      <p className="whitespace-pre-wrap text-slate-700">
-                        {c.body}
-                      </p>
-                    </li>
-                  ))}
+                          </div>
+                          {c.author_id === currentUserId && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteComment(c.id)}
+                              disabled={commentDeletingId === c.id}
+                              className="rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                              title="Delete note"
+                            >
+                              {commentDeletingId === c.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          )}
+                        </div>
+                        <p className={`whitespace-pre-wrap ${isUnread ? "font-semibold text-slate-900" : "text-slate-700"}`}>
+                          {c.body}
+                        </p>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
               {commentError && (

@@ -138,6 +138,46 @@ export async function upsertBank(
       .from("banks")
       .insert({ regulator: null, ...patch, user_id: user.id });
     if (error) return { error: error.message };
+
+    // For a new bank with a cert, add it (as untracked) to every other user who doesn't have it yet.
+    if (patch.cert != null) {
+      const admin = createAdminClient();
+      const [{ data: otherProfiles }, { data: existingBanks }] = await Promise.all([
+        admin.from("profiles").select("id").neq("id", user.id),
+        admin.from("banks").select("user_id").eq("cert", patch.cert).is("deleted_at", null),
+      ]);
+      const existingIds = new Set((existingBanks ?? []).map((b) => b.user_id as string));
+      const toInsert = (otherProfiles ?? [])
+        .filter((p) => !existingIds.has(p.id as string))
+        .map((p) => ({
+          user_id: p.id,
+          cert: patch.cert,
+          name: patch.name,
+          city: patch.city,
+          state: patch.state,
+          assets: patch.assets,
+          holding_company: patch.holding_company,
+          regulator: null,
+          status: "untracked",
+          priority: patch.priority,
+          open_methods: patch.open_methods,
+          eligibility: patch.eligibility,
+          eligibility_date: patch.eligibility_date,
+          branch_location: patch.branch_location,
+          phone: patch.phone,
+          requirements: patch.requirements,
+          min_to_open: patch.min_to_open,
+          target_balance: patch.target_balance,
+          application_steps: patch.application_steps,
+          conversion_stage: patch.conversion_stage,
+          subscription_start: patch.subscription_start,
+          subscription_end: patch.subscription_end,
+          pricing_date: patch.pricing_date,
+        }));
+      if (toInsert.length > 0) {
+        await admin.from("banks").insert(toInsert);
+      }
+    }
   }
 
   // Propagate shared ("global") fields to all other users' copies of the same bank.
@@ -601,8 +641,25 @@ export async function getBankComments(cert: number): Promise<BankComment[]> {
     .from("bank_comments")
     .select("*")
     .eq("cert", cert)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: true });
   return (data ?? []) as BankComment[];
+}
+
+/** Returns the current user's last-read timestamp for a cert's comment thread. */
+export async function getCommentReadAt(cert: number): Promise<string | null> {
+  if (DEMO_MODE) return null;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase
+    .from("bank_comment_reads")
+    .select("last_read_at")
+    .eq("user_id", user.id)
+    .eq("cert", cert)
+    .maybeSingle();
+  return (data?.last_read_at as string | null) ?? null;
 }
 
 export async function addBankComment(
@@ -718,6 +775,7 @@ export async function markCommentsRead(cert: number): Promise<void> {
     { user_id: user.id, cert, last_read_at: new Date().toISOString() },
     { onConflict: "user_id,cert" },
   );
+  revalidatePath("/banks");
 }
 
 /** Certs whose comment thread has activity the current user hasn't read yet. */
