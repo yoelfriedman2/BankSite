@@ -30,6 +30,16 @@ function toWords(n: number): string {
   return r.trim();
 }
 
+/** Numeric amount with thousands separators and 2 decimals, e.g. 1,284.56. */
+function fmtAmount(raw: string): string {
+  const n = parseFloat(raw);
+  if (!raw || isNaN(n)) return raw ?? "";
+  return n.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 function amountWords(raw: string): string {
   const num = parseFloat(raw);
   if (!raw || isNaN(num) || num <= 0) return "";
@@ -62,30 +72,49 @@ function buildPrintHTML(fields: {
   checkNum: string;
   date: string;
 }): string {
-  const micrLine = [
-    fields.routing ? `⑆${esc(fields.routing)}⑆` : "⑆         ⑆",
-    fields.accountNum ? `  ${esc(fields.accountNum)}  ` : "               ",
-    `⑈  ${esc(fields.checkNum) || "    "}`,
-  ].join("");
+  // MICR line in standard business-check field order, left → right:
+  //   Auxiliary On-Us (check #) · Transit (routing) · On-Us (account).
+  // NOTE: a bank-scannable MICR line requires the E-13B magnetic font printed
+  // with MICR toner; these symbols reproduce the correct layout/positions for a
+  // proper-looking printed check.
+  const auxOnUs = fields.checkNum ? `⑈${esc(fields.checkNum)}⑈` : "";
+  const transit = fields.routing ? `⑆${esc(fields.routing)}⑆` : "⑆ ⑆";
+  const onUs = fields.accountNum ? `${esc(fields.accountNum)}⑈` : "";
+  const micrLine = [auxOnUs, transit, onUs].filter(Boolean).join("   ");
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <style>
-  /* Standard business check: 8.5" wide × 3.5" tall on letter paper.
-     Printer non-printable area is typically 0.2" so we subtract that. */
-  @page { size: 8.5in 11in; margin: 0.2in; }
+  /* Standard voucher check: the check is the top 3.5in of an 8.5x11 sheet.
+     Print at 100% / "Actual size" (turn OFF "fit to page") for true alignment. */
+  @page { size: 8.5in 11in; margin: 0; }
   * { box-sizing: border-box; }
-  body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; }
+  body {
+    margin: 0; padding: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
   .check {
-    width: 8.1in;   /* 8.5 − 2 × 0.2 printer margin */
-    height: 3.1in;  /* 3.5 − 2 × 0.2 printer margin */
-    border: 1.5px solid #8ab4d4;
-    background: linear-gradient(to bottom, #eef5fb 0%, #f5f9fd 60%, #eef5fb 100%);
-    padding: 0.18in 0.28in 0.65in 0.28in; /* extra bottom padding reserves space for MICR */
     position: relative;
+    width: 8.5in;
+    height: 3.5in;
+    /* bottom padding keeps content out of the MICR clear band (bottom 5/8in) */
+    padding: 0.34in 0.46in 0.82in 0.46in;
     page-break-inside: avoid;
+    overflow: hidden;
+  }
+  /* Card look, inset from the page edge so the border clears the printer's
+     non-printable margin and still reads as a check on plain paper. */
+  .check::before {
+    content: "";
+    position: absolute;
+    inset: 0.16in;
+    border: 1.5px solid #8ab4d4;
+    border-radius: 5px;
+    background: linear-gradient(to bottom, #eef5fb 0%, #f7fafd 55%, #eef5fb 100%);
+    z-index: -1;
   }
   .row-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.1in; }
   .holder-name { font-size: 13pt; font-weight: bold; color: #1a3a5c; }
@@ -114,22 +143,28 @@ function buildPrintHTML(fields: {
   .sig-block .field-line { min-width: 1.8in; }
   .micr-row {
     position: absolute;
-    bottom: 0.2in;   /* ANSI X9.27: MICR band 3/16"–9/16" from bottom edge */
-    left: 0.28in;
-    right: 0.28in;
+    bottom: 0.19in;   /* baseline ≈ 3/16" above the bottom edge — ANSI clear band */
+    left: 0.5in;
+    right: 0.5in;
     font-family: 'Courier New', Courier, monospace;
-    font-size: 11pt;
-    letter-spacing: 0.08em;
+    font-size: 12pt;
+    letter-spacing: 0.12em;
     color: #000;
   }
   .accent-bar {
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
+    top: 0.16in;
+    left: 0.16in;
+    right: 0.16in;
+    height: 5px;
     background: linear-gradient(to right, #1a3a5c, #4a8ab4, #1a3a5c);
-    border-radius: 2px 2px 0 0;
+    border-radius: 5px 5px 0 0;
+  }
+  /* The 3.5in voucher perforation / cut line. */
+  .cut-line {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    border-top: 1px dashed #aebfce;
   }
 </style>
 </head>
@@ -156,7 +191,7 @@ function buildPrintHTML(fields: {
     <span class="payto-label">PAY TO THE ORDER OF</span>
     <span class="payto-line">${esc(fields.payee)}</span>
     <span class="amount-prefix">$</span>
-    <span class="amount-box">${esc(fields.amount) || "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"}</span>
+    <span class="amount-box">${esc(fmtAmount(fields.amount)) || "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"}</span>
   </div>
 
   <div class="words-row">
@@ -182,6 +217,7 @@ function buildPrintHTML(fields: {
   </div>
 
   <div class="micr-row">${micrLine}</div>
+  <div class="cut-line"></div>
 </div>
 <script>window.onload = function() { window.print(); };</script>
 </body>
@@ -306,7 +342,7 @@ export function CheckPrintModal({
               <span className="flex-1 border-b border-blue-300 pb-0.5 text-sm text-blue-900">{payee || " "}</span>
               <span className="shrink-0 text-xs text-slate-500">$</span>
               <span className="min-w-[4.5rem] border border-blue-300 bg-white px-2 py-0.5 text-right font-bold text-blue-900">
-                {amount || "      "}
+                {amount ? fmtAmount(amount) : "      "}
               </span>
             </div>
 
@@ -336,13 +372,15 @@ export function CheckPrintModal({
               </div>
             </div>
 
-            {/* MICR line */}
+            {/* MICR line — check #, routing, account (business-check order) */}
             <div className="mt-3 border-t border-blue-200 pt-2 font-mono text-xs tracking-widest text-slate-700">
-              {routing ? `⑆${routing}⑆` : "⑆         ⑆"}
-              {"  "}
-              {accountNum || "               "}
-              {"  ⑈  "}
-              {checkNum || "    "}
+              {[
+                checkNum ? `⑈${checkNum}⑈` : "",
+                routing ? `⑆${routing}⑆` : "⑆ ⑆",
+                accountNum ? `${accountNum}⑈` : "",
+              ]
+                .filter(Boolean)
+                .join("   ")}
             </div>
           </div>
 

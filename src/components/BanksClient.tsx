@@ -346,11 +346,9 @@ export function BanksClient({
                     <ConversionBadge stage={b.conversion_stage} />
                   </div>
                   <div className="mt-0.5 truncate text-xs text-slate-400">
-                    {[b.city ? titleCase(b.city) : null, b.state]
-                      .filter(Boolean)
-                      .join(", ")}
+                    {b.state ?? ""}
                     {accts.length > 0
-                      ? ` · ${accts.length} acct${accts.length === 1 ? "" : "s"} · ${formatCurrency(total)}`
+                      ? `${b.state ? " · " : ""}${accts.length} acct${accts.length === 1 ? "" : "s"} · ${formatCurrency(total)}`
                       : ""}
                   </div>
                 </div>
@@ -366,20 +364,21 @@ export function BanksClient({
         <table className="min-w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-              <th className="px-4 py-3 font-medium">Bank</th>
-              <th className="px-4 py-3 font-medium">Location</th>
-              <th className="px-4 py-3 text-right font-medium">Assets</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Accounts</th>
-              <th className="px-4 py-3 text-right font-medium">Balance</th>
-              <th className="px-4 py-3 text-center font-medium">Health</th>
-              <th className="px-4 py-3 text-right font-medium"></th>
+              <th className="px-3 py-3 font-medium">Bank</th>
+              <th className="px-3 py-3 font-medium">State</th>
+              <th className="px-3 py-3 text-right font-medium">Assets</th>
+              <th className="px-3 py-3 font-medium">Status</th>
+              <th className="px-3 py-3 font-medium">Priority</th>
+              <th className="px-3 py-3 font-medium">Accounts</th>
+              <th className="px-3 py-3 text-right font-medium">Balance</th>
+              <th className="px-3 py-3 text-center font-medium">Health</th>
+              <th className="px-3 py-3 text-right font-medium"></th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
+                <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
                   No banks match your filters.
                 </td>
               </tr>
@@ -405,7 +404,7 @@ export function BanksClient({
                     aria-label={`Manage ${b.name}`}
                     className="cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400"
                   >
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-slate-900">
                           {b.name}
@@ -419,26 +418,22 @@ export function BanksClient({
                         <ConversionBadge stage={b.conversion_stage} />
                       </div>
                       {b.holding_company && (
-                        <div className="max-w-[14rem] truncate text-xs text-slate-400">
+                        <div className="max-w-[11rem] truncate text-xs text-slate-400">
                           {titleCase(b.holding_company)}
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {b.city || b.state ? (
-                        <>
-                          {titleCase(b.city)}
-                          {b.city && b.state ? ", " : ""}
-                          {b.state}
-                        </>
+                    <td className="px-3 py-3 text-slate-600">
+                      {b.state ? (
+                        b.state
                       ) : (
                         <span className="text-slate-300">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-600">
+                    <td className="px-3 py-3 text-right tabular-nums text-slate-600">
                       {formatAssets(b.assets)}
                     </td>
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-2">
                         <select
                           value={b.status}
@@ -460,28 +455,30 @@ export function BanksClient({
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-slate-600">
-                      <div className="flex flex-col gap-1">
-                        {accts.length > 0 && (
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-amber-100 px-1.5 text-xs font-semibold text-amber-700">
-                              {accts.length}
-                            </span>
-                            {holders && (
-                              <span className="max-w-[10rem] truncate text-xs text-slate-400">
-                                {holders}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        {b.priority ? (
-                          <PriorityBadge priority={b.priority} />
-                        ) : accts.length === 0 ? (
-                          <span className="text-slate-300">—</span>
-                        ) : null}
-                      </div>
+                    <td className="px-3 py-3">
+                      {b.priority ? (
+                        <PriorityBadge priority={b.priority} />
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-600">
+                    <td className="px-3 py-3 text-slate-600">
+                      {accts.length > 0 ? (
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-slate-100 px-1.5 text-xs font-semibold text-slate-600">
+                            {accts.length}
+                          </span>
+                          {holders && (
+                            <span className="max-w-[10rem] truncate text-xs text-slate-400">
+                              {holders}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums text-slate-600">
                       {accts.length > 0 ? (
                         <div>
                           {formatCurrency(total)}
@@ -496,7 +493,7 @@ export function BanksClient({
                         <span className="text-slate-300">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
                       <div className="flex justify-center">
                         {health === "none" ? (
                           <span className="text-slate-300">—</span>
@@ -505,7 +502,7 @@ export function BanksClient({
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end">
                         <button
                           onClick={() => handleDelete(b)}
