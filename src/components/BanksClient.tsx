@@ -2,7 +2,17 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Search, Trash2, Loader2, Download, UploadCloud } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Trash2,
+  Loader2,
+  Download,
+  UploadCloud,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
+} from "lucide-react";
 import {
   STATUS_LABELS,
   STATUS_ORDER,
@@ -28,12 +38,50 @@ import { ImportDialog } from "@/components/ImportDialog";
 import { exportToExcel } from "@/lib/export";
 import { setBankStatus, deleteBank } from "@/app/(app)/banks/actions";
 
-type SortKey = "name" | "assets" | "state";
+type SortKey =
+  | "name"
+  | "state"
+  | "assets"
+  | "status"
+  | "priority"
+  | "accounts"
+  | "balance"
+  | "health";
+type SortDir = "asc" | "desc";
 
 const SORT_LABELS: Record<SortKey, string> = {
-  name: "Name (A→Z)",
-  assets: "Assets (high→low)",
-  state: "State (A→Z)",
+  name: "Bank",
+  state: "State",
+  assets: "Assets",
+  status: "Status",
+  priority: "Priority",
+  accounts: "Accounts",
+  balance: "Balance",
+  health: "Health",
+};
+
+/** The direction a column starts in the first time you sort by it. */
+const DEFAULT_DIR: Record<SortKey, SortDir> = {
+  name: "asc",
+  state: "asc",
+  assets: "desc",
+  status: "asc",
+  priority: "asc",
+  accounts: "desc",
+  balance: "desc",
+  health: "asc",
+};
+
+const STATUS_RANK: Record<BankStatus, number> = STATUS_ORDER.reduce(
+  (acc, s, i) => ({ ...acc, [s]: i }),
+  {} as Record<BankStatus, number>,
+);
+const PRIORITY_RANK: Record<string, number> = { high: 0, med: 1, low: 2 };
+const HEALTH_RANK: Record<ActivityLevel, number> = {
+  red: 0,
+  orange: 1,
+  green: 2,
+  none: 3,
 };
 
 const STATUS_SELECT_STYLES: Record<BankStatus, string> = {
@@ -61,24 +109,55 @@ function bankHealth(accts: Account[], defMonths: number): ActivityLevel {
   return "none";
 }
 
-function sortBanks(list: Bank[], sort: SortKey): Bank[] {
+function sortBanks(
+  list: Bank[],
+  sort: SortKey,
+  dir: SortDir,
+  accountsByBank: Record<string, Account[]>,
+  defMonths: number,
+): Bank[] {
+  const accts = (b: Bank) => accountsByBank[b.id] ?? [];
+  const total = (b: Bank) =>
+    accts(b).reduce((s, a) => s + (a.balance ?? 0), 0);
+
   const arr = [...list];
-  switch (sort) {
-    case "assets":
-      arr.sort((a, b) => (b.assets ?? -Infinity) - (a.assets ?? -Infinity));
-      break;
-    case "state":
-      arr.sort(
-        (a, b) =>
-          (a.state ?? "ZZ").localeCompare(b.state ?? "ZZ") ||
-          a.name.localeCompare(b.name),
-      );
-      break;
-    case "name":
-    default:
-      arr.sort((a, b) => a.name.localeCompare(b.name));
-      break;
-  }
+  arr.sort((a, b) => {
+    let r = 0;
+    switch (sort) {
+      case "state":
+        r = (a.state ?? "ZZ").localeCompare(b.state ?? "ZZ");
+        break;
+      case "assets":
+        r = (a.assets ?? -Infinity) - (b.assets ?? -Infinity);
+        break;
+      case "status":
+        r = STATUS_RANK[a.status] - STATUS_RANK[b.status];
+        break;
+      case "priority":
+        r =
+          (PRIORITY_RANK[a.priority ?? ""] ?? 3) -
+          (PRIORITY_RANK[b.priority ?? ""] ?? 3);
+        break;
+      case "accounts":
+        r = accts(a).length - accts(b).length;
+        break;
+      case "balance":
+        r = total(a) - total(b);
+        break;
+      case "health":
+        r =
+          HEALTH_RANK[bankHealth(accts(a), defMonths)] -
+          HEALTH_RANK[bankHealth(accts(b), defMonths)];
+        break;
+      case "name":
+      default:
+        r = 0;
+        break;
+    }
+    // Stable, predictable tiebreak: always fall back to bank name (A→Z).
+    if (r === 0) r = a.name.localeCompare(b.name);
+    return dir === "desc" ? -r : r;
+  });
   return arr;
 }
 
@@ -111,6 +190,7 @@ export function BanksClient({
   const [stateFilter, setStateFilter] = useState<string>("all");
   const [query, setQuery] = useState(initialQuery ?? "");
   const [sort, setSort] = useState<SortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editingBankId, setEditingBankId] = useState<string | null>(null);
@@ -161,8 +241,77 @@ export function BanksClient({
         return inBank || inHolders;
       });
     }
-    return sortBanks(list, sort);
-  }, [banks, accountsByBank, statusFilter, stateFilter, query, sort]);
+    return sortBanks(list, sort, sortDir, accountsByBank, defaultDormancyMonths);
+  }, [
+    banks,
+    accountsByBank,
+    statusFilter,
+    stateFilter,
+    query,
+    sort,
+    sortDir,
+    defaultDormancyMonths,
+  ]);
+
+  /** Click a column to sort by it; click the active column again to flip direction. */
+  function toggleSort(key: SortKey) {
+    if (sort === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSort(key);
+      setSortDir(DEFAULT_DIR[key]);
+    }
+  }
+
+  /** A clickable column header that sorts the table by `sortKey`. */
+  function SortTh({
+    label,
+    sortKey,
+    align = "left",
+  }: {
+    label: string;
+    sortKey: SortKey;
+    align?: "left" | "right" | "center";
+  }) {
+    const active = sort === sortKey;
+    const justify =
+      align === "right"
+        ? "justify-end"
+        : align === "center"
+          ? "justify-center"
+          : "justify-start";
+    return (
+      <th
+        className="px-3 py-3 font-medium"
+        aria-sort={
+          active
+            ? sortDir === "asc"
+              ? "ascending"
+              : "descending"
+            : "none"
+        }
+      >
+        <button
+          type="button"
+          onClick={() => toggleSort(sortKey)}
+          className={`group inline-flex w-full items-center gap-1 ${justify} ${
+            active ? "text-slate-700" : "hover:text-slate-700"
+          }`}
+        >
+          <span>{label}</span>
+          {active ? (
+            sortDir === "asc" ? (
+              <ChevronUp className="h-3 w-3" />
+            ) : (
+              <ChevronDown className="h-3 w-3" />
+            )
+          ) : (
+            <ChevronsUpDown className="h-3 w-3 text-slate-300 group-hover:text-slate-400" />
+          )}
+        </button>
+      </th>
+    );
+  }
 
   const editingBank = editingBankId
     ? banks.find((b) => b.id === editingBankId) ?? null
@@ -297,15 +446,35 @@ export function BanksClient({
 
             <select
               value={sort}
-              onChange={(e) => setSort(e.target.value as SortKey)}
+              onChange={(e) => {
+                const k = e.target.value as SortKey;
+                setSort(k);
+                setSortDir(DEFAULT_DIR[k]);
+              }}
+              aria-label="Sort banks by"
               className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500 sm:flex-none"
             >
               {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
                 <option key={k} value={k}>
-                  {SORT_LABELS[k]}
+                  Sort: {SORT_LABELS[k]}
                 </option>
               ))}
             </select>
+            <button
+              type="button"
+              onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+              title={sortDir === "asc" ? "Ascending" : "Descending"}
+              aria-label={`Sort direction: ${
+                sortDir === "asc" ? "ascending" : "descending"
+              }`}
+              className="flex shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-white px-2.5 text-slate-600 hover:bg-slate-50"
+            >
+              {sortDir === "asc" ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </button>
           </div>
         </div>
       </div>
@@ -364,14 +533,14 @@ export function BanksClient({
         <table className="min-w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-              <th className="px-3 py-3 font-medium">Bank</th>
-              <th className="px-3 py-3 font-medium">State</th>
-              <th className="px-3 py-3 text-right font-medium">Assets</th>
-              <th className="px-3 py-3 font-medium">Status</th>
-              <th className="px-3 py-3 font-medium">Priority</th>
-              <th className="px-3 py-3 font-medium">Accounts</th>
-              <th className="px-3 py-3 text-right font-medium">Balance</th>
-              <th className="px-3 py-3 text-center font-medium">Health</th>
+              <SortTh label="Bank" sortKey="name" />
+              <SortTh label="State" sortKey="state" />
+              <SortTh label="Assets" sortKey="assets" align="right" />
+              <SortTh label="Status" sortKey="status" />
+              <SortTh label="Priority" sortKey="priority" />
+              <SortTh label="Accounts" sortKey="accounts" />
+              <SortTh label="Balance" sortKey="balance" align="right" />
+              <SortTh label="Health" sortKey="health" align="center" />
               <th className="px-3 py-3 text-right font-medium"></th>
             </tr>
           </thead>
