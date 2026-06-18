@@ -126,12 +126,20 @@ export default async function DashboardPage() {
     const bankName = bankMap.get(a.bank_id) ?? "—";
 
     const level = getActivityLevel(a, defaultMonths, now);
-    if ((level === "red" || level === "orange") && a.last_activity_date) {
+    if (level === "red" || level === "orange") {
+      // getActivityLevel falls back to date_opened when there's no recorded
+      // last_activity_date, so use the same date here — otherwise the dashboard
+      // would skip an account that the Accounts page (and its level dot) flags.
+      const activityDate = (a.last_activity_date ?? a.date_opened)!;
+      const months = monthsSince(activityDate, now);
+      const sinceOpen = !a.last_activity_date;
       attention.push({
         account: a,
         bankName,
         level,
-        reason: `No activity in ${monthsSince(a.last_activity_date, now)} months`,
+        reason: `No activity in ${months} month${months === 1 ? "" : "s"}${
+          sinceOpen ? " (since opening)" : ""
+        }`,
       });
     }
     if (isCdMaturingSoon(a, 30, now) && a.cd_maturity_date) {

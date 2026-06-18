@@ -10,16 +10,20 @@ import {
   OPEN_METHOD_LABELS,
   ELIGIBILITY_LABELS,
   APPLICATION_STEPS,
+  CONVERSION_STAGE_LABELS,
+  CONVERSION_STAGE_ORDER,
   type Account,
   type Bank,
   type BankComment,
   type OpenMethod,
+  type ConversionStage,
 } from "@/lib/types";
 import { getActivityLevel } from "@/lib/dormancy";
 import { formatCurrency, formatDate, maskAccountNumber } from "@/lib/format";
 import { ActivityDot } from "@/components/badges";
 import { AccountModal } from "@/components/AccountModal";
 import { CheckPrintModal } from "@/components/CheckPrintModal";
+import { DateInput } from "@/components/DateInput";
 import {
   upsertBank,
   getBankComments,
@@ -214,7 +218,7 @@ export function BankForm({
       <form
         onSubmit={handleSubmit}
         onMouseDown={(e) => e.stopPropagation()}
-        className="flex h-full w-full max-w-lg flex-col bg-white shadow-2xl"
+        className="flex h-full w-full max-w-2xl flex-col bg-white shadow-2xl"
       >
         <header className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
           <h2 className="text-lg font-semibold text-slate-900">
@@ -473,7 +477,7 @@ export function BankForm({
                   onChange={(e) => set("assets", e.target.value)}
                 />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className={labelClass} htmlFor="holding_company">
                   Holding company
                 </label>
@@ -547,6 +551,19 @@ export function BankForm({
                 />
               </div>
               <div>
+                <label className={labelClass} htmlFor="target_balance">
+                  Target balance ($)
+                </label>
+                <input
+                  id="target_balance"
+                  type="number"
+                  className={inputClass}
+                  placeholder="balance you aim to keep"
+                  value={values.target_balance}
+                  onChange={(e) => set("target_balance", e.target.value)}
+                />
+              </div>
+              <div>
                 <label className={labelClass} htmlFor="phone">
                   Phone
                 </label>
@@ -557,7 +574,7 @@ export function BankForm({
                   onChange={(e) => set("phone", e.target.value)}
                 />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className={labelClass} htmlFor="branch_location">
                   Preferred branch / address
                 </label>
@@ -569,22 +586,85 @@ export function BankForm({
                   onChange={(e) => set("branch_location", e.target.value)}
                 />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <label className={labelClass} htmlFor="eligibility_date">
                   Eligibility / record date
                 </label>
-                <input
+                <DateInput
                   id="eligibility_date"
-                  type="date"
                   className={inputClass}
                   value={values.eligibility_date}
-                  onChange={(e) => set("eligibility_date", e.target.value)}
+                  onChange={(v) => set("eligibility_date", v)}
                 />
                 <p className="mt-1 text-xs text-slate-400">
                   Deposit date that sets your IPO subscription priority, if known.
                 </p>
               </div>
             </div>
+          </section>
+
+          {/* Conversion / IPO pipeline */}
+          <section className="space-y-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Conversion / IPO
+            </h3>
+            <div>
+              <label className={labelClass} htmlFor="conversion_stage">
+                Conversion stage
+              </label>
+              <select
+                id="conversion_stage"
+                className={inputClass}
+                value={values.conversion_stage}
+                onChange={(e) =>
+                  set("conversion_stage", e.target.value as ConversionStage)
+                }
+              >
+                {CONVERSION_STAGE_ORDER.map((s) => (
+                  <option key={s} value={s}>
+                    {CONVERSION_STAGE_LABELS[s]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className={labelClass} htmlFor="subscription_start">
+                  Subscription opens
+                </label>
+                <DateInput
+                  id="subscription_start"
+                  className={inputClass}
+                  value={values.subscription_start}
+                  onChange={(v) => set("subscription_start", v)}
+                />
+              </div>
+              <div>
+                <label className={labelClass} htmlFor="subscription_end">
+                  Subscription deadline
+                </label>
+                <DateInput
+                  id="subscription_end"
+                  className={inputClass}
+                  value={values.subscription_end}
+                  onChange={(v) => set("subscription_end", v)}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className={labelClass} htmlFor="pricing_date">
+                  IPO pricing date
+                </label>
+                <DateInput
+                  id="pricing_date"
+                  className={inputClass}
+                  value={values.pricing_date}
+                  onChange={(v) => set("pricing_date", v)}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-slate-400">
+              These drive the dashboard&apos;s Conversion watch and the calendar.
+            </p>
           </section>
 
           {/* Notes */}

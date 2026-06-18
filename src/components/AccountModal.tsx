@@ -4,6 +4,7 @@ import { useState, useTransition, type FormEvent } from "react";
 import { X, Loader2, Eye, EyeOff } from "lucide-react";
 import { ACCOUNT_TYPE_LABELS, type Account } from "@/lib/types";
 import { formatDate } from "@/lib/format";
+import { DateInput } from "@/components/DateInput";
 import {
   upsertAccount,
   type AccountFormValues,
@@ -127,7 +128,7 @@ export function AccountModal({
       <form
         onSubmit={handleSubmit}
         onMouseDown={(e) => e.stopPropagation()}
-        className="my-8 w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+        className="my-8 w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl"
       >
         <div className="mb-1 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900">
@@ -212,12 +213,11 @@ export function AccountModal({
 
           <div>
             <label className={labelClass} htmlFor="date_opened">Date opened</label>
-            <input
+            <DateInput
               id="date_opened"
-              type="date"
               className={inputClass}
               value={values.date_opened}
-              onChange={(e) => set("date_opened", e.target.value)}
+              onChange={(v) => set("date_opened", v)}
             />
           </div>
 
@@ -225,12 +225,11 @@ export function AccountModal({
             <>
               <div>
                 <label className={labelClass} htmlFor="last_activity_date">Last activity date</label>
-                <input
+                <DateInput
                   id="last_activity_date"
-                  type="date"
                   className={inputClass}
                   value={values.last_activity_date}
-                  onChange={(e) => set("last_activity_date", e.target.value)}
+                  onChange={(v) => set("last_activity_date", v)}
                 />
               </div>
               <div>
@@ -253,12 +252,11 @@ export function AccountModal({
           {showCd && (
             <div>
               <label className={labelClass} htmlFor="cd_maturity_date">CD maturity date</label>
-              <input
+              <DateInput
                 id="cd_maturity_date"
-                type="date"
                 className={inputClass}
                 value={values.cd_maturity_date}
-                onChange={(e) => set("cd_maturity_date", e.target.value)}
+                onChange={(v) => set("cd_maturity_date", v)}
               />
             </div>
           )}
@@ -358,12 +356,13 @@ export function AccountModal({
               </ul>
             )}
             <div className="flex items-center gap-2">
-              <input
-                type="date"
-                className="w-36 shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-                value={newDate}
-                onChange={(e) => setNewDate(e.target.value)}
-              />
+              <div className="w-40 shrink-0">
+                <DateInput
+                  value={newDate}
+                  onChange={setNewDate}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                />
+              </div>
               <input
                 className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
                 placeholder="note (optional)"
