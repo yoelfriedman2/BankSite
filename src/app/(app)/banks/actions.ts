@@ -802,7 +802,8 @@ export async function markCommentsRead(cert: number): Promise<void> {
     { user_id: user.id, cert, last_read_at: new Date().toISOString() },
     { onConflict: "user_id,cert" },
   );
-  revalidatePath("/banks");
+  // No revalidatePath — the unread dot is cleared optimistically in BanksClient
+  // via localReadCerts, so a server round-trip would only cause a blink.
 }
 
 /** Certs whose comment thread has activity the current user hasn't read yet. */
