@@ -165,6 +165,8 @@ export async function upsertBank(
 
   // Propagate shared ("global") fields to all other users' copies of the same bank.
   // Private fields (status, priority, notes, target_balance) are intentionally excluded.
+  // shared_fields_updated_at / shared_updated_by are stamped on OTHER users' rows so the
+  // amber unread dot fires for them — never on the editor's own row.
   if (patch.cert != null) {
     const sharedPatch = {
       open_methods: patch.open_methods,
@@ -174,6 +176,8 @@ export async function upsertBank(
       phone: patch.phone,
       min_to_open: patch.min_to_open,
       conversion_stage: patch.conversion_stage,
+      shared_fields_updated_at: new Date().toISOString(),
+      shared_updated_by: user.id,
     };
     const admin = createAdminClient();
     await admin
@@ -842,6 +846,28 @@ export async function getUnreadCommentCerts(): Promise<number[]> {
     const readAt = readByCert.get(cert);
     if (!readAt || latest > readAt) unread.push(cert);
   }
+
+  // Also flag banks where another user recently updated shared fields (open_methods,
+  // eligibility, conversion_stage, etc.) after this user's last read.
+  const { data: fieldChanges } = await supabase
+    .from("banks")
+    .select("cert, shared_fields_updated_at")
+    .not("shared_fields_updated_at", "is", null)
+    .neq("shared_updated_by", user.id)
+    .is("deleted_at", null);
+
+  const unreadSet = new Set(unread);
+  for (const b of fieldChanges ?? []) {
+    const c = b.cert as number;
+    if (unreadSet.has(c)) continue;
+    const updatedAt = b.shared_fields_updated_at as string;
+    const readAt = readByCert.get(c);
+    if (!readAt || updatedAt > readAt) {
+      unread.push(c);
+      unreadSet.add(c);
+    }
+  }
+
   return unread;
 }
 
@@ -854,9 +880,11 @@ export type RelatedBank = {
   name: string;
   state: string | null;
   bankId: string | null; // the current user's bank id for this cert, if they have it
+  source: "manual" | "holding_company"; // manual = explicit link; holding_company = inferred
 };
 
-/** Returns all banks linked to the given cert (from this user's perspective). */
+/** Returns all banks linked to the given cert (from this user's perspective).
+ *  Includes both explicit bank_relationships rows and banks sharing the same holding company. */
 export async function getRelatedBanks(cert: number): Promise<RelatedBank[]> {
   const supabase = await createClient();
   const {
@@ -864,32 +892,72 @@ export async function getRelatedBanks(cert: number): Promise<RelatedBank[]> {
   } = await supabase.auth.getUser();
   if (!user) return [];
 
-  const { data: rels } = await supabase
-    .from("bank_relationships")
-    .select("cert_a, cert_b")
-    .or(`cert_a.eq.${cert},cert_b.eq.${cert}`);
+  // Run explicit-relationship and holding-company lookups in parallel
+  const [{ data: rels }, { data: thisBank }] = await Promise.all([
+    supabase
+      .from("bank_relationships")
+      .select("cert_a, cert_b")
+      .or(`cert_a.eq.${cert},cert_b.eq.${cert}`),
+    supabase
+      .from("banks")
+      .select("holding_company")
+      .eq("cert", cert)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+  ]);
 
-  if (!rels || rels.length === 0) return [];
+  const results = new Map<number, RelatedBank>();
 
-  const relatedCerts = rels.map((r) =>
-    (r.cert_a as number) === cert ? (r.cert_b as number) : (r.cert_a as number),
-  );
+  // ── Explicit manual links ──────────────────────────────────────────────────
+  if (rels && rels.length > 0) {
+    const explicitCerts = rels.map((r) =>
+      (r.cert_a as number) === cert ? (r.cert_b as number) : (r.cert_a as number),
+    );
+    const { data: banks } = await supabase
+      .from("banks")
+      .select("id, cert, name, state")
+      .in("cert", explicitCerts)
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
 
-  const { data: banks } = await supabase
-    .from("banks")
-    .select("id, cert, name, state")
-    .in("cert", relatedCerts)
-    .is("deleted_at", null);
+    for (const rc of explicitCerts) {
+      const b = (banks ?? []).find((x) => (x.cert as number) === rc);
+      results.set(rc, {
+        cert: rc,
+        name: (b?.name as string) ?? `cert #${rc}`,
+        state: (b?.state as string | null) ?? null,
+        bankId: (b?.id as string | null) ?? null,
+        source: "manual",
+      });
+    }
+  }
 
-  return relatedCerts.map((rc) => {
-    const b = (banks ?? []).find((x) => (x.cert as number) === rc);
-    return {
-      cert: rc,
-      name: (b?.name as string) ?? `cert #${rc}`,
-      state: (b?.state as string | null) ?? null,
-      bankId: (b?.id as string | null) ?? null,
-    };
-  });
+  // ── Same holding company ───────────────────────────────────────────────────
+  const hc = (thisBank?.holding_company as string | null)?.trim();
+  if (hc) {
+    const { data: hcBanks } = await supabase
+      .from("banks")
+      .select("id, cert, name, state")
+      .eq("user_id", user.id)
+      .eq("holding_company", hc)
+      .neq("cert", cert)
+      .is("deleted_at", null);
+
+    for (const b of hcBanks ?? []) {
+      const rc = b.cert as number;
+      if (!results.has(rc)) {
+        results.set(rc, {
+          cert: rc,
+          name: b.name as string,
+          state: (b.state as string | null) ?? null,
+          bankId: (b.id as string | null) ?? null,
+          source: "holding_company",
+        });
+      }
+    }
+  }
+
+  return Array.from(results.values());
 }
 
 /** Adds a bidirectional link between two banks. Idempotent. */

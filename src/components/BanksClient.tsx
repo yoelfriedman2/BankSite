@@ -516,7 +516,7 @@ export function BanksClient({
                     {b.cert != null && unreadSet.has(b.cert) && (
                       <span
                         className="h-2 w-2 shrink-0 rounded-full bg-amber-500"
-                        title="Unread note"
+                        title="Unread update"
                       />
                     )}
                     <ConversionBadge stage={b.conversion_stage} />
@@ -588,7 +588,7 @@ export function BanksClient({
                         {b.cert != null && unreadSet.has(b.cert) && (
                           <span
                             className="h-2 w-2 shrink-0 rounded-full bg-amber-500"
-                            title="Unread note"
+                            title="Unread update"
                           />
                         )}
                         <ConversionBadge stage={b.conversion_stage} />

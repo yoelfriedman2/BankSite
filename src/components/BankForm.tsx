@@ -522,14 +522,20 @@ export function BankForm({
                           <span className="font-medium">{rb.name}</span>
                         )}
                         {rb.state && <span className="text-slate-400">{rb.state}</span>}
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveRelationship(rb.cert)}
-                          className="ml-0.5 text-slate-300 hover:text-rose-500"
-                          title="Remove link"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
+                        {rb.source === "holding_company" ? (
+                          <span className="text-slate-300 text-[10px] italic" title="Same holding company">
+                            holding co.
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveRelationship(rb.cert)}
+                            className="ml-0.5 text-slate-300 hover:text-rose-500"
+                            title="Remove link"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        )}
                       </span>
                     ))}
                   </div>
