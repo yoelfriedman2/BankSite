@@ -154,21 +154,18 @@ export function BankForm({
   const [infoExpanded, setInfoExpanded] = useState(false);
 
   useEffect(() => {
-    setReadAt(null);
+    // Set readAt optimistically to NOW so "New" badges disappear immediately on open.
+    // markCommentsRead persists this to the DB in the background (no revalidation needed —
+    // the unread dot is already cleared optimistically in BanksClient via localReadCerts).
+    setReadAt(new Date().toISOString());
     setRelatedBanks([]);
     if (initial?.cert != null) {
       const cert = initial.cert;
-      getCommentReadAt(cert)
-        .then((ra) => {
-          setReadAt(ra);
-          return getBankComments(cert);
-        })
-        .then(setComments)
-        .catch(() => {});
+      getBankComments(cert).then(setComments).catch(() => {});
       markCommentsRead(cert).catch(() => {});
       getRelatedBanks(cert).then(setRelatedBanks).catch(() => {});
     }
-  }, [initial]);
+  }, [initial?.id]);
 
   // Search for related banks as user types
   useEffect(() => {

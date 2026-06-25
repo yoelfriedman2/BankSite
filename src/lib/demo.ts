@@ -45,6 +45,9 @@ export type ImportRow = {
   branch_location: string | null;
   phone: string | null;
   bank_notes: string | null;
+  conversion_stage: Bank["conversion_stage"] | null;
+  min_to_open: number | null;
+  community_notes: string[];
   // optional account on the same row
   holder: string | null;
   account_type: Account["account_type"];
@@ -459,6 +462,8 @@ export function importDemoRows(rows: ImportRow[]): {
         branch_location: row.branch_location ?? existing.branch_location,
         phone: row.phone ?? existing.phone,
         notes: row.bank_notes ?? existing.notes,
+        conversion_stage: row.conversion_stage ?? existing.conversion_stage,
+        min_to_open: row.min_to_open ?? existing.min_to_open,
       });
       bankId = existing.id;
     } else {
@@ -478,8 +483,8 @@ export function importDemoRows(rows: ImportRow[]): {
         branch_location: row.branch_location,
         phone: row.phone,
         notes: row.bank_notes,
-        conversion_stage: "none",
-        min_to_open: null,
+        conversion_stage: row.conversion_stage ?? "none",
+        min_to_open: row.min_to_open ?? null,
         target_balance: null,
         deleted_at: null,
       });
