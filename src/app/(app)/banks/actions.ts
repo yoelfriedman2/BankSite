@@ -259,11 +259,30 @@ export async function restoreBank(id: string): Promise<{ error?: string }> {
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
+  // Capture the bank's trashed-at timestamp so we can also restore the accounts
+  // that were soft-deleted in the SAME operation (deleteBank stamps both with
+  // the same time). Accounts the user trashed separately keep a different
+  // timestamp and stay in Trash.
+  const { data: bankRow } = await supabase
+    .from("banks")
+    .select("deleted_at")
+    .eq("id", id)
+    .maybeSingle();
+  const trashedAt = bankRow?.deleted_at as string | null;
+
   const { error } = await supabase
     .from("banks")
     .update({ deleted_at: null })
     .eq("id", id);
   if (error) return { error: error.message };
+
+  if (trashedAt) {
+    await supabase
+      .from("accounts")
+      .update({ deleted_at: null })
+      .eq("bank_id", id)
+      .eq("deleted_at", trashedAt);
+  }
 
   revalidate();
   return {};
@@ -373,7 +392,7 @@ function rowHasAccount(r: ImportRow): boolean {
 
 export async function importBanks(
   rows: ImportRow[],
-): Promise<{ banks?: number; accounts?: number; error?: string }> {
+): Promise<{ banks?: number; accounts?: number; notes?: number; error?: string }> {
   if (!rows || rows.length === 0) {
     return { error: "No bank rows were found in that file." };
   }
@@ -525,6 +544,7 @@ export async function importBanks(
   }
 
   // Post community notes, skipping exact duplicates
+  let notesPosted = 0;
   if (noteInserts.length) {
     const { data: existingNotes } = await supabase
       .from("bank_comments")
@@ -537,20 +557,21 @@ export async function importBanks(
       (n) => !noteSet.has(`${n.cert}:${n.body}`),
     );
     if (newNotes.length) {
-      await supabase.from("bank_comments").insert(
+      const { error: noteErr } = await supabase.from("bank_comments").insert(
         newNotes.map((n) => ({
           cert: n.cert,
           author_id: user.id,
           author_name: displayName,
           body: n.body,
-          notify_all: false,
         })),
       );
+      if (noteErr) return { error: noteErr.message };
+      notesPosted = newNotes.length;
     }
   }
 
   revalidate();
-  return { banks: banksTouched, accounts: accountInserts.length };
+  return { banks: banksTouched, accounts: accountInserts.length, notes: notesPosted };
 }
 
 /** Real-mode only: populate a brand-new user's list with the default 426 banks. */
@@ -676,23 +697,6 @@ export async function getBankComments(cert: number): Promise<BankComment[]> {
   return (data ?? []) as BankComment[];
 }
 
-/** Returns the current user's last-read timestamp for a cert's comment thread. */
-export async function getCommentReadAt(cert: number): Promise<string | null> {
-  if (DEMO_MODE) return null;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data } = await supabase
-    .from("bank_comment_reads")
-    .select("last_read_at")
-    .eq("user_id", user.id)
-    .eq("cert", cert)
-    .maybeSingle();
-  return (data?.last_read_at as string | null) ?? null;
-}
-
 export async function addBankComment(
   cert: number,
   body: string,
@@ -739,10 +743,14 @@ export async function addBankComment(
   if (notify) {
     try {
       const admin = createAdminClient();
+      // Respect both the master email switch and the per-type "New community
+      // notes" toggle (Settings states individual toggles only apply when the
+      // master is on), so a user who opted out of note emails isn't emailed.
       const { data: profiles } = await admin
         .from("profiles")
         .select("id")
         .eq("notify_email", true)
+        .eq("notify_new_comments", true)
         .neq("id", user.id);
 
       if (profiles?.length) {

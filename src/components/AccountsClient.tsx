@@ -21,7 +21,7 @@ import {
   monthsSince,
   daysUntil,
 } from "@/lib/dormancy";
-import { formatCurrency, formatDate, formatDateShort, maskAccountNumber, titleCase } from "@/lib/format";
+import { formatCurrency, formatDateShort, maskAccountNumber } from "@/lib/format";
 import { ActivityDot } from "@/components/badges";
 import { AccountModal } from "@/components/AccountModal";
 import { logActivityToday } from "@/app/(app)/accounts/actions";

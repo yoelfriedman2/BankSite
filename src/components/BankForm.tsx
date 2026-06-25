@@ -26,7 +26,6 @@ import { DateInput } from "@/components/DateInput";
 import {
   upsertBank,
   getBankComments,
-  getCommentReadAt,
   addBankComment,
   deleteBankComment,
   markCommentsRead,

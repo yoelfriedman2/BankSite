@@ -21,7 +21,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#4f46e5",
+  // Match the PWA manifest's theme_color so the mobile browser chrome matches
+  // the app's amber brand instead of a stray indigo.
+  themeColor: "#F59E0B",
 };
 
 export default function RootLayout({

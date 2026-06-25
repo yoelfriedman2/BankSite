@@ -324,9 +324,20 @@ export function deleteDemoBank(id: string): void {
   );
 }
 export function restoreDemoBank(id: string): void {
+  // Restore the bank, then restore the accounts trashed alongside it (same
+  // deleted_at timestamp as deleteDemoBank stamped), mirroring real mode.
+  const bank = store().banks.find((b) => b.id === id);
+  const trashedAt = bank?.deleted_at ?? null;
   store().banks = store().banks.map((b) =>
     b.id === id ? { ...b, deleted_at: null } : b,
   );
+  if (trashedAt) {
+    store().accounts = store().accounts.map((a) =>
+      a.bank_id === id && a.deleted_at === trashedAt
+        ? { ...a, deleted_at: null }
+        : a,
+    );
+  }
 }
 export function permanentlyDeleteDemoBank(id: string): void {
   store().banks = store().banks.filter((b) => b.id !== id);

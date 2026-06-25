@@ -460,7 +460,7 @@ export function ImportDialog({
   const [fileName, setFileName] = useState<string | null>(null);
   const [parsedRows, setParsedRows] = useState<ImportRow[]>([]);
   const [review, setReview] = useState<ReviewEntry[]>([]);
-  const [result, setResult] = useState<{ banks: number; accounts: number } | null>(null);
+  const [result, setResult] = useState<{ banks: number; accounts: number; notes: number } | null>(null);
   const [isPending, startTransition] = useTransition();
 
   async function handleFile(file: File) {
@@ -509,7 +509,7 @@ export function ImportDialog({
         setError(res.error);
         return;
       }
-      setResult({ banks: res.banks ?? 0, accounts: res.accounts ?? 0 });
+      setResult({ banks: res.banks ?? 0, accounts: res.accounts ?? 0, notes: res.notes ?? 0 });
       setStage("done");
       onImported();
     });
@@ -703,7 +703,7 @@ export function ImportDialog({
               <p className="mt-1">
                 {result.banks} bank{result.banks === 1 ? "" : "s"} updated
                 {result.accounts > 0 && ` · ${result.accounts} account${result.accounts === 1 ? "" : "s"} added`}
-                {(result as { notes?: number }).notes ? ` · ${(result as { notes?: number }).notes} note${(result as { notes?: number }).notes === 1 ? "" : "s"} posted` : ""}
+                {result.notes > 0 ? ` · ${result.notes} note${result.notes === 1 ? "" : "s"} posted` : ""}
               </p>
             </div>
           )}

@@ -43,8 +43,11 @@ function fmtAmount(raw: string): string {
 function amountWords(raw: string): string {
   const num = parseFloat(raw);
   if (!raw || isNaN(num) || num <= 0) return "";
-  const dollars = Math.floor(num);
-  const cents = Math.round((num - dollars) * 100);
+  // Round to whole cents first so the words match the numeric box (e.g. 1.999
+  // → $2.00, not "one and 100/100").
+  const totalCents = Math.round(num * 100);
+  const dollars = Math.floor(totalCents / 100);
+  const cents = totalCents % 100;
   const w = toWords(dollars);
   return `${w.charAt(0).toUpperCase()}${w.slice(1)} and ${String(cents).padStart(2, "0")}/100`;
 }
