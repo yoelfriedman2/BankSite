@@ -502,6 +502,12 @@ export function BankForm({
             {initial?.cert != null && (
               <div className="mt-3">
                 <label className={labelClass}>Related banks</label>
+                {relatedBanks.length === 0 && (
+                  <p className="mb-2 text-xs text-slate-400">
+                    No related banks. Banks in the same holding company appear here
+                    automatically — search below to link any other bank.
+                  </p>
+                )}
                 {relatedBanks.length > 0 && (
                   <div className="flex flex-wrap gap-2 mb-2">
                     {relatedBanks.map((rb) => (

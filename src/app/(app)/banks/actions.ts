@@ -891,6 +891,13 @@ export type RelatedBank = {
   source: "manual" | "holding_company"; // manual = explicit link; holding_company = inferred
 };
 
+/** Normalize a holding-company name for loose matching: lowercase + strip every
+ *  non-alphanumeric char, so "FIRST CAROLINA BANCSHARES, M.H.C." matches
+ *  "First Carolina Bancshares MHC" regardless of punctuation/case/spacing. */
+function normHolding(s: string | null | undefined): string {
+  return (s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 /** Returns all banks linked to the given cert (from this user's perspective).
  *  Includes both explicit bank_relationships rows and banks sharing the same holding company. */
 export async function getRelatedBanks(cert: number): Promise<RelatedBank[]> {
@@ -940,28 +947,28 @@ export async function getRelatedBanks(cert: number): Promise<RelatedBank[]> {
     }
   }
 
-  // ── Same holding company ───────────────────────────────────────────────────
-  const hc = (thisBank?.holding_company as string | null)?.trim();
-  if (hc) {
+  // ── Same holding company (normalized so "M.H.C." == "MHC", punctuation/case ignored) ──
+  const hcNorm = normHolding(thisBank?.holding_company as string | null);
+  if (hcNorm) {
     const { data: hcBanks } = await supabase
       .from("banks")
-      .select("id, cert, name, state")
+      .select("id, cert, name, state, holding_company")
       .eq("user_id", user.id)
-      .eq("holding_company", hc)
+      .not("holding_company", "is", null)
       .neq("cert", cert)
       .is("deleted_at", null);
 
     for (const b of hcBanks ?? []) {
-      const rc = b.cert as number;
-      if (!results.has(rc)) {
-        results.set(rc, {
-          cert: rc,
-          name: b.name as string,
-          state: (b.state as string | null) ?? null,
-          bankId: (b.id as string | null) ?? null,
-          source: "holding_company",
-        });
-      }
+      if (normHolding(b.holding_company as string | null) !== hcNorm) continue;
+      const rc = b.cert as number | null;
+      if (rc == null || results.has(rc)) continue;
+      results.set(rc, {
+        cert: rc,
+        name: b.name as string,
+        state: (b.state as string | null) ?? null,
+        bankId: (b.id as string | null) ?? null,
+        source: "holding_company",
+      });
     }
   }
 
