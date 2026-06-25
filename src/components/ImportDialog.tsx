@@ -66,6 +66,163 @@ function parseAccountType(v: unknown): ImportRow["account_type"] {
   return "other";
 }
 
+/* ─── Bank-name note extractor ───
+ * Parses notes embedded in bank names like:
+ *   "Chelsea Groton Bank (was in branch & X let)"
+ *   "Hoyne Savings Bank Public already"
+ *   "Winchester Savings Bank (in person) (2nd offering)"
+ * and returns clean name + structured fields.
+ */
+type NameNotes = {
+  cleanName: string;
+  openMethods: ("online" | "mail" | "in_person" | "phone")[];
+  eligibility: string | null;
+  status: ImportRow["status"];
+  conversionStage: ImportRow["conversion_stage"];
+  minToOpen: number | null;
+  communityNotes: string[];
+};
+
+function parseBankNameNotes(raw: string): NameNotes {
+  const result: NameNotes = {
+    cleanName: raw,
+    openMethods: [],
+    eligibility: null,
+    status: null,
+    conversionStage: null,
+    minToOpen: null,
+    communityNotes: [],
+  };
+
+  const chexSuffix = /chex\s*system/i.test(raw) ? " (uses ChexSystem)" : "";
+
+  // ── Identify who was denied ──────────────────────────────────────────────
+  const cheskyBranch = /chesky\s+was\s+in\s+branch\s+.*\bx\s+let\b/i.test(raw);
+  // Generic "was in branch & X let" (Sholy unless a named person precedes it)
+  const sholyBranch = !cheskyBranch && /was\s+in\s+branch.*\bx\s+let\b/i.test(raw);
+  const mailDenial = /by\s+mail\s+.*\bx\s+let\b/i.test(raw);
+  const onlineDenial = /tried\s+online\s+and\s+x\s+let/i.test(raw);
+  const notGoingToLet = /not\s+going\s+to\s+let/i.test(raw);
+  const closedMeUp =
+    /closed\s+me\s+up|me\s+tha[ty]\s+closed\s+up|thay\s+closed\s+me\s+up/i.test(raw);
+  const closedOutOfState = /closed\s+all\s+out\s+of\s+state/i.test(raw);
+  const noChance = /no\s+chance\s+of\s+opening/i.test(raw);
+  // Personal credit-issue denials (NOT bank policy → don't set cannot_open)
+  const creditIssue =
+    /too\s+many\s+inquir|had\s+too\s+many\s+inquir|too\s+many\s+inq/i.test(raw);
+
+  // Local-only area restrictions
+  const localPatterns = [
+    /only\s+open\s+(local|for\s+surrounding|for\s+those\s+have)/i,
+    /only\s+opening\s+for\s+(surrounding|local|those|east|a\s+\w)/i,
+    /not\s+opening\s+for\s+out\s+of\s+(area|state)/i,
+    /not\s+going\s+to\s+open\s+for\s+out/i,
+    /will\s+not\s+open\s+for\s+out/i,
+    /need\s+to\s+be\s+a\s+resident/i,
+    /\d+\s+mile\s+radius/i,
+    /zip\s+code\s+outside/i,
+    /address\s+is\s+outside/i,
+    /outside\s+of\s+the\s+area\s+service/i,
+    /outside\s+of\s+(the\s+)?market\s+area/i,
+    /unable\s+to\s+approve\s+out\s+of\s+area/i,
+    /not\s+accepting\s+out\s+of\s+surrounding/i,
+    /only\s+for\s+(surrounding|east\s+\w|locals)/i,
+    /only\s+open\s+for\s+surrounding/i,
+    /they're\s+only\s+opening\s+for/i,
+    /only\s+opening\s+for\s+a\s+/i,
+  ];
+  const isLocalOnly = localPatterns.some((p) => p.test(raw));
+
+  // ── Set status + community notes ─────────────────────────────────────────
+  if (sholyBranch) {
+    result.status = "cannot_open";
+    result.communityNotes.push(`Sholy: was at branch, they did not let${chexSuffix}`);
+  } else if (mailDenial) {
+    result.status = "cannot_open";
+    result.communityNotes.push(`Sholy: tried by mail, they did not let${chexSuffix}`);
+  } else if (onlineDenial) {
+    result.status = "cannot_open";
+    result.communityNotes.push("Sholy: tried online, they did not let");
+  } else if (notGoingToLet || closedOutOfState || noChance) {
+    result.status = "cannot_open";
+    result.communityNotes.push("Sholy: says does not allow");
+  } else if (closedMeUp && !creditIssue) {
+    result.status = "cannot_open";
+    result.communityNotes.push("Sholy: was at branch, they did not let");
+  }
+
+  if (isLocalOnly && !result.status) {
+    result.status = "cannot_open";
+    result.communityNotes.push("Sholy: says does not allow");
+  }
+  if (isLocalOnly) result.eligibility = "local_only";
+
+  if (cheskyBranch) {
+    result.communityNotes.push("Chesky: was at branch, they did not let");
+  }
+
+  // ── Open methods ─────────────────────────────────────────────────────────
+  if (/\bin\s+person\b/i.test(raw)) result.openMethods.push("in_person");
+  // "was in branch" (without explicit "in person") → bank uses in-person method
+  if (/was\s+in\s+branch/i.test(raw) && !result.openMethods.includes("in_person")) {
+    result.openMethods.push("in_person");
+  }
+  // "online" — but NOT if the only mention is a failed online attempt
+  if (/\bonline\b/i.test(raw) && !onlineDenial) {
+    result.openMethods.push("online");
+  }
+  if (/\bby\s+phone\b|\btold\s+me\s+by\s+phone|\bphone\s+only\b/i.test(raw)) {
+    result.openMethods.push("phone");
+  }
+  // "by mail" — bank accepts mail apps even if Sholy was denied via mail
+  if (/\bby\s+mail\b/i.test(raw) && !result.openMethods.includes("mail")) {
+    result.openMethods.push("mail");
+  }
+
+  // ── Min to open ──────────────────────────────────────────────────────────
+  const minMatch = raw.match(/min\s+\$([0-9,]+)/i);
+  if (minMatch) {
+    result.minToOpen = parseInt(minMatch[1].replace(/,/g, ""), 10);
+    if (/by\s+mail/i.test(raw) && !result.openMethods.includes("mail")) {
+      result.openMethods.push("mail");
+    }
+  }
+
+  // ── Conversion stage ─────────────────────────────────────────────────────
+  if (/\bpublic\s+alre?a?d?y\b/i.test(raw)) {
+    result.conversionStage = "completed";
+  } else if (
+    /\b2nd\s+offering\b/i.test(raw) &&
+    !/2nd\s+offering\s+not\s+interesting/i.test(raw)
+  ) {
+    result.conversionStage = "second_possible";
+  } else if (/\bgoing\s+public\b/i.test(raw)) {
+    result.conversionStage = "filed";
+  }
+
+  // ── Clean name ───────────────────────────────────────────────────────────
+  // Use text before the first ( as the canonical name — avoids pulling in
+  // trailing cross-references ("NVE Bank NJ", "Wakefield", "did 10&10", etc.)
+  const parenIdx = raw.indexOf("(");
+  let cleaned = (parenIdx > 0 ? raw.slice(0, parenIdx) : raw)
+    .replace(/\bpublic\s+alre?a?d?y\b.*/gi, "")
+    .replace(/\b2nd\s+offering\b.*/gi, "")
+    .replace(/\bgoing\s+public\b.*/gi, "")
+    .replace(/[,\s]+$/, "")
+    .trim();
+  result.cleanName = cleaned || raw.trim(); // fall back if empty
+
+  return result;
+}
+
+function hasEmbeddedNotes(name: string): boolean {
+  return (
+    /\(.*\)/.test(name) ||
+    /\bpublic\s+alre?a?d?y\b/i.test(name) ||
+    /\b2nd\s+offering\b/i.test(name)
+  );
+}
+
 const NAME_KEYS = ["name", "institution", "bank", "bank name"];
 function findCol(header: string[], candidates: string[]): number {
   return header.findIndex((h) => candidates.includes(h));
@@ -116,8 +273,20 @@ async function parseWorkbook(buf: ArrayBuffer): Promise<ImportRow[]> {
   for (let i = headerIdx + 1; i < grid.length; i++) {
     const r = grid[i] as unknown[];
     if (!r) continue;
-    const name = toText(get(r, col.name));
-    if (!name) continue;
+    const rawName = toText(get(r, col.name));
+    if (!rawName) continue;
+
+    // Parse notes embedded in the bank name (e.g. "(was in branch & X let)")
+    const nameNotes = hasEmbeddedNotes(rawName)
+      ? parseBankNameNotes(rawName)
+      : null;
+    const name = nameNotes?.cleanName ?? rawName;
+
+    // Column-level values (from explicit columns, if the Excel has them)
+    const colStatus = parseStatus(get(r, col.status));
+    const colMethods = parseOpenMethods(get(r, col.methods));
+    const colElig = parseEligibility(get(r, col.elig));
+
     rows.push({
       cert: toNumber(get(r, col.cert)),
       name,
@@ -126,12 +295,18 @@ async function parseWorkbook(buf: ArrayBuffer): Promise<ImportRow[]> {
       regulator: toText(get(r, col.reg)),
       assets: toNumber(get(r, col.assets)),
       holding_company: toText(get(r, col.hc)),
-      status: parseStatus(get(r, col.status)),
-      open_methods: parseOpenMethods(get(r, col.methods)),
-      eligibility: parseEligibility(get(r, col.elig)),
+      // Explicit column wins; fall back to what was parsed from the name
+      status: colStatus ?? nameNotes?.status ?? null,
+      open_methods:
+        colMethods ??
+        (nameNotes?.openMethods.length ? nameNotes.openMethods : null),
+      eligibility: (colElig ?? nameNotes?.eligibility ?? null) as ImportRow["eligibility"],
       branch_location: toText(get(r, col.branch)),
       phone: toText(get(r, col.phone)),
       bank_notes: null,
+      conversion_stage: nameNotes?.conversionStage ?? null,
+      min_to_open: nameNotes?.minToOpen ?? null,
+      community_notes: nameNotes?.communityNotes ?? [],
       holder: toText(get(r, col.holder)),
       account_type: parseAccountType(get(r, col.acctType)),
       account_number: toText(get(r, col.acctNum)),
@@ -416,72 +591,107 @@ export function ImportDialog({
                 or leave it as &ldquo;Create new&rdquo; to add a new bank.
               </p>
               <div className="space-y-2">
-                {review.map((entry, idx) => (
-                  <div
-                    key={idx}
-                    className="rounded-xl border border-slate-200 bg-slate-50 p-3"
-                  >
-                    <div className="flex items-start gap-2">
-                      {/* Confidence dot */}
-                      <span
-                        className="mt-1 h-2.5 w-2.5 flex-shrink-0 rounded-full"
-                        style={{ background: CONF_COLORS[entry.confidence] }}
-                        title={CONF_LABELS[entry.confidence]}
-                      />
-                      <div className="min-w-0 flex-1">
-                        {/* Import name */}
-                        <div className="flex items-center gap-1.5">
-                          <span className="truncate text-sm font-medium text-slate-800">
-                            {entry.importName}
-                          </span>
-                          {entry.accountCount > 0 && (
-                            <span className="flex-shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
-                              {entry.accountCount} acct{entry.accountCount > 1 ? "s" : ""}
-                            </span>
-                          )}
-                        </div>
+                {review.map((entry, idx) => {
+                  // Gather extracted changes for this bank group
+                  const groupRows = entry.rowIndices.map((i) => parsedRows[i]);
+                  const firstRow = groupRows[0];
+                  const tags: string[] = [];
+                  if (firstRow?.status === "cannot_open") tags.push("cannot open");
+                  if (firstRow?.open_methods?.length) tags.push(firstRow.open_methods.join(", ").replace("in_person", "in person"));
+                  if (firstRow?.conversion_stage) tags.push(firstRow.conversion_stage.replace("_", " "));
+                  if (firstRow?.min_to_open) tags.push(`min $${firstRow.min_to_open.toLocaleString()}`);
+                  const notes = groupRows.flatMap((r) => r.community_notes ?? []);
 
-                        {/* Arrow + match select */}
-                        <div className="mt-1.5 flex items-center gap-2">
-                          <ArrowRight className="h-3.5 w-3.5 flex-shrink-0 text-slate-300" />
-                          <select
-                            value={entry.selectedId}
-                            onChange={(e) => updateMatch(idx, e.target.value)}
-                            className="min-w-0 flex-1 truncate rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-amber-500"
-                          >
-                            <option value={CREATE_NEW}>+ Create new bank</option>
-                            <optgroup label="Existing banks">
-                              {existingBanks.map((b) => (
-                                <option key={b.id} value={b.id}>
-                                  {b.name}
-                                </option>
+                  return (
+                    <div
+                      key={idx}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-3"
+                    >
+                      <div className="flex items-start gap-2">
+                        {/* Confidence dot */}
+                        <span
+                          className="mt-1 h-2.5 w-2.5 flex-shrink-0 rounded-full"
+                          style={{ background: CONF_COLORS[entry.confidence] }}
+                          title={CONF_LABELS[entry.confidence]}
+                        />
+                        <div className="min-w-0 flex-1">
+                          {/* Import name */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate text-sm font-medium text-slate-800">
+                              {entry.importName}
+                            </span>
+                            {entry.accountCount > 0 && (
+                              <span className="flex-shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                                {entry.accountCount} acct{entry.accountCount > 1 ? "s" : ""}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Arrow + match select */}
+                          <div className="mt-1.5 flex items-center gap-2">
+                            <ArrowRight className="h-3.5 w-3.5 flex-shrink-0 text-slate-300" />
+                            <select
+                              value={entry.selectedId}
+                              onChange={(e) => updateMatch(idx, e.target.value)}
+                              className="min-w-0 flex-1 truncate rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-amber-500"
+                            >
+                              <option value={CREATE_NEW}>+ Create new bank</option>
+                              <optgroup label="Existing banks">
+                                {existingBanks.map((b) => (
+                                  <option key={b.id} value={b.id}>
+                                    {b.name}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            </select>
+                          </div>
+
+                          {/* Confidence label */}
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            {entry.confidence === "exact" && (
+                              <span className="flex items-center gap-1 text-xs text-emerald-600">
+                                <Check className="h-3 w-3" /> {CONF_LABELS.exact}
+                              </span>
+                            )}
+                            {entry.confidence === "fuzzy" && (
+                              <span className="flex items-center gap-1 text-xs text-amber-600">
+                                <AlertTriangle className="h-3 w-3" /> {CONF_LABELS.fuzzy} — verify the match
+                              </span>
+                            )}
+                            {entry.confidence === "none" && entry.selectedId === CREATE_NEW && (
+                              <span className="flex items-center gap-1 text-xs text-slate-400">
+                                <Plus className="h-3 w-3" /> Will be added as a new bank
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Extracted changes summary */}
+                          {(tags.length > 0 || notes.length > 0) && (
+                            <div className="mt-2 space-y-1">
+                              {tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {tags.map((t) => (
+                                    <span
+                                      key={t}
+                                      className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-600"
+                                    >
+                                      {t}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {notes.map((n, ni) => (
+                                <p key={ni} className="text-[10px] italic text-slate-400">
+                                  📝 {n}
+                                </p>
                               ))}
-                            </optgroup>
-                          </select>
-                        </div>
-
-                        {/* Confidence label */}
-                        <div className="mt-1 flex items-center gap-1">
-                          {entry.confidence === "exact" && (
-                            <span className="flex items-center gap-1 text-xs text-emerald-600">
-                              <Check className="h-3 w-3" /> {CONF_LABELS.exact}
-                            </span>
-                          )}
-                          {entry.confidence === "fuzzy" && (
-                            <span className="flex items-center gap-1 text-xs text-amber-600">
-                              <AlertTriangle className="h-3 w-3" /> {CONF_LABELS.fuzzy} — verify the match
-                            </span>
-                          )}
-                          {entry.confidence === "none" && entry.selectedId === CREATE_NEW && (
-                            <span className="flex items-center gap-1 text-xs text-slate-400">
-                              <Plus className="h-3 w-3" /> Will be added as a new bank
-                            </span>
+                            </div>
                           )}
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           )}
@@ -491,8 +701,9 @@ export function ImportDialog({
             <div className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
               <p className="font-semibold">Import complete!</p>
               <p className="mt-1">
-                {result.banks} bank{result.banks === 1 ? "" : "s"} updated ·{" "}
-                {result.accounts} account{result.accounts === 1 ? "" : "s"} added
+                {result.banks} bank{result.banks === 1 ? "" : "s"} updated
+                {result.accounts > 0 && ` · ${result.accounts} account${result.accounts === 1 ? "" : "s"} added`}
+                {(result as { notes?: number }).notes ? ` · ${(result as { notes?: number }).notes} note${(result as { notes?: number }).notes === 1 ? "" : "s"} posted` : ""}
               </p>
             </div>
           )}

@@ -386,26 +386,36 @@ export async function importBanks(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
-  const { data: existing } = await supabase
+  const { data: existingData } = await supabase
     .from("banks")
     .select("id, cert, name, status")
     .is("deleted_at", null);
-  const byCert = new Map<number, { id: string; status: string }>();
-  const byName = new Map<string, { id: string; status: string }>();
-  const byId = new Map<string, { id: string; status: string }>();
-  for (const b of existing ?? []) {
-    const entry = { id: b.id as string, status: b.status as string };
+  type ExistingEntry = { id: string; cert: number | null; status: string };
+  const byCert = new Map<number, ExistingEntry>();
+  const byName = new Map<string, ExistingEntry>();
+  const byId = new Map<string, ExistingEntry>();
+  for (const b of existingData ?? []) {
+    const entry: ExistingEntry = { id: b.id as string, cert: b.cert as number | null, status: b.status as string };
     if (b.cert != null) byCert.set(b.cert as number, entry);
     byName.set((b.name as string).toLowerCase(), entry);
     byId.set(b.id as string, entry);
   }
 
+  // Fetch display name for community notes
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("display_name")
+    .eq("id", user.id)
+    .maybeSingle();
+  const displayName = (profile?.display_name as string | null) ?? "Import";
+
   const accountInserts: Record<string, unknown>[] = [];
+  const noteInserts: { cert: number; body: string }[] = [];
   let banksTouched = 0;
 
   for (const row of rows) {
     // Client review step may have pre-resolved a bank ID
-    let found: { id: string; status: string } | undefined;
+    let found: ExistingEntry | undefined;
     if (row.matched_bank_id === "CREATE_NEW") {
       found = undefined; // explicitly force new bank creation
     } else if (row.matched_bank_id) {
@@ -418,10 +428,14 @@ export async function importBanks(
     const acct = rowHasAccount(row);
 
     let bankId: string;
+    let bankCert: number | null = row.cert;
     if (found) {
       bankId = found.id;
-      const upd: Record<string, unknown> = { name: row.name };
-      if (row.cert != null) upd.cert = row.cert;
+      bankCert = found.cert ?? row.cert;
+      const upd: Record<string, unknown> = {};
+      // Don't overwrite the matched bank's name — it's the canonical identifier.
+      // Only update descriptive/informational fields.
+      if (row.cert != null && found.cert == null) upd.cert = row.cert; // fill in missing cert
       if (row.city != null) upd.city = row.city;
       if (row.state != null) upd.state = row.state;
       if (row.regulator != null) upd.regulator = row.regulator;
@@ -433,11 +447,15 @@ export async function importBanks(
       if (row.phone != null) upd.phone = row.phone;
       if (row.bank_notes != null) upd.notes = row.bank_notes;
       if (row.status) upd.status = row.status;
-      const { error } = await supabase
-        .from("banks")
-        .update(upd)
-        .eq("id", bankId);
-      if (error) return { error: error.message };
+      if (row.conversion_stage != null) upd.conversion_stage = row.conversion_stage;
+      if (row.min_to_open != null) upd.min_to_open = row.min_to_open;
+      if (Object.keys(upd).length > 0) {
+        const { error } = await supabase
+          .from("banks")
+          .update(upd)
+          .eq("id", bankId);
+        if (error) return { error: error.message };
+      }
     } else {
       const { data, error } = await supabase
         .from("banks")
@@ -456,6 +474,8 @@ export async function importBanks(
           branch_location: row.branch_location,
           phone: row.phone,
           notes: row.bank_notes,
+          conversion_stage: row.conversion_stage,
+          min_to_open: row.min_to_open,
         })
         .select("id")
         .single();
@@ -463,11 +483,18 @@ export async function importBanks(
         return { error: error?.message ?? "Could not add a bank." };
       }
       bankId = data.id as string;
-      const entry = { id: bankId, status: "open" };
+      const entry: ExistingEntry = { id: bankId, cert: row.cert, status: "open" };
       if (row.cert != null) byCert.set(row.cert, entry);
       byName.set(row.name.toLowerCase(), entry);
     }
     banksTouched++;
+
+    // Queue community notes (posted after all bank updates to avoid partial writes)
+    if (row.community_notes?.length && bankCert != null) {
+      for (const body of row.community_notes) {
+        noteInserts.push({ cert: bankCert, body });
+      }
+    }
 
     if (acct) {
       accountInserts.push({
@@ -491,6 +518,31 @@ export async function importBanks(
   if (accountInserts.length) {
     const { error } = await supabase.from("accounts").insert(accountInserts);
     if (error) return { error: error.message };
+  }
+
+  // Post community notes, skipping exact duplicates
+  if (noteInserts.length) {
+    const { data: existingNotes } = await supabase
+      .from("bank_comments")
+      .select("cert, body")
+      .in("cert", [...new Set(noteInserts.map((n) => n.cert))]);
+    const noteSet = new Set(
+      (existingNotes ?? []).map((n) => `${n.cert}:${n.body}`),
+    );
+    const newNotes = noteInserts.filter(
+      (n) => !noteSet.has(`${n.cert}:${n.body}`),
+    );
+    if (newNotes.length) {
+      await supabase.from("bank_comments").insert(
+        newNotes.map((n) => ({
+          cert: n.cert,
+          author_id: user.id,
+          author_name: displayName,
+          body: n.body,
+          notify_all: false,
+        })),
+      );
+    }
   }
 
   revalidate();
