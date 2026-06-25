@@ -24,8 +24,7 @@ export async function exportToExcel(banks: Bank[], accounts: Account[]) {
       .join(", "),
     "Eligibility date": b.eligibility_date ?? "",
     "Branch location": b.branch_location ?? "",
-    Phone: b.phone ?? "",
-    Requirements: b.requirements ?? "",
+    "Preferred contact": b.phone ?? "",
     Notes: b.notes ?? "",
   }));
 
@@ -74,8 +73,7 @@ export async function downloadImportTemplate() {
       "Open Methods": "online, in person",
       Eligibility: "Out-of-state OK",
       "Branch Location": "123 Main St, Springfield MA",
-      Phone: "(413) 555-0100",
-      Requirements: "$50 minimum to open",
+      "Preferred Contact": "(413) 555-0100",
       Holder: "John",
       "Account Type": "Checking",
       "Account Number": "100012345",

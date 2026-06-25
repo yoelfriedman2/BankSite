@@ -236,7 +236,7 @@ export function BanksClient({
     const q = query.trim().toLowerCase();
     if (q) {
       list = list.filter((b) => {
-        const inBank = [b.name, b.city, b.state, b.holding_company, b.notes, b.requirements].some(
+        const inBank = [b.name, b.city, b.state, b.holding_company, b.notes].some(
           (f) => f?.toLowerCase().includes(q),
         );
         const inHolders = (accountsByBank[b.id] ?? []).some((a) =>
@@ -723,6 +723,10 @@ export function BanksClient({
             router.refresh();
           }}
           onChanged={() => router.refresh()}
+          onOpenBank={(bankId) => {
+            setEditingBankId(bankId);
+            setDrawerOpen(true);
+          }}
         />
       )}
       {importOpen && (

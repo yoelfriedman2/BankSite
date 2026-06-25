@@ -49,13 +49,8 @@ export type BankFormValues = {
   eligibility_date: string;
   branch_location: string;
   phone: string;
-  requirements: string;
   notes: string;
   conversion_stage: ConversionStage;
-  subscription_start: string;
-  subscription_end: string;
-  pricing_date: string;
-  application_steps: Record<string, boolean>;
   min_to_open: string;
   target_balance: string;
 };
@@ -93,13 +88,8 @@ function buildPatch(values: BankFormValues): Partial<BankFields> {
     eligibility_date: text(values.eligibility_date),
     branch_location: text(values.branch_location),
     phone: text(values.phone),
-    requirements: text(values.requirements),
     notes: text(values.notes),
     conversion_stage: values.conversion_stage,
-    subscription_start: text(values.subscription_start),
-    subscription_end: text(values.subscription_end),
-    pricing_date: text(values.pricing_date),
-    application_steps: values.application_steps,
     min_to_open: decimal(values.min_to_open),
     target_balance: decimal(values.target_balance),
   };
@@ -159,20 +149,13 @@ export async function upsertBank(
           holding_company: patch.holding_company,
           regulator: null,
           status: "untracked",
-          priority: patch.priority,
           open_methods: patch.open_methods,
           eligibility: patch.eligibility,
           eligibility_date: patch.eligibility_date,
           branch_location: patch.branch_location,
           phone: patch.phone,
-          requirements: patch.requirements,
           min_to_open: patch.min_to_open,
-          target_balance: patch.target_balance,
-          application_steps: patch.application_steps,
           conversion_stage: patch.conversion_stage,
-          subscription_start: patch.subscription_start,
-          subscription_end: patch.subscription_end,
-          pricing_date: patch.pricing_date,
         }));
       if (toInsert.length > 0) {
         await admin.from("banks").insert(toInsert);
@@ -181,22 +164,16 @@ export async function upsertBank(
   }
 
   // Propagate shared ("global") fields to all other users' copies of the same bank.
+  // Private fields (status, priority, notes, target_balance) are intentionally excluded.
   if (patch.cert != null) {
     const sharedPatch = {
-      priority: patch.priority,
       open_methods: patch.open_methods,
       eligibility: patch.eligibility,
       eligibility_date: patch.eligibility_date,
       branch_location: patch.branch_location,
       phone: patch.phone,
-      requirements: patch.requirements,
       min_to_open: patch.min_to_open,
-      target_balance: patch.target_balance,
-      application_steps: patch.application_steps,
       conversion_stage: patch.conversion_stage,
-      subscription_start: patch.subscription_start,
-      subscription_end: patch.subscription_end,
-      pricing_date: patch.pricing_date,
     };
     const admin = createAdminClient();
     await admin
@@ -454,7 +431,6 @@ export async function importBanks(
       if (row.eligibility != null) upd.eligibility = row.eligibility;
       if (row.branch_location != null) upd.branch_location = row.branch_location;
       if (row.phone != null) upd.phone = row.phone;
-      if (row.requirements != null) upd.requirements = row.requirements;
       if (row.bank_notes != null) upd.notes = row.bank_notes;
       if (row.status) upd.status = row.status;
       const { error } = await supabase
@@ -479,7 +455,6 @@ export async function importBanks(
           eligibility: row.eligibility,
           branch_location: row.branch_location,
           phone: row.phone,
-          requirements: row.requirements,
           notes: row.bank_notes,
         })
         .select("id")
@@ -815,4 +790,134 @@ export async function getUnreadCommentCerts(): Promise<number[]> {
     if (!readAt || latest > readAt) unread.push(cert);
   }
   return unread;
+}
+
+// ---------------------------------------------------------------------------
+// Bank relationships (global bidirectional links by cert)
+// ---------------------------------------------------------------------------
+
+export type RelatedBank = {
+  cert: number;
+  name: string;
+  state: string | null;
+  bankId: string | null; // the current user's bank id for this cert, if they have it
+};
+
+/** Returns all banks linked to the given cert (from this user's perspective). */
+export async function getRelatedBanks(cert: number): Promise<RelatedBank[]> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data: rels } = await supabase
+    .from("bank_relationships")
+    .select("cert_a, cert_b")
+    .or(`cert_a.eq.${cert},cert_b.eq.${cert}`);
+
+  if (!rels || rels.length === 0) return [];
+
+  const relatedCerts = rels.map((r) =>
+    (r.cert_a as number) === cert ? (r.cert_b as number) : (r.cert_a as number),
+  );
+
+  const { data: banks } = await supabase
+    .from("banks")
+    .select("id, cert, name, state")
+    .in("cert", relatedCerts)
+    .is("deleted_at", null);
+
+  return relatedCerts.map((rc) => {
+    const b = (banks ?? []).find((x) => (x.cert as number) === rc);
+    return {
+      cert: rc,
+      name: (b?.name as string) ?? `cert #${rc}`,
+      state: (b?.state as string | null) ?? null,
+      bankId: (b?.id as string | null) ?? null,
+    };
+  });
+}
+
+/** Adds a bidirectional link between two banks. Idempotent. */
+export async function addBankRelationship(
+  certA: number,
+  certB: number,
+): Promise<{ error?: string }> {
+  if (certA === certB) return { error: "Cannot link a bank to itself." };
+  const lo = Math.min(certA, certB);
+  const hi = Math.max(certA, certB);
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { error } = await supabase
+    .from("bank_relationships")
+    .upsert({ cert_a: lo, cert_b: hi, created_by: user.id }, { onConflict: "cert_a,cert_b" });
+  if (error) return { error: error.message };
+
+  revalidate();
+  return {};
+}
+
+/** Removes the link between two banks. */
+export async function removeBankRelationship(
+  certA: number,
+  certB: number,
+): Promise<{ error?: string }> {
+  const lo = Math.min(certA, certB);
+  const hi = Math.max(certA, certB);
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { error } = await supabase
+    .from("bank_relationships")
+    .delete()
+    .eq("cert_a", lo)
+    .eq("cert_b", hi);
+  if (error) return { error: error.message };
+
+  revalidate();
+  return {};
+}
+
+/** Searches the current user's banks by name for the relationship picker. */
+export async function searchBanksForRelationship(
+  query: string,
+  excludeCert: number,
+): Promise<{ cert: number; name: string; state: string | null; bankId: string }[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const safe = q.replace(/[%,()*\\]/g, " ");
+  const { data } = await supabase
+    .from("banks")
+    .select("id, cert, name, state")
+    .is("deleted_at", null)
+    .not("cert", "is", null)
+    .neq("cert", excludeCert)
+    .ilike("name", `%${safe}%`)
+    .limit(8);
+
+  return (data ?? [])
+    .filter((b) => b.cert != null)
+    .map((b) => ({
+      cert: b.cert as number,
+      name: b.name as string,
+      state: (b.state as string | null) ?? null,
+      bankId: b.id as string,
+    }));
 }

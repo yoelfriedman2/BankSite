@@ -44,7 +44,6 @@ export type ImportRow = {
   eligibility: Bank["eligibility"];
   branch_location: string | null;
   phone: string | null;
-  requirements: string | null;
   bank_notes: string | null;
   // optional account on the same row
   holder: string | null;
@@ -135,13 +134,8 @@ function seedToBankFields(s: (typeof BANKS_SEED)[number]): BankFields {
     eligibility_date: null,
     branch_location: null,
     phone: null,
-    requirements: null,
     notes: null,
     conversion_stage: "none",
-    subscription_start: null,
-    subscription_end: null,
-    pricing_date: null,
-    application_steps: {},
     min_to_open: null,
     target_balance: null,
     deleted_at: null,
@@ -155,10 +149,6 @@ const BANK_OVERRIDES: Record<number, Partial<BankFields>> = {
     eligibility: "nationwide",
     eligibility_date: yearsAgo(1),
     conversion_stage: "subscription",
-    subscription_start: daysFromNow(-8),
-    subscription_end: daysFromNow(12),
-    pricing_date: daysFromNow(20),
-    application_steps: { online_access: true },
     min_to_open: 50,
     target_balance: 1000,
   },
@@ -178,7 +168,6 @@ const BANK_OVERRIDES: Record<number, Partial<BankFields>> = {
     eligibility: "local_only",
     branch_location: "123 Main St, Springfield, MA 01103",
     phone: "(413) 555-0100",
-    requirements: "In-branch only; $50 minimum to open.",
   },
   5: {
     status: "applied",
@@ -187,12 +176,11 @@ const BANK_OVERRIDES: Record<number, Partial<BankFields>> = {
     eligibility: "in_state",
     notes: "Application submitted ~2 weeks ago.",
     conversion_stage: "filed",
-    application_steps: { online_access: false },
   },
   6: {
     status: "cannot_open",
     eligibility: "local_only",
-    requirements: "Out-of-state residents not accepted.",
+    notes: "Out-of-state residents not accepted.",
   },
   7: { status: "want_to_open", open_methods: ["online"], eligibility: "nationwide" },
 };
@@ -470,7 +458,6 @@ export function importDemoRows(rows: ImportRow[]): {
         eligibility: row.eligibility ?? existing.eligibility,
         branch_location: row.branch_location ?? existing.branch_location,
         phone: row.phone ?? existing.phone,
-        requirements: row.requirements ?? existing.requirements,
         notes: row.bank_notes ?? existing.notes,
       });
       bankId = existing.id;
@@ -490,13 +477,8 @@ export function importDemoRows(rows: ImportRow[]): {
         eligibility_date: null,
         branch_location: row.branch_location,
         phone: row.phone,
-        requirements: row.requirements,
         notes: row.bank_notes,
         conversion_stage: "none",
-        subscription_start: null,
-        subscription_end: null,
-        pricing_date: null,
-        application_steps: {},
         min_to_open: null,
         target_balance: null,
         deleted_at: null,

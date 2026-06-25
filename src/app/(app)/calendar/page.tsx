@@ -53,27 +53,6 @@ export default async function CalendarPage() {
   const events: CalEvent[] = [];
 
   for (const b of banks) {
-    if (b.subscription_start)
-      events.push({
-        date: b.subscription_start,
-        type: "sub_start",
-        label: `${b.name}: subscription opens`,
-        href: "/banks",
-      });
-    if (b.subscription_end)
-      events.push({
-        date: b.subscription_end,
-        type: "sub_end",
-        label: `${b.name}: subscription deadline`,
-        href: "/banks",
-      });
-    if (b.pricing_date)
-      events.push({
-        date: b.pricing_date,
-        type: "pricing",
-        label: `${b.name}: IPO pricing`,
-        href: "/banks",
-      });
     if (b.eligibility_date)
       events.push({
         date: b.eligibility_date,

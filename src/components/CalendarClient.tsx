@@ -7,16 +7,13 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 export type CalEvent = {
   date: string; // YYYY-MM-DD
   type:
-    | "sub_start" | "sub_end" | "pricing" | "eligibility"
+    | "eligibility"
     | "cd" | "activity" | "opened" | "last_activity" | "activity_log";
   label: string;
   href: string;
 };
 
 const TYPE_STYLES: Record<CalEvent["type"], string> = {
-  sub_end: "bg-rose-100 text-rose-700",
-  sub_start: "bg-amber-100 text-amber-700",
-  pricing: "bg-violet-100 text-violet-700",
   eligibility: "bg-slate-100 text-slate-600",
   cd: "bg-amber-100 text-amber-800",
   activity: "bg-emerald-100 text-emerald-700",
@@ -26,9 +23,6 @@ const TYPE_STYLES: Record<CalEvent["type"], string> = {
 };
 
 const TYPE_LABELS: Record<CalEvent["type"], string> = {
-  sub_start: "Subscription opens",
-  sub_end: "Subscription deadline",
-  pricing: "IPO pricing",
   eligibility: "Eligibility date",
   cd: "CD maturity",
   activity: "Activity due",
