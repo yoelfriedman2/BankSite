@@ -13,14 +13,15 @@ export type AccountType =
   | "money_market"
   | "other";
 export type Priority = "low" | "med" | "high";
-export type OpenMethod = "online" | "mail" | "in_person";
+export type OpenMethod = "online" | "mail" | "in_person" | "phone";
 export type Eligibility = "nationwide" | "in_state" | "local_only";
 export type ConversionStage =
   | "none"
   | "rumored"
   | "filed"
   | "subscription"
-  | "completed";
+  | "completed"
+  | "second_possible";
 
 /**
  * A bank in the user's master list: FDIC reference data plus the user's
@@ -30,7 +31,7 @@ export interface Bank {
   id: string;
   user_id: string;
 
-  // Reference / master data
+  // Reference / master data (shared — propagated to all users on save)
   cert: number | null;
   name: string;
   city: string | null;
@@ -39,27 +40,22 @@ export interface Bank {
   assets: number | null; // total assets in $000
   holding_company: string | null;
 
-  // User tracking
-  status: BankStatus;
-  priority: Priority | null;
+  // How to open (shared)
   open_methods: OpenMethod[] | null;
   eligibility: Eligibility | null;
   eligibility_date: string | null; // deposit eligibility / record date for IPO priority
   branch_location: string | null;
-  phone: string | null;
-  requirements: string | null;
-  notes: string | null;
-
-  // Conversion pipeline
-  conversion_stage: ConversionStage;
-  subscription_start: string | null;
-  subscription_end: string | null;
-  pricing_date: string | null;
-
-  // Scale / account-opening helpers
-  application_steps: Record<string, boolean>;
+  phone: string | null; // preferred contact name and/or phone number
   min_to_open: number | null;
+
+  // Conversion pipeline (shared)
+  conversion_stage: ConversionStage;
+
+  // User tracking (private — never propagated to other users)
+  status: BankStatus;
+  priority: Priority | null;
   target_balance: number | null;
+  notes: string | null;
 
   deleted_at: string | null;
   created_at: string;
@@ -100,6 +96,14 @@ export interface BankComment {
   author_id: string;
   author_name: string | null;
   body: string;
+  created_at: string;
+}
+
+/** A global bidirectional link between two banks (keyed by cert). */
+export interface BankRelationship {
+  cert_a: number;
+  cert_b: number;
+  created_by: string | null;
   created_at: string;
 }
 
@@ -165,6 +169,7 @@ export const OPEN_METHOD_LABELS: Record<OpenMethod, string> = {
   online: "Online",
   mail: "By mail",
   in_person: "In person",
+  phone: "By phone",
 };
 
 export const ELIGIBILITY_LABELS: Record<Eligibility, string> = {
@@ -179,6 +184,7 @@ export const CONVERSION_STAGE_LABELS: Record<ConversionStage, string> = {
   filed: "Filed / announced",
   subscription: "Subscription open",
   completed: "Converted",
+  second_possible: "2nd IPO possible",
 };
 
 export const CONVERSION_STAGE_ORDER: ConversionStage[] = [
@@ -187,9 +193,5 @@ export const CONVERSION_STAGE_ORDER: ConversionStage[] = [
   "filed",
   "subscription",
   "completed",
-];
-
-/** Steps shown in the "Applied" account-opening checklist (kept intentionally simple). */
-export const APPLICATION_STEPS: { key: string; label: string }[] = [
-  { key: "online_access", label: "Online access set up" },
+  "second_possible",
 ];

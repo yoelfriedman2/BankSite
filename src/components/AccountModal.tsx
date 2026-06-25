@@ -73,6 +73,9 @@ export function AccountModal({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [showPassword, setShowPassword] = useState(false);
+  const [onlineAccessOpen, setOnlineAccessOpen] = useState(() =>
+    !!(initial?.online_url || initial?.username || initial?.password),
+  );
   const [newDate, setNewDate] = useState(() =>
     new Date().toISOString().slice(0, 10),
   );
@@ -273,65 +276,77 @@ export function AccountModal({
           </div>
 
           <div className="mt-1 border-t border-slate-100 pt-4">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Online access
-            </h3>
-            <label className={labelClass} htmlFor="online_url">Login URL</label>
-            <input
-              id="online_url"
-              className={inputClass}
-              placeholder="https://…"
-              value={values.online_url}
-              onChange={(e) => set("online_url", e.target.value)}
-            />
-          </div>
-
-          {/* Username + password stay side-by-side — short values, naturally paired */}
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className={labelClass} htmlFor="acct_username">Username</label>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
               <input
-                id="acct_username"
-                autoComplete="off"
-                className={inputClass}
-                value={values.username}
-                onChange={(e) => set("username", e.target.value)}
+                type="checkbox"
+                checked={onlineAccessOpen}
+                onChange={(e) => setOnlineAccessOpen(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 accent-amber-600"
               />
-            </div>
-            <div className="flex-1">
-              <label className={labelClass} htmlFor="acct_password">Password</label>
-              <div className="relative">
-                <input
-                  id="acct_password"
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="off"
-                  className={`${inputClass} pr-10`}
-                  value={values.password}
-                  onChange={(e) => set("password", e.target.value)}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((s) => !s)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  title={showPassword ? "Hide" : "Show"}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
+              <span className="text-sm font-medium text-slate-700">Online access set up</span>
+            </label>
           </div>
 
-          <div>
-            <label className={labelClass} htmlFor="access_notes">Access notes</label>
-            <textarea
-              id="access_notes"
-              rows={2}
-              className={inputClass}
-              placeholder="security questions, which email, etc."
-              value={values.access_notes}
-              onChange={(e) => set("access_notes", e.target.value)}
-            />
-          </div>
+          {onlineAccessOpen && (
+            <>
+              <div>
+                <label className={labelClass} htmlFor="online_url">Login URL</label>
+                <input
+                  id="online_url"
+                  className={inputClass}
+                  placeholder="https://…"
+                  value={values.online_url}
+                  onChange={(e) => set("online_url", e.target.value)}
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className={labelClass} htmlFor="acct_username">Username</label>
+                  <input
+                    id="acct_username"
+                    autoComplete="off"
+                    className={inputClass}
+                    value={values.username}
+                    onChange={(e) => set("username", e.target.value)}
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className={labelClass} htmlFor="acct_password">Password</label>
+                  <div className="relative">
+                    <input
+                      id="acct_password"
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="off"
+                      className={`${inputClass} pr-10`}
+                      value={values.password}
+                      onChange={(e) => set("password", e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((s) => !s)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      title={showPassword ? "Hide" : "Show"}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className={labelClass} htmlFor="access_notes">Access notes</label>
+                <textarea
+                  id="access_notes"
+                  rows={2}
+                  className={inputClass}
+                  placeholder="security questions, which email, etc."
+                  value={values.access_notes}
+                  onChange={(e) => set("access_notes", e.target.value)}
+                />
+              </div>
+            </>
+          )}
 
           <div>
             <label className={labelClass}>Activity history</label>

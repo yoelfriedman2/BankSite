@@ -41,10 +41,11 @@ function parseStatus(v: unknown): ImportRow["status"] {
 function parseOpenMethods(v: unknown): ImportRow["open_methods"] {
   const t = toText(v)?.toLowerCase();
   if (!t) return null;
-  const m: ("online" | "mail" | "in_person")[] = [];
+  const m: ("online" | "mail" | "in_person" | "phone")[] = [];
   if (t.includes("online")) m.push("online");
   if (t.includes("mail")) m.push("mail");
   if (t.includes("person") || t.includes("branch")) m.push("in_person");
+  if (t.includes("phone")) m.push("phone");
   return m.length ? m : null;
 }
 function parseEligibility(v: unknown): ImportRow["eligibility"] {
@@ -94,8 +95,7 @@ async function parseWorkbook(buf: ArrayBuffer): Promise<ImportRow[]> {
     methods: findCol(header, ["open methods", "how to open", "open method", "methods"]),
     elig: findCol(header, ["eligibility", "who can open"]),
     branch: findCol(header, ["branch location", "branch", "location"]),
-    phone: findCol(header, ["phone", "phone number"]),
-    requirements: findCol(header, ["requirements", "requirement"]),
+    phone: findCol(header, ["phone", "phone number", "preferred contact"]),
     holder: findCol(header, ["holder", "account holder", "owner", "name on account"]),
     acctType: findCol(header, ["account type", "type"]),
     acctNum: findCol(header, ["account number", "account #", "account no", "acct #"]),
@@ -131,7 +131,6 @@ async function parseWorkbook(buf: ArrayBuffer): Promise<ImportRow[]> {
       eligibility: parseEligibility(get(r, col.elig)),
       branch_location: toText(get(r, col.branch)),
       phone: toText(get(r, col.phone)),
-      requirements: toText(get(r, col.requirements)),
       bank_notes: null,
       holder: toText(get(r, col.holder)),
       account_type: parseAccountType(get(r, col.acctType)),

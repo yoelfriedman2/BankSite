@@ -164,13 +164,7 @@ export default async function DashboardPage() {
     .map((b) => {
       let reason = "Filed — prepare to subscribe";
       if (b.conversion_stage === "subscription") {
-        if (b.subscription_end) {
-          const d = daysUntil(b.subscription_end, now);
-          reason =
-            d >= 0 ? `Subscription closes in ${d} days` : "Subscription closed";
-        } else {
-          reason = "Subscription open";
-        }
+        reason = "Subscription open";
       }
       return { bank: b, reason };
     })
