@@ -352,7 +352,7 @@ export function BanksClient({
         {refs.map((r) => {
           const target = bankByCert.get(r.cert);
           const cls =
-            "rounded border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700";
+            "rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700 leading-tight";
           return target ? (
             <button
               key={r.cert}
@@ -549,17 +549,19 @@ export function BanksClient({
                 tabIndex={0}
                 onClick={() => openBank(b)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
+                  if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
                     openBank(b);
                   }
                 }}
-                className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+                className="flex w-full cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
               >
                 {health !== "none" ? (
-                  <ActivityDot level={health} />
+                  <span className="mt-1 shrink-0">
+                    <ActivityDot level={health} />
+                  </span>
                 ) : (
-                  <span className="h-2.5 w-2.5 shrink-0" />
+                  <span className="mt-1 h-2.5 w-2.5 shrink-0" />
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -582,7 +584,9 @@ export function BanksClient({
                   </div>
                   <RelatedChips cert={b.cert} />
                 </div>
-                <StatusBadge status={b.status} />
+                <span className="mt-0.5 shrink-0">
+                  <StatusBadge status={b.status} />
+                </span>
               </div>
             );
           })
