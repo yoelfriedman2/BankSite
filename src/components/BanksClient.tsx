@@ -12,6 +12,7 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronsUpDown,
+  Link2,
 } from "lucide-react";
 import {
   STATUS_LABELS,
@@ -169,6 +170,7 @@ export function BanksClient({
   userDisplayName,
   currentUserId,
   unreadCerts,
+  linkedCerts,
   initialStatus,
   initialQuery,
 }: {
@@ -179,6 +181,7 @@ export function BanksClient({
   userDisplayName: string;
   currentUserId: string | null;
   unreadCerts: number[];
+  linkedCerts: number[];
   initialStatus?: BankStatus | "all";
   initialQuery?: string;
 }) {
@@ -187,6 +190,7 @@ export function BanksClient({
     () => new Set(unreadCerts.filter((c) => !localReadCerts.has(c))),
     [unreadCerts, localReadCerts],
   );
+  const linkedSet = useMemo(() => new Set(linkedCerts), [linkedCerts]);
   const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<BankStatus | "all">(
     initialStatus ?? "all",
@@ -519,6 +523,11 @@ export function BanksClient({
                         title="Unread update"
                       />
                     )}
+                    {b.cert != null && linkedSet.has(b.cert) && (
+                      <span title="Has related banks" className="inline-flex shrink-0">
+                        <Link2 className="h-3.5 w-3.5 text-slate-400" aria-label="Has related banks" />
+                      </span>
+                    )}
                     <ConversionBadge stage={b.conversion_stage} />
                   </div>
                   <div className="mt-0.5 truncate text-xs text-slate-400">
@@ -590,6 +599,11 @@ export function BanksClient({
                             className="h-2 w-2 shrink-0 rounded-full bg-amber-500"
                             title="Unread update"
                           />
+                        )}
+                        {b.cert != null && linkedSet.has(b.cert) && (
+                          <span title="Has related banks" className="inline-flex shrink-0">
+                            <Link2 className="h-3.5 w-3.5 text-slate-400" aria-label="Has related banks" />
+                          </span>
                         )}
                         <ConversionBadge stage={b.conversion_stage} />
                       </div>

@@ -8,7 +8,7 @@ import {
   getDemoProfile,
   getKnownHolders,
 } from "@/lib/demo";
-import { seedBanks, getUnreadCommentCerts } from "./actions";
+import { seedBanks, getUnreadCommentCerts, getLinkedCerts } from "./actions";
 import type { Account, Bank, BankStatus } from "@/lib/types";
 
 const VALID_STATUSES: Array<BankStatus | "all"> = [
@@ -36,7 +36,10 @@ export default async function BanksPage({
   const initialQuery = typeof sp.q === "string" ? sp.q : undefined;
 
   if (DEMO_MODE) {
-    const unreadCerts = await getUnreadCommentCerts();
+    const [unreadCerts, linkedCerts] = await Promise.all([
+      getUnreadCommentCerts(),
+      getLinkedCerts(),
+    ]);
     const demoProfile = getDemoProfile();
     return (
       <BanksClient
@@ -47,6 +50,7 @@ export default async function BanksPage({
         userDisplayName={demoProfile.display_name ?? ""}
         currentUserId={DEMO_USER.id}
         unreadCerts={unreadCerts}
+        linkedCerts={linkedCerts}
         initialStatus={initialStatus}
         initialQuery={initialQuery}
       />
@@ -93,7 +97,10 @@ export default async function BanksPage({
     ]),
   ).sort();
 
-  const unreadCerts = await getUnreadCommentCerts();
+  const [unreadCerts, linkedCerts] = await Promise.all([
+    getUnreadCommentCerts(),
+    getLinkedCerts(),
+  ]);
 
   return (
     <BanksClient
@@ -104,6 +111,7 @@ export default async function BanksPage({
       userDisplayName={profile?.display_name ?? ""}
       currentUserId={user?.id ?? null}
       unreadCerts={unreadCerts}
+      linkedCerts={linkedCerts}
       initialStatus={initialStatus}
       initialQuery={initialQuery}
     />

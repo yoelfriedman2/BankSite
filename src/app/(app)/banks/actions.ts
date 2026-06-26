@@ -898,6 +898,63 @@ function normHolding(s: string | null | undefined): string {
   return (s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+/** Certs that share a holding company with at least one other bank in the list. */
+function holdingCompanyLinkedCerts(
+  banks: { cert: number | null; holding_company: string | null }[],
+): number[] {
+  const byHolding = new Map<string, number[]>();
+  for (const b of banks) {
+    if (b.cert == null) continue;
+    const h = normHolding(b.holding_company);
+    if (!h) continue;
+    (byHolding.get(h) ?? byHolding.set(h, []).get(h)!).push(b.cert);
+  }
+  const out: number[] = [];
+  for (const certs of byHolding.values()) if (certs.length >= 2) out.push(...certs);
+  return out;
+}
+
+/** Certs of the current user's banks that have at least one related bank —
+ *  an explicit link OR a same-holding-company sibling. Drives the list-level
+ *  "linked" indicator so you can see it without opening each bank. */
+export async function getLinkedCerts(): Promise<number[]> {
+  if (DEMO_MODE) {
+    return holdingCompanyLinkedCerts(
+      getDemoBanks().map((b) => ({ cert: b.cert, holding_company: b.holding_company })),
+    );
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data: banks } = await supabase
+    .from("banks")
+    .select("cert, holding_company")
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+  const userBanks = (banks ?? []) as { cert: number | null; holding_company: string | null }[];
+  const userCerts = new Set(
+    userBanks.map((b) => b.cert).filter((c): c is number => c != null),
+  );
+
+  const linked = new Set<number>(holdingCompanyLinkedCerts(userBanks));
+
+  const { data: rels } = await supabase
+    .from("bank_relationships")
+    .select("cert_a, cert_b");
+  for (const r of rels ?? []) {
+    const a = r.cert_a as number;
+    const b = r.cert_b as number;
+    if (userCerts.has(a)) linked.add(a);
+    if (userCerts.has(b)) linked.add(b);
+  }
+
+  return [...linked];
+}
+
 /** Returns all banks linked to the given cert (from this user's perspective).
  *  Includes both explicit bank_relationships rows and banks sharing the same holding company. */
 export async function getRelatedBanks(cert: number): Promise<RelatedBank[]> {
