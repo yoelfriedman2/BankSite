@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useTransition, type FormEvent } from "react";
+import { useState, useEffect, useTransition, type FormEvent } from "react";
 import { X, Loader2, Eye, EyeOff } from "lucide-react";
 import { ACCOUNT_TYPE_LABELS, type Account } from "@/lib/types";
-import { formatDate } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
 import { DateInput } from "@/components/DateInput";
 import {
   upsertAccount,
   type AccountFormValues,
 } from "@/app/(app)/accounts/actions";
+import { getBalanceHistory, type BalancePoint } from "@/app/(app)/money/actions";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -80,6 +81,13 @@ export function AccountModal({
     new Date().toISOString().slice(0, 10),
   );
   const [newNote, setNewNote] = useState("");
+  const [balanceHistory, setBalanceHistory] = useState<BalancePoint[]>([]);
+
+  useEffect(() => {
+    if (initial?.id) {
+      getBalanceHistory(initial.id).then(setBalanceHistory).catch(() => {});
+    }
+  }, [initial?.id]);
 
   function set<K extends keyof AccountFormValues>(
     key: K,
@@ -393,6 +401,34 @@ export function AccountModal({
               </button>
             </div>
           </div>
+
+          {balanceHistory.length > 0 && (
+            <div>
+              <label className={labelClass}>Balance history</label>
+              <ul className="space-y-1">
+                {balanceHistory.map((p, i) => (
+                  <li
+                    key={i}
+                    className="flex items-center gap-2 rounded-md bg-slate-50 px-2 py-1 text-sm"
+                  >
+                    <span className="w-24 shrink-0 text-slate-500">{formatDate(p.as_of_date)}</span>
+                    <span className="flex-1 truncate text-xs text-slate-400">{p.reason ?? ""}</span>
+                    {p.change_amount != null && (
+                      <span
+                        className={`shrink-0 text-xs tabular-nums ${p.change_amount < 0 ? "text-rose-500" : "text-emerald-600"}`}
+                      >
+                        {p.change_amount < 0 ? "−" : "+"}
+                        {formatCurrency(Math.abs(p.change_amount))}
+                      </span>
+                    )}
+                    <span className="w-24 shrink-0 text-right font-medium tabular-nums text-slate-800">
+                      {formatCurrency(p.balance)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
         </div>
 

@@ -8,17 +8,15 @@ import {
   Check,
   X,
   ArrowDownToLine,
-  CalendarSearch,
 } from "lucide-react";
 import { DateInput } from "@/components/DateInput";
 import { formatCurrency, formatDate } from "@/lib/format";
 import {
   createSweepBatch,
   returnSweep,
-  getBalanceAsOf,
+  returnSweepBatch,
   type OutstandingSweep,
   type SweepAccountOption,
-  type BalanceAsOfRow,
 } from "@/app/(app)/money/actions";
 
 const inputClass =
@@ -29,13 +27,9 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 export function MoneyClient({
   sweeps,
   accounts,
-  initialAsOf,
-  initialAsOfDate,
 }: {
   sweeps: OutstandingSweep[];
   accounts: SweepAccountOption[];
-  initialAsOf: BalanceAsOfRow[];
-  initialAsOfDate: string;
 }) {
   const router = useRouter();
   const [returningId, setReturningId] = useState<string | null>(null);
@@ -63,7 +57,7 @@ export function MoneyClient({
   function handleReturnGroup(items: OutstandingSweep[]) {
     if (!window.confirm(`Mark all ${items.length} as returned?`)) return;
     startTransition(async () => {
-      for (const it of items) await returnSweep(it.id);
+      await returnSweepBatch(items.map((it) => it.id));
       router.refresh();
     });
   }
@@ -171,8 +165,6 @@ export function MoneyClient({
         </div>
       )}
 
-      <BalanceAsOf initial={initialAsOf} initialDate={initialAsOfDate} />
-
       {newOpen && (
         <NewMoveModal
           accounts={accounts}
@@ -184,97 +176,6 @@ export function MoneyClient({
           }}
         />
       )}
-    </div>
-  );
-}
-
-/* ── Balance as of a date ── */
-function BalanceAsOf({
-  initial,
-  initialDate,
-}: {
-  initial: BalanceAsOfRow[];
-  initialDate: string;
-}) {
-  const [date, setDate] = useState(initialDate);
-  const [rows, setRows] = useState<BalanceAsOfRow[]>(initial);
-  const [loading, setLoading] = useState(false);
-
-  function changeDate(d: string) {
-    setDate(d);
-    if (!d) return;
-    setLoading(true);
-    getBalanceAsOf(d)
-      .then(setRows)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }
-
-  const total = rows.reduce((s, r) => s + (r.balanceAsOf ?? 0), 0);
-
-  return (
-    <div className="mt-10">
-      <div className="mb-1 flex items-center gap-2">
-        <CalendarSearch className="h-4 w-4 text-amber-500" />
-        <h2 className="text-sm font-semibold text-slate-700">Balance as of a date</h2>
-      </div>
-      <p className="mb-3 text-xs text-slate-400">
-        What each account held on a given date — this is what sets your IPO share allocation on a bank&apos;s record date.
-      </p>
-
-      <div className="mb-3 flex items-center gap-3">
-        <div className="w-44">
-          <DateInput value={date} onChange={changeDate} />
-        </div>
-        {loading && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
-        <span className="ml-auto text-sm text-slate-500">
-          Total: <span className="font-semibold text-slate-900">{formatCurrency(total)}</span>
-        </span>
-      </div>
-
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-              <th className="px-4 py-3 font-medium">Bank</th>
-              <th className="px-4 py-3 font-medium">Holder</th>
-              <th className="px-4 py-3 text-right font-medium">Balance on date</th>
-              <th className="px-4 py-3 text-right font-medium">Current</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-slate-400">
-                  No accounts yet.
-                </td>
-              </tr>
-            ) : (
-              rows.map((r) => (
-                <tr key={r.accountId} className="border-b border-slate-100 last:border-0">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-slate-900">{r.bankName}</div>
-                    {r.bankState && <div className="text-xs text-slate-400">{r.bankState}</div>}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {r.holder || <span className="text-slate-300">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {r.balanceAsOf != null ? (
-                      <span className="font-medium text-slate-900">{formatCurrency(r.balanceAsOf)}</span>
-                    ) : (
-                      <span className="text-xs text-slate-300">not recorded</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-500">
-                    {formatCurrency(r.currentBalance)}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }

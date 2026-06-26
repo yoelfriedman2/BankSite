@@ -153,10 +153,14 @@ export async function createSweepBatch(
     const acct = byId.get(item.accountId);
     if (!acct) continue;
     const current = acct.balance != null ? Number(acct.balance) : 0;
-    const newBalance = Math.max(0, Number((current - item.amount).toFixed(2)));
+    // Never move out more than is actually there, so the return is symmetric
+    // (returning the recorded amount restores the original balance exactly).
+    const out = Math.min(item.amount, Math.max(0, current));
+    if (out <= 0) continue;
+    const newBalance = Number((current - out).toFixed(2));
     const log = [
       ...((acct.activity_log as { date: string; note: string | null }[]) ?? []),
-      { date: item.movedOutAt, note: `Moved out ${item.amount} — ${r}` },
+      { date: item.movedOutAt, note: `Moved out ${out} — ${r}` },
     ];
     const { error: updErr } = await supabase
       .from("accounts")
@@ -168,7 +172,7 @@ export async function createSweepBatch(
       user_id: user.id,
       account_id: item.accountId,
       reason: r,
-      amount: item.amount,
+      amount: out,
       left_behind: newBalance,
       moved_out_at: item.movedOutAt,
     });
@@ -177,10 +181,12 @@ export async function createSweepBatch(
       account_id: item.accountId,
       as_of_date: item.movedOutAt,
       balance: newBalance,
-      change_amount: -item.amount,
+      change_amount: -out,
       reason: `sweep out — ${r}`,
     });
   }
+
+  if (sweepRows.length === 0) return { error: "Those accounts have no balance to move." };
 
   if (sweepRows.length) {
     const { error } = await supabase.from("account_sweeps").insert(sweepRows);
@@ -245,6 +251,45 @@ export async function returnSweep(sweepId: string): Promise<{ error?: string }> 
 
   revalidate();
   return {};
+}
+
+/** Return several swept amounts at once (used by "Return all" on a reason). */
+export async function returnSweepBatch(ids: string[]): Promise<{ error?: string }> {
+  for (const id of ids) {
+    const res = await returnSweep(id);
+    if (res.error) return res;
+  }
+  return {};
+}
+
+export type BalancePoint = {
+  as_of_date: string;
+  balance: number;
+  change_amount: number | null;
+  reason: string | null;
+};
+
+/** The dated balance points for one account (newest first), for its history view. */
+export async function getBalanceHistory(accountId: string): Promise<BalancePoint[]> {
+  if (DEMO_MODE) return [];
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data } = await supabase
+    .from("account_balance_history")
+    .select("as_of_date, balance, change_amount, reason")
+    .eq("account_id", accountId)
+    .order("as_of_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(60);
+  return (data ?? []).map((h) => ({
+    as_of_date: h.as_of_date as string,
+    balance: Number(h.balance),
+    change_amount: h.change_amount != null ? Number(h.change_amount) : null,
+    reason: (h.reason as string | null) ?? null,
+  }));
 }
 
 /** Each account's balance as of the given date (latest recorded point on or before it). */
