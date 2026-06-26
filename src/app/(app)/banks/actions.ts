@@ -898,29 +898,35 @@ function normHolding(s: string | null | undefined): string {
   return (s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-/** Certs that share a holding company with at least one other bank in the list. */
-function holdingCompanyLinkedCerts(
-  banks: { cert: number | null; holding_company: string | null }[],
-): number[] {
-  const byHolding = new Map<string, number[]>();
+type BankLite = { cert: number | null; name: string; holding_company: string | null };
+
+/** For each cert, the names of its same-holding-company siblings in the list. */
+function holdingCompanyRelatedNames(banks: BankLite[]): Record<number, string[]> {
+  const byHolding = new Map<string, { cert: number; name: string }[]>();
   for (const b of banks) {
     if (b.cert == null) continue;
     const h = normHolding(b.holding_company);
     if (!h) continue;
-    (byHolding.get(h) ?? byHolding.set(h, []).get(h)!).push(b.cert);
+    (byHolding.get(h) ?? byHolding.set(h, []).get(h)!).push({ cert: b.cert, name: b.name });
   }
-  const out: number[] = [];
-  for (const certs of byHolding.values()) if (certs.length >= 2) out.push(...certs);
+  const out: Record<number, string[]> = {};
+  for (const group of byHolding.values()) {
+    if (group.length < 2) continue;
+    for (const b of group) {
+      out[b.cert] = group.filter((x) => x.cert !== b.cert).map((x) => x.name);
+    }
+  }
   return out;
 }
 
-/** Certs of the current user's banks that have at least one related bank —
- *  an explicit link OR a same-holding-company sibling. Drives the list-level
- *  "linked" indicator so you can see it without opening each bank. */
-export async function getLinkedCerts(): Promise<number[]> {
+/** Maps each of the current user's bank certs to the names of its related banks
+ *  (explicit links + same-holding-company siblings). Drives the list-level
+ *  "linked" indicator and its tooltip, so you can see which banks are linked
+ *  without opening the drawer. */
+export async function getRelatedNamesByCert(): Promise<Record<number, string[]>> {
   if (DEMO_MODE) {
-    return holdingCompanyLinkedCerts(
-      getDemoBanks().map((b) => ({ cert: b.cert, holding_company: b.holding_company })),
+    return holdingCompanyRelatedNames(
+      getDemoBanks().map((b) => ({ cert: b.cert, name: b.name, holding_company: b.holding_company })),
     );
   }
 
@@ -928,19 +934,24 @@ export async function getLinkedCerts(): Promise<number[]> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return [];
+  if (!user) return {};
 
   const { data: banks } = await supabase
     .from("banks")
-    .select("cert, holding_company")
+    .select("cert, name, holding_company")
     .eq("user_id", user.id)
     .is("deleted_at", null);
-  const userBanks = (banks ?? []) as { cert: number | null; holding_company: string | null }[];
-  const userCerts = new Set(
-    userBanks.map((b) => b.cert).filter((c): c is number => c != null),
-  );
+  const userBanks = (banks ?? []) as BankLite[];
 
-  const linked = new Set<number>(holdingCompanyLinkedCerts(userBanks));
+  const nameByCert = new Map<number, string>();
+  for (const b of userBanks) if (b.cert != null) nameByCert.set(b.cert, b.name);
+
+  const related = holdingCompanyRelatedNames(userBanks);
+  const addRelated = (cert: number, otherCert: number) => {
+    const name = nameByCert.get(otherCert) ?? `cert #${otherCert}`;
+    (related[cert] ??= []);
+    if (!related[cert].includes(name)) related[cert].push(name);
+  };
 
   const { data: rels } = await supabase
     .from("bank_relationships")
@@ -948,11 +959,11 @@ export async function getLinkedCerts(): Promise<number[]> {
   for (const r of rels ?? []) {
     const a = r.cert_a as number;
     const b = r.cert_b as number;
-    if (userCerts.has(a)) linked.add(a);
-    if (userCerts.has(b)) linked.add(b);
+    if (nameByCert.has(a)) addRelated(a, b);
+    if (nameByCert.has(b)) addRelated(b, a);
   }
 
-  return [...linked];
+  return related;
 }
 
 /** Returns all banks linked to the given cert (from this user's perspective).

@@ -170,7 +170,7 @@ export function BanksClient({
   userDisplayName,
   currentUserId,
   unreadCerts,
-  linkedCerts,
+  relatedNamesByCert,
   initialStatus,
   initialQuery,
 }: {
@@ -181,7 +181,7 @@ export function BanksClient({
   userDisplayName: string;
   currentUserId: string | null;
   unreadCerts: number[];
-  linkedCerts: number[];
+  relatedNamesByCert: Record<number, string[]>;
   initialStatus?: BankStatus | "all";
   initialQuery?: string;
 }) {
@@ -190,7 +190,6 @@ export function BanksClient({
     () => new Set(unreadCerts.filter((c) => !localReadCerts.has(c))),
     [unreadCerts, localReadCerts],
   );
-  const linkedSet = useMemo(() => new Set(linkedCerts), [linkedCerts]);
   const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<BankStatus | "all">(
     initialStatus ?? "all",
@@ -523,11 +522,17 @@ export function BanksClient({
                         title="Unread update"
                       />
                     )}
-                    {b.cert != null && linkedSet.has(b.cert) && (
-                      <span title="Has related banks" className="inline-flex shrink-0">
-                        <Link2 className="h-3.5 w-3.5 text-slate-400" aria-label="Has related banks" />
+                    {b.cert != null && relatedNamesByCert[b.cert]?.length ? (
+                      <span
+                        title={`Related: ${relatedNamesByCert[b.cert].join(", ")}`}
+                        className="inline-flex shrink-0"
+                      >
+                        <Link2
+                          className="h-3.5 w-3.5 text-slate-400"
+                          aria-label={`Related banks: ${relatedNamesByCert[b.cert].join(", ")}`}
+                        />
                       </span>
-                    )}
+                    ) : null}
                     <ConversionBadge stage={b.conversion_stage} />
                   </div>
                   <div className="mt-0.5 truncate text-xs text-slate-400">
@@ -600,11 +605,17 @@ export function BanksClient({
                             title="Unread update"
                           />
                         )}
-                        {b.cert != null && linkedSet.has(b.cert) && (
-                          <span title="Has related banks" className="inline-flex shrink-0">
-                            <Link2 className="h-3.5 w-3.5 text-slate-400" aria-label="Has related banks" />
+                        {b.cert != null && relatedNamesByCert[b.cert]?.length ? (
+                          <span
+                            title={`Related: ${relatedNamesByCert[b.cert].join(", ")}`}
+                            className="inline-flex shrink-0"
+                          >
+                            <Link2
+                              className="h-3.5 w-3.5 text-slate-400"
+                              aria-label={`Related banks: ${relatedNamesByCert[b.cert].join(", ")}`}
+                            />
                           </span>
-                        )}
+                        ) : null}
                         <ConversionBadge stage={b.conversion_stage} />
                       </div>
                       {b.holding_company && (

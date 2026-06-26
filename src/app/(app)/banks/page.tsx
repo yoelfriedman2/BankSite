@@ -8,7 +8,7 @@ import {
   getDemoProfile,
   getKnownHolders,
 } from "@/lib/demo";
-import { seedBanks, getUnreadCommentCerts, getLinkedCerts } from "./actions";
+import { seedBanks, getUnreadCommentCerts, getRelatedNamesByCert } from "./actions";
 import type { Account, Bank, BankStatus } from "@/lib/types";
 
 const VALID_STATUSES: Array<BankStatus | "all"> = [
@@ -36,9 +36,9 @@ export default async function BanksPage({
   const initialQuery = typeof sp.q === "string" ? sp.q : undefined;
 
   if (DEMO_MODE) {
-    const [unreadCerts, linkedCerts] = await Promise.all([
+    const [unreadCerts, relatedNamesByCert] = await Promise.all([
       getUnreadCommentCerts(),
-      getLinkedCerts(),
+      getRelatedNamesByCert(),
     ]);
     const demoProfile = getDemoProfile();
     return (
@@ -50,7 +50,7 @@ export default async function BanksPage({
         userDisplayName={demoProfile.display_name ?? ""}
         currentUserId={DEMO_USER.id}
         unreadCerts={unreadCerts}
-        linkedCerts={linkedCerts}
+        relatedNamesByCert={relatedNamesByCert}
         initialStatus={initialStatus}
         initialQuery={initialQuery}
       />
@@ -97,9 +97,9 @@ export default async function BanksPage({
     ]),
   ).sort();
 
-  const [unreadCerts, linkedCerts] = await Promise.all([
+  const [unreadCerts, relatedNamesByCert] = await Promise.all([
     getUnreadCommentCerts(),
-    getLinkedCerts(),
+    getRelatedNamesByCert(),
   ]);
 
   return (
@@ -111,7 +111,7 @@ export default async function BanksPage({
       userDisplayName={profile?.display_name ?? ""}
       currentUserId={user?.id ?? null}
       unreadCerts={unreadCerts}
-      linkedCerts={linkedCerts}
+      relatedNamesByCert={relatedNamesByCert}
       initialStatus={initialStatus}
       initialQuery={initialQuery}
     />
