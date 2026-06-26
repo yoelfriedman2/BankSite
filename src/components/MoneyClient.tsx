@@ -1,0 +1,468 @@
+"use client";
+
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Plus,
+  Loader2,
+  Check,
+  X,
+  ArrowDownToLine,
+  CalendarSearch,
+} from "lucide-react";
+import { DateInput } from "@/components/DateInput";
+import { formatCurrency, formatDate } from "@/lib/format";
+import {
+  createSweepBatch,
+  returnSweep,
+  getBalanceAsOf,
+  type OutstandingSweep,
+  type SweepAccountOption,
+  type BalanceAsOfRow,
+} from "@/app/(app)/money/actions";
+
+const inputClass =
+  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
+
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
+export function MoneyClient({
+  sweeps,
+  accounts,
+  initialAsOf,
+  initialAsOfDate,
+}: {
+  sweeps: OutstandingSweep[];
+  accounts: SweepAccountOption[];
+  initialAsOf: BalanceAsOfRow[];
+  initialAsOfDate: string;
+}) {
+  const router = useRouter();
+  const [returningId, setReturningId] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+  const [newOpen, setNewOpen] = useState(false);
+
+  // Group outstanding sweeps by reason
+  const groups = useMemo(() => {
+    const m = new Map<string, OutstandingSweep[]>();
+    for (const s of sweeps) (m.get(s.reason) ?? m.set(s.reason, []).get(s.reason)!).push(s);
+    return [...m.entries()];
+  }, [sweeps]);
+
+  const totalOut = sweeps.reduce((s, x) => s + x.amount, 0);
+
+  function handleReturn(id: string) {
+    setReturningId(id);
+    startTransition(async () => {
+      await returnSweep(id);
+      setReturningId(null);
+      router.refresh();
+    });
+  }
+
+  function handleReturnGroup(items: OutstandingSweep[]) {
+    if (!window.confirm(`Mark all ${items.length} as returned?`)) return;
+    startTransition(async () => {
+      for (const it of items) await returnSweep(it.id);
+      router.refresh();
+    });
+  }
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-slate-900">Money moved</h1>
+        <p className="text-sm text-slate-500">
+          Track cash temporarily pulled from accounts (e.g. to fund an IPO) and what still needs to go back.
+        </p>
+      </div>
+
+      {/* Summary */}
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="rounded-xl bg-slate-50 p-4">
+          <div className="text-xs text-slate-500">Out now, to return</div>
+          <div className="text-2xl font-semibold text-slate-900">{formatCurrency(totalOut)}</div>
+        </div>
+        <div className="rounded-xl bg-slate-50 p-4">
+          <div className="text-xs text-slate-500">Across accounts</div>
+          <div className="text-2xl font-semibold text-slate-900">{sweeps.length}</div>
+        </div>
+        <div className="rounded-xl bg-slate-50 p-4">
+          <div className="text-xs text-slate-500">Open reasons</div>
+          <div className="text-2xl font-semibold text-slate-900">{groups.length}</div>
+        </div>
+      </div>
+
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-slate-700">Currently moved out</h2>
+        <button
+          onClick={() => setNewOpen(true)}
+          className="flex items-center gap-2 rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-600"
+        >
+          <Plus className="h-4 w-4" />
+          New money move
+        </button>
+      </div>
+
+      {groups.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center">
+          <ArrowDownToLine className="mx-auto mb-3 h-7 w-7 text-slate-300" />
+          <p className="font-medium text-slate-700">Nothing moved out right now</p>
+          <p className="mt-1 text-sm text-slate-400">
+            When you pull money from accounts to fund an IPO, record it here so you remember to put it back.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {groups.map(([reason, items]) => {
+            const groupTotal = items.reduce((s, x) => s + x.amount, 0);
+            return (
+              <div key={reason} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-slate-900">{reason}</div>
+                    <div className="text-xs text-slate-500">
+                      {formatCurrency(groupTotal)} out · {items.length} account{items.length === 1 ? "" : "s"} to return
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleReturnGroup(items)}
+                    className="shrink-0 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                  >
+                    Return all
+                  </button>
+                </div>
+                <ul>
+                  {items.map((s) => (
+                    <li
+                      key={s.id}
+                      className="flex items-center gap-3 border-b border-slate-100 px-4 py-3 last:border-0"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm text-slate-800">
+                          {s.holder ? `${s.holder} · ` : ""}{s.bankName}
+                        </div>
+                        <div className="text-xs text-slate-400">
+                          Moved {formatDate(s.movedOutAt)}
+                          {s.leftBehind != null ? ` · left ${formatCurrency(s.leftBehind)}` : ""}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">
+                        {formatCurrency(s.amount)}
+                      </div>
+                      <button
+                        onClick={() => handleReturn(s.id)}
+                        disabled={returningId === s.id}
+                        className="flex shrink-0 items-center gap-1.5 rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                      >
+                        {returningId === s.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Check className="h-3.5 w-3.5" />
+                        )}
+                        Returned
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <BalanceAsOf initial={initialAsOf} initialDate={initialAsOfDate} />
+
+      {newOpen && (
+        <NewMoveModal
+          accounts={accounts}
+          onClose={() => setNewOpen(false)}
+          onSaved={() => {
+            setNewOpen(false);
+            router.refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── Balance as of a date ── */
+function BalanceAsOf({
+  initial,
+  initialDate,
+}: {
+  initial: BalanceAsOfRow[];
+  initialDate: string;
+}) {
+  const [date, setDate] = useState(initialDate);
+  const [rows, setRows] = useState<BalanceAsOfRow[]>(initial);
+  const [loading, setLoading] = useState(false);
+
+  function changeDate(d: string) {
+    setDate(d);
+    if (!d) return;
+    setLoading(true);
+    getBalanceAsOf(d)
+      .then(setRows)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }
+
+  const total = rows.reduce((s, r) => s + (r.balanceAsOf ?? 0), 0);
+
+  return (
+    <div className="mt-10">
+      <div className="mb-1 flex items-center gap-2">
+        <CalendarSearch className="h-4 w-4 text-amber-500" />
+        <h2 className="text-sm font-semibold text-slate-700">Balance as of a date</h2>
+      </div>
+      <p className="mb-3 text-xs text-slate-400">
+        What each account held on a given date — this is what sets your IPO share allocation on a bank&apos;s record date.
+      </p>
+
+      <div className="mb-3 flex items-center gap-3">
+        <div className="w-44">
+          <DateInput value={date} onChange={changeDate} />
+        </div>
+        {loading && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+        <span className="ml-auto text-sm text-slate-500">
+          Total: <span className="font-semibold text-slate-900">{formatCurrency(total)}</span>
+        </span>
+      </div>
+
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 font-medium">Bank</th>
+              <th className="px-4 py-3 font-medium">Holder</th>
+              <th className="px-4 py-3 text-right font-medium">Balance on date</th>
+              <th className="px-4 py-3 text-right font-medium">Current</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-4 py-10 text-center text-slate-400">
+                  No accounts yet.
+                </td>
+              </tr>
+            ) : (
+              rows.map((r) => (
+                <tr key={r.accountId} className="border-b border-slate-100 last:border-0">
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-slate-900">{r.bankName}</div>
+                    {r.bankState && <div className="text-xs text-slate-400">{r.bankState}</div>}
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {r.holder || <span className="text-slate-300">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums">
+                    {r.balanceAsOf != null ? (
+                      <span className="font-medium text-slate-900">{formatCurrency(r.balanceAsOf)}</span>
+                    ) : (
+                      <span className="text-xs text-slate-300">not recorded</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-slate-500">
+                    {formatCurrency(r.currentBalance)}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ── New money move modal ── */
+function NewMoveModal({
+  accounts,
+  onClose,
+  onSaved,
+}: {
+  accounts: SweepAccountOption[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [date, setDate] = useState(todayStr());
+  const [query, setQuery] = useState("");
+  const [leave, setLeave] = useState("");
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return accounts;
+    return accounts.filter(
+      (a) => a.bankName.toLowerCase().includes(q) || (a.holder ?? "").toLowerCase().includes(q),
+    );
+  }, [accounts, query]);
+
+  function applyLeave() {
+    const keep = Number(leave);
+    if (!Number.isFinite(keep)) return;
+    const next: Record<string, string> = {};
+    for (const a of accounts) {
+      const bal = a.balance ?? 0;
+      const out = Math.max(0, Number((bal - keep).toFixed(2)));
+      if (out > 0) next[a.accountId] = String(out);
+    }
+    setAmounts(next);
+  }
+
+  const selected = Object.entries(amounts).filter(([, v]) => Number(v) > 0);
+  const total = selected.reduce((s, [, v]) => s + Number(v), 0);
+
+  function handleSubmit() {
+    setError(null);
+    const items = selected.map(([accountId, v]) => ({
+      accountId,
+      amount: Number(v),
+      movedOutAt: date,
+    }));
+    startTransition(async () => {
+      const res = await createSweepBatch(reason, items);
+      if (res.error) {
+        setError(res.error);
+        return;
+      }
+      onSaved();
+    });
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4"
+      onMouseDown={onClose}
+    >
+      <div
+        className="my-8 w-full max-w-xl rounded-2xl bg-white shadow-2xl"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+          <h2 className="text-lg font-semibold text-slate-900">New money move</h2>
+          <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-4 px-6 py-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Reason</label>
+              <input
+                className={inputClass}
+                placeholder="e.g. Winchester Savings IPO"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Date moved</label>
+              <DateInput value={date} onChange={setDate} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Leave in each ($)</label>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  className={inputClass}
+                  placeholder="e.g. 100"
+                  value={leave}
+                  onChange={(e) => setLeave(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={applyLeave}
+                  className="shrink-0 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:bg-slate-100"
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <input
+              className={`${inputClass} mb-2`}
+              placeholder="Search accounts…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <div className="max-h-72 overflow-y-auto rounded-lg border border-slate-200">
+              {filtered.length === 0 ? (
+                <p className="px-3 py-6 text-center text-sm text-slate-400">No accounts match.</p>
+              ) : (
+                filtered.map((a) => {
+                  const amt = amounts[a.accountId] ?? "";
+                  const out = Number(amt);
+                  const left = a.balance != null && out > 0 ? Math.max(0, a.balance - out) : a.balance;
+                  return (
+                    <div
+                      key={a.accountId}
+                      className="flex items-center gap-3 border-b border-slate-100 px-3 py-2 last:border-0"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm text-slate-800">
+                          {a.holder ? `${a.holder} · ` : ""}{a.bankName}
+                        </div>
+                        <div className="text-xs text-slate-400">
+                          Balance {formatCurrency(a.balance)}
+                          {out > 0 ? ` · leaves ${formatCurrency(left)}` : ""}
+                        </div>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="0"
+                        className="w-28 rounded-lg border border-slate-300 px-2 py-1.5 text-right text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                        value={amt}
+                        onChange={(e) =>
+                          setAmounts((m) => ({ ...m, [a.accountId]: e.target.value }))
+                        }
+                      />
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {error && (
+            <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4">
+          <div className="text-sm text-slate-500">
+            Moving <span className="font-semibold text-slate-900">{formatCurrency(total)}</span> from {selected.length} account{selected.length === 1 ? "" : "s"}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={isPending || selected.length === 0 || !reason.trim()}
+              className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+            >
+              {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Move money
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

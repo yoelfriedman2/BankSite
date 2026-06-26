@@ -89,6 +89,32 @@ export interface Account {
   updated_at: string;
 }
 
+/** Money temporarily moved out of an account (e.g. to fund an IPO), to be returned. */
+export interface AccountSweep {
+  id: string;
+  user_id: string;
+  account_id: string;
+  reason: string;
+  amount: number;
+  left_behind: number | null;
+  moved_out_at: string;
+  returned_at: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+/** A dated balance point for an account. Balance as of date D = latest row with as_of_date <= D. */
+export interface BalanceHistoryEntry {
+  id: string;
+  user_id: string;
+  account_id: string;
+  as_of_date: string;
+  balance: number;
+  change_amount: number | null;
+  reason: string | null;
+  created_at: string;
+}
+
 /** A shared community comment on a bank (keyed by FDIC cert, visible to all users). */
 export interface BankComment {
   id: string;

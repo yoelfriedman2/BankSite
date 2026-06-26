@@ -137,17 +137,50 @@ export async function upsertAccount(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
+  const today = new Date().toISOString().slice(0, 10);
   if (values.id) {
+    // Record a dated balance point when the balance changes, so the
+    // "balance as of date" history stays accurate.
+    const { data: prev } = await supabase
+      .from("accounts")
+      .select("balance")
+      .eq("id", values.id)
+      .maybeSingle();
+    const oldBalance = prev?.balance != null ? Number(prev.balance) : null;
+
     const { error } = await supabase
       .from("accounts")
       .update(patch)
       .eq("id", values.id);
     if (error) return { error: error.message };
+
+    if (patch.balance != null && patch.balance !== oldBalance) {
+      await supabase.from("account_balance_history").insert({
+        user_id: user.id,
+        account_id: values.id,
+        as_of_date: today,
+        balance: patch.balance,
+        change_amount: oldBalance != null ? Number((patch.balance - oldBalance).toFixed(2)) : null,
+        reason: "manual update",
+      });
+    }
   } else {
-    const { error } = await supabase
+    const { data: created, error } = await supabase
       .from("accounts")
-      .insert({ ...patch, user_id: user.id, bank_id: values.bank_id });
-    if (error) return { error: error.message };
+      .insert({ ...patch, user_id: user.id, bank_id: values.bank_id })
+      .select("id")
+      .single();
+    if (error || !created) return { error: error?.message ?? "Could not add the account." };
+
+    if (patch.balance != null) {
+      await supabase.from("account_balance_history").insert({
+        user_id: user.id,
+        account_id: created.id,
+        as_of_date: today,
+        balance: patch.balance,
+        reason: "opening balance",
+      });
+    }
   }
 
   // Auto-promote to "open" on insert or edit if the bank status warrants it.
