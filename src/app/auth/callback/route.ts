@@ -49,8 +49,19 @@ export async function GET(request: NextRequest) {
             user.user_metadata?.full_name ??
             user.user_metadata?.name ??
             "";
-          void sendWelcomeEmail(user.email, name);
-          void sendNewUserNotification(name || user.email, user.email);
+          // Await the sends: in a serverless function any work left pending after
+          // the response is returned can be killed before it runs, so fire-and-forget
+          // silently dropped these. Errors are logged so failures are visible.
+          const [welcome, adminNotif] = await Promise.all([
+            sendWelcomeEmail(user.email, name).catch((e) => ({ error: String(e) })),
+            sendNewUserNotification(name || user.email, user.email).catch((e) => ({
+              error: String(e),
+            })),
+          ]);
+          if (welcome?.error)
+            console.error("[auth/callback] welcome email failed:", welcome.error);
+          if (adminNotif?.error)
+            console.error("[auth/callback] admin notification failed:", adminNotif.error);
         }
       }
       return response;
