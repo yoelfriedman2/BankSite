@@ -176,6 +176,7 @@ export function MoneyClient({
       {newOpen && (
         <NewMoveModal
           accounts={accounts}
+          existingReasons={groups.map(([r]) => r)}
           onClose={() => setNewOpen(false)}
           onSaved={() => {
             setNewOpen(false);
@@ -281,17 +282,18 @@ function BalanceAsOf({
 /* ── New money move modal ── */
 function NewMoveModal({
   accounts,
+  existingReasons,
   onClose,
   onSaved,
 }: {
   accounts: SweepAccountOption[];
+  existingReasons: string[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [reason, setReason] = useState("");
   const [date, setDate] = useState(todayStr());
   const [query, setQuery] = useState("");
-  const [leave, setLeave] = useState("");
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -303,18 +305,6 @@ function NewMoveModal({
       (a) => a.bankName.toLowerCase().includes(q) || (a.holder ?? "").toLowerCase().includes(q),
     );
   }, [accounts, query]);
-
-  function applyLeave() {
-    const keep = Number(leave);
-    if (!Number.isFinite(keep)) return;
-    const next: Record<string, string> = {};
-    for (const a of accounts) {
-      const bal = a.balance ?? 0;
-      const out = Math.max(0, Number((bal - keep).toFixed(2)));
-      if (out > 0) next[a.accountId] = String(out);
-    }
-    setAmounts(next);
-  }
 
   const selected = Object.entries(amounts).filter(([, v]) => Number(v) > 0);
   const total = selected.reduce((s, [, v]) => s + Number(v), 0);
@@ -358,35 +348,24 @@ function NewMoveModal({
               <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Reason</label>
               <input
                 className={inputClass}
+                list="sweep-reasons"
                 placeholder="e.g. Winchester Savings IPO"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 autoFocus
               />
+              <datalist id="sweep-reasons">
+                {existingReasons.map((r) => (
+                  <option key={r} value={r} />
+                ))}
+              </datalist>
+              <p className="mt-1 text-xs text-slate-400">
+                Entered once — it covers every account you add below.
+              </p>
             </div>
-            <div>
+            <div className="col-span-2 sm:col-span-1">
               <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Date moved</label>
               <DateInput value={date} onChange={setDate} />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Leave in each ($)</label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  min="0"
-                  className={inputClass}
-                  placeholder="e.g. 100"
-                  value={leave}
-                  onChange={(e) => setLeave(e.target.value)}
-                />
-                <button
-                  type="button"
-                  onClick={applyLeave}
-                  className="shrink-0 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:bg-slate-100"
-                >
-                  Apply
-                </button>
-              </div>
             </div>
           </div>
 
@@ -404,7 +383,8 @@ function NewMoveModal({
                 filtered.map((a) => {
                   const amt = amounts[a.accountId] ?? "";
                   const out = Number(amt);
-                  const left = a.balance != null && out > 0 ? Math.max(0, a.balance - out) : a.balance;
+                  const after =
+                    a.balance != null && out > 0 ? Math.max(0, Number((a.balance - out).toFixed(2))) : null;
                   return (
                     <div
                       key={a.accountId}
@@ -416,13 +396,14 @@ function NewMoveModal({
                         </div>
                         <div className="text-xs text-slate-400">
                           Balance {formatCurrency(a.balance)}
-                          {out > 0 ? ` · leaves ${formatCurrency(left)}` : ""}
+                          {after != null ? ` → ${formatCurrency(after)} after` : ""}
                         </div>
                       </div>
                       <input
                         type="number"
                         min="0"
-                        placeholder="0"
+                        placeholder="amount"
+                        aria-label={`Amount to move from ${a.holder ?? ""} ${a.bankName}`}
                         className="w-28 rounded-lg border border-slate-300 px-2 py-1.5 text-right text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
                         value={amt}
                         onChange={(e) =>
