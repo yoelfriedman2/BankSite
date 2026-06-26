@@ -37,7 +37,7 @@ import {
 import { BankForm } from "@/components/BankForm";
 import { ImportDialog } from "@/components/ImportDialog";
 import { exportToExcel } from "@/lib/export";
-import { setBankStatus, deleteBank } from "@/app/(app)/banks/actions";
+import { setBankStatus, deleteBank, type RelatedRef } from "@/app/(app)/banks/actions";
 
 type SortKey =
   | "name"
@@ -170,7 +170,7 @@ export function BanksClient({
   userDisplayName,
   currentUserId,
   unreadCerts,
-  relatedNamesByCert,
+  relatedByCert,
   initialStatus,
   initialQuery,
 }: {
@@ -181,7 +181,7 @@ export function BanksClient({
   userDisplayName: string;
   currentUserId: string | null;
   unreadCerts: number[];
-  relatedNamesByCert: Record<number, string[]>;
+  relatedByCert: Record<number, RelatedRef[]>;
   initialStatus?: BankStatus | "all";
   initialQuery?: string;
 }) {
@@ -210,6 +210,13 @@ export function BanksClient({
     for (const a of accounts) (map[a.bank_id] ??= []).push(a);
     return map;
   }, [accounts]);
+
+  // cert -> bank, so a related-bank chip can open that bank's drawer directly.
+  const bankByCert = useMemo(() => {
+    const map = new Map<number, Bank>();
+    for (const b of banks) if (b.cert != null && !map.has(b.cert)) map.set(b.cert, b);
+    return map;
+  }, [banks]);
 
   const counts = useMemo(() => {
     const c = {
@@ -331,6 +338,41 @@ export function BanksClient({
     if (b.cert != null) {
       setLocalReadCerts((prev) => new Set([...prev, b.cert!]));
     }
+  }
+
+  /** Always-visible, clickable related-bank chips for a row. Styled distinctly
+   *  from the gray holding-company line (link icon + indigo pills). Clicking a
+   *  chip opens that bank's drawer instead of the row's own. */
+  function RelatedChips({ cert }: { cert: number | null }) {
+    const refs = cert != null ? relatedByCert[cert] : undefined;
+    if (!refs || refs.length === 0) return null;
+    return (
+      <div className="mt-1 flex flex-wrap items-center gap-1">
+        <Link2 className="h-3 w-3 shrink-0 text-indigo-400" aria-hidden />
+        {refs.map((r) => {
+          const target = bankByCert.get(r.cert);
+          const cls =
+            "rounded border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700";
+          return target ? (
+            <button
+              key={r.cert}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                openBank(target);
+              }}
+              className={`${cls} hover:bg-indigo-100`}
+            >
+              {r.name}
+            </button>
+          ) : (
+            <span key={r.cert} className={`${cls} opacity-70`}>
+              {r.name}
+            </span>
+          );
+        })}
+      </div>
+    );
   }
   function openAdd() {
     setEditingBankId(null);
@@ -501,10 +543,18 @@ export function BanksClient({
             const total = accts.reduce((s, a) => s + (a.balance ?? 0), 0);
             const health = bankHealth(accts, defaultDormancyMonths);
             return (
-              <button
+              <div
                 key={b.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => openBank(b)}
-                className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    openBank(b);
+                  }
+                }}
+                className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
               >
                 {health !== "none" ? (
                   <ActivityDot level={health} />
@@ -522,17 +572,6 @@ export function BanksClient({
                         title="Unread update"
                       />
                     )}
-                    {b.cert != null && relatedNamesByCert[b.cert]?.length ? (
-                      <span
-                        title={`Related: ${relatedNamesByCert[b.cert].join(", ")}`}
-                        className="inline-flex shrink-0"
-                      >
-                        <Link2
-                          className="h-3.5 w-3.5 text-slate-400"
-                          aria-label={`Related banks: ${relatedNamesByCert[b.cert].join(", ")}`}
-                        />
-                      </span>
-                    ) : null}
                     <ConversionBadge stage={b.conversion_stage} />
                   </div>
                   <div className="mt-0.5 truncate text-xs text-slate-400">
@@ -541,9 +580,10 @@ export function BanksClient({
                       ? `${b.state ? " · " : ""}${accts.length} acct${accts.length === 1 ? "" : "s"} · ${formatCurrency(total)}`
                       : ""}
                   </div>
+                  <RelatedChips cert={b.cert} />
                 </div>
                 <StatusBadge status={b.status} />
-              </button>
+              </div>
             );
           })
         )}
@@ -605,17 +645,6 @@ export function BanksClient({
                             title="Unread update"
                           />
                         )}
-                        {b.cert != null && relatedNamesByCert[b.cert]?.length ? (
-                          <span
-                            title={`Related: ${relatedNamesByCert[b.cert].join(", ")}`}
-                            className="inline-flex shrink-0"
-                          >
-                            <Link2
-                              className="h-3.5 w-3.5 text-slate-400"
-                              aria-label={`Related banks: ${relatedNamesByCert[b.cert].join(", ")}`}
-                            />
-                          </span>
-                        ) : null}
                         <ConversionBadge stage={b.conversion_stage} />
                       </div>
                       {b.holding_company && (
@@ -623,6 +652,7 @@ export function BanksClient({
                           {titleCase(b.holding_company)}
                         </div>
                       )}
+                      <RelatedChips cert={b.cert} />
                     </td>
                     <td className="px-3 py-3 text-slate-600">
                       {b.state ? (

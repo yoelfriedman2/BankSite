@@ -899,9 +899,10 @@ function normHolding(s: string | null | undefined): string {
 }
 
 type BankLite = { cert: number | null; name: string; holding_company: string | null };
+export type RelatedRef = { cert: number; name: string; source: "manual" | "holding_company" };
 
-/** For each cert, the names of its same-holding-company siblings in the list. */
-function holdingCompanyRelatedNames(banks: BankLite[]): Record<number, string[]> {
+/** For each cert, its same-holding-company siblings in the list. */
+function holdingCompanyRelated(banks: BankLite[]): Record<number, RelatedRef[]> {
   const byHolding = new Map<string, { cert: number; name: string }[]>();
   for (const b of banks) {
     if (b.cert == null) continue;
@@ -909,23 +910,24 @@ function holdingCompanyRelatedNames(banks: BankLite[]): Record<number, string[]>
     if (!h) continue;
     (byHolding.get(h) ?? byHolding.set(h, []).get(h)!).push({ cert: b.cert, name: b.name });
   }
-  const out: Record<number, string[]> = {};
+  const out: Record<number, RelatedRef[]> = {};
   for (const group of byHolding.values()) {
     if (group.length < 2) continue;
     for (const b of group) {
-      out[b.cert] = group.filter((x) => x.cert !== b.cert).map((x) => x.name);
+      out[b.cert] = group
+        .filter((x) => x.cert !== b.cert)
+        .map((x) => ({ cert: x.cert, name: x.name, source: "holding_company" as const }));
     }
   }
   return out;
 }
 
-/** Maps each of the current user's bank certs to the names of its related banks
- *  (explicit links + same-holding-company siblings). Drives the list-level
- *  "linked" indicator and its tooltip, so you can see which banks are linked
- *  without opening the drawer. */
-export async function getRelatedNamesByCert(): Promise<Record<number, string[]>> {
+/** Maps each of the current user's bank certs to its related banks (explicit
+ *  links + same-holding-company siblings), each with cert + name so the list
+ *  can render them as clickable chips without opening the drawer. */
+export async function getRelatedByCert(): Promise<Record<number, RelatedRef[]>> {
   if (DEMO_MODE) {
-    return holdingCompanyRelatedNames(
+    return holdingCompanyRelated(
       getDemoBanks().map((b) => ({ cert: b.cert, name: b.name, holding_company: b.holding_company })),
     );
   }
@@ -946,11 +948,16 @@ export async function getRelatedNamesByCert(): Promise<Record<number, string[]>>
   const nameByCert = new Map<number, string>();
   for (const b of userBanks) if (b.cert != null) nameByCert.set(b.cert, b.name);
 
-  const related = holdingCompanyRelatedNames(userBanks);
-  const addRelated = (cert: number, otherCert: number) => {
-    const name = nameByCert.get(otherCert) ?? `cert #${otherCert}`;
+  const related = holdingCompanyRelated(userBanks);
+  const addManual = (cert: number, otherCert: number) => {
     (related[cert] ??= []);
-    if (!related[cert].includes(name)) related[cert].push(name);
+    if (!related[cert].some((r) => r.cert === otherCert)) {
+      related[cert].push({
+        cert: otherCert,
+        name: nameByCert.get(otherCert) ?? `cert #${otherCert}`,
+        source: "manual",
+      });
+    }
   };
 
   const { data: rels } = await supabase
@@ -959,8 +966,8 @@ export async function getRelatedNamesByCert(): Promise<Record<number, string[]>>
   for (const r of rels ?? []) {
     const a = r.cert_a as number;
     const b = r.cert_b as number;
-    if (nameByCert.has(a)) addRelated(a, b);
-    if (nameByCert.has(b)) addRelated(b, a);
+    if (nameByCert.has(a)) addManual(a, b);
+    if (nameByCert.has(b)) addManual(b, a);
   }
 
   return related;
