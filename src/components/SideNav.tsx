@@ -10,7 +10,7 @@ import {
   CalendarSearch,
   CalendarDays,
   Printer,
-  History,
+  Sparkles,
   ShieldCheck,
   Settings,
   Trash2,
@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { GlobalSearch } from "@/components/GlobalSearch";
+import { useChangelogUnread } from "@/components/useChangelogUnread";
 
 type NavLink = {
   href: string;
@@ -35,7 +36,7 @@ const LINKS: NavLink[] = [
   { href: "/balances", label: "Balance by date", icon: CalendarSearch, tour: "balances" },
   { href: "/calendar", label: "Calendar", icon: CalendarDays, tour: "calendar" },
   { href: "/checks", label: "Print Checks", icon: Printer, tour: "checks" },
-  { href: "/activity", label: "Activity", icon: History, tour: "activity" },
+  { href: "/updates", label: "Updates", icon: Sparkles, tour: "updates" },
   { href: "/admin", label: "Admin", icon: ShieldCheck, tour: "admin", ownerOnly: true },
   { href: "/settings", label: "Settings", icon: Settings, tour: "settings" },
   { href: "/trash", label: "Trash", icon: Trash2, tour: "trash" },
@@ -55,6 +56,7 @@ export function SideNav({
 }) {
   const pathname = usePathname();
   const links = LINKS.filter((l) => !l.ownerOnly || isOwner);
+  const updatesUnread = useChangelogUnread();
 
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-800 bg-slate-900 text-slate-300 md:flex md:sticky md:top-0 md:h-screen md:overflow-y-auto">
@@ -86,6 +88,9 @@ export function SideNav({
             >
               <Icon className="h-[18px] w-[18px]" />
               {label}
+              {href === "/updates" && updatesUnread && (
+                <span className="ml-auto h-2 w-2 rounded-full bg-amber-400" />
+              )}
             </Link>
           );
         })}
