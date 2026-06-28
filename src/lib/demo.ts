@@ -270,6 +270,7 @@ function createInitialStore(): DemoStore {
     notify_new_comments: false,
     notify_product_updates: false,
     banks_seeded: true,
+    onboarded: true,
     created_at: new Date().toISOString(),
   };
 

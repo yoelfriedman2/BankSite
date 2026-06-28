@@ -33,9 +33,12 @@ export default async function AppLayout({
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("display_name")
+      .select("display_name, onboarded")
       .eq("id", user.id)
       .maybeSingle();
+
+    // New users finish setup (confirm their name) before entering the app.
+    if (!profile?.onboarded) redirect("/welcome");
 
     displayName =
       profile?.display_name ||

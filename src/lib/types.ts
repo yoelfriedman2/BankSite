@@ -149,6 +149,7 @@ export interface Profile {
   notify_new_comments: boolean;
   notify_product_updates: boolean;
   banks_seeded: boolean;
+  onboarded: boolean;
   created_at: string;
 }
 

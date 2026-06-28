@@ -125,7 +125,12 @@ export function LoginForm({ initialError, notice }: { initialError?: string; not
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        // Request the user's name/email. Microsoft only returns the `name` claim
+        // when `profile` is in scope; Google includes it by default.
+        scopes: provider === "azure" ? "openid profile email" : undefined,
+      },
     });
     if (error) {
       setError(error.message);
