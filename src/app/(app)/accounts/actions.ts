@@ -53,7 +53,7 @@ function integer(v: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function buildPatch(values: AccountFormValues): Omit<AccountFields, "deleted_at"> {
+function buildPatch(values: AccountFormValues): Omit<AccountFields, "deleted_at" | "last_check_number"> {
   const log = (values.activity_log ?? [])
     .filter((e) => e.date)
     .map((e) => ({ date: e.date, note: e.note?.trim() ? e.note.trim() : null }));
@@ -83,7 +83,7 @@ function buildPatch(values: AccountFormValues): Omit<AccountFields, "deleted_at"
   };
 }
 
-function fieldsFromAccount(a: Account): Omit<AccountFields, "deleted_at"> {
+function fieldsFromAccount(a: Account): Omit<AccountFields, "deleted_at" | "last_check_number"> {
   return {
     holder: a.holder,
     account_type: a.account_type,
@@ -122,7 +122,7 @@ export async function upsertAccount(
     if (values.id) {
       updateDemoAccount(values.id, patch);
     } else {
-      addDemoAccount(values.bank_id, { ...patch, deleted_at: null });
+      addDemoAccount(values.bank_id, { ...patch, last_check_number: null, deleted_at: null });
     }
     if (demoBank && PROMOTE_FROM.has(demoBank.status)) {
       updateDemoBank(values.bank_id, { status: "open" });
@@ -281,6 +281,7 @@ export async function duplicateAccount(
       ...fieldsFromAccount(source),
       account_number: null,
       activity_log: [],
+      last_check_number: null,
       deleted_at: null,
     });
     if (demoBank && PROMOTE_FROM.has(demoBank.status)) {
@@ -325,6 +326,17 @@ export async function duplicateAccount(
 
   revalidate();
   return {};
+}
+
+/** Persist the last check number used for an account so the next print starts from last+1. */
+export async function saveLastCheckNumber(accountId: string, num: number): Promise<void> {
+  if (DEMO_MODE || !accountId || !Number.isInteger(num) || num < 0) return;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+  await supabase.from("accounts").update({ last_check_number: num }).eq("id", accountId);
 }
 
 /** One-click: stamp an account's last activity as today (resets dormancy clock). */

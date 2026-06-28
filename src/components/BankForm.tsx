@@ -443,6 +443,21 @@ export function BankForm({
             )}
           </section>
 
+          {/* ── Shared-field update notice ── */}
+          {initial?.shared_updated_by &&
+            initial.shared_updated_by !== currentUserId &&
+            initial.shared_updated_by_name && (
+              <div className="mx-6 mt-0 mb-0 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                <p className="text-xs text-amber-800">
+                  <span className="font-semibold">{initial.shared_updated_by_name}</span>
+                  {" updated shared bank info"}
+                  {initial.shared_fields_updated_at && (
+                    <> on {formatDate(initial.shared_fields_updated_at.slice(0, 10))}</>
+                  )}
+                </p>
+              </div>
+            )}
+
           {/* ── Bank info (shared) ── */}
           <section className="px-6 py-5">
             <SectionHeader title="Bank info" shared={true} />

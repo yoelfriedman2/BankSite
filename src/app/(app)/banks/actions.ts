@@ -168,6 +168,18 @@ export async function upsertBank(
   // shared_fields_updated_at / shared_updated_by are stamped on OTHER users' rows so the
   // amber unread dot fires for them — never on the editor's own row.
   if (patch.cert != null) {
+    // Resolve updater display name once so the notification can show it without a profile lookup.
+    const { data: updaterProfile } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", user.id)
+      .maybeSingle();
+    const updaterName =
+      (updaterProfile?.display_name as string | null) ||
+      (user.user_metadata?.full_name as string | undefined) ||
+      user.email ||
+      null;
+
     const sharedPatch = {
       open_methods: patch.open_methods,
       eligibility: patch.eligibility,
@@ -178,6 +190,7 @@ export async function upsertBank(
       conversion_stage: patch.conversion_stage,
       shared_fields_updated_at: new Date().toISOString(),
       shared_updated_by: user.id,
+      shared_updated_by_name: updaterName,
     };
     const admin = createAdminClient();
     await admin
@@ -593,6 +606,24 @@ export async function seedBanks(): Promise<{ seeded?: number; error?: string }> 
   const payload = BANKS_SEED.map((s) => ({ user_id: user.id, ...s }));
   const { error } = await supabase.from("banks").insert(payload);
   if (error) return { error: error.message };
+
+  // Set cannot_open on banks whose community notes contain strong denial signals,
+  // so new users start with a more accurate status rather than "untracked".
+  const CANNOT_OPEN_RE = /can'?t\s+open|cannot\s+open|won'?t\s+open|will\s+not\s+open|not\s+accepting|doesn'?t\s+open|does\s+not\s+open|no\s+new\s+accounts|denied\b|rejected\b|declined?\b/i;
+  const { data: comments } = await supabase
+    .from("bank_comments")
+    .select("cert, body");
+  const cannotOpenCerts = new Set<number>();
+  for (const c of comments ?? []) {
+    if (CANNOT_OPEN_RE.test(c.body as string)) cannotOpenCerts.add(c.cert as number);
+  }
+  if (cannotOpenCerts.size > 0) {
+    await supabase
+      .from("banks")
+      .update({ status: "cannot_open" })
+      .in("cert", [...cannotOpenCerts])
+      .is("deleted_at", null);
+  }
 
   // No revalidatePath here: seedBanks runs during the Banks page render (which
   // re-queries immediately after), and revalidatePath can't be called mid-render.
@@ -1131,4 +1162,46 @@ export async function searchBanksForRelationship(
       state: (b.state as string | null) ?? null,
       bankId: b.id as string,
     }));
+}
+
+export type CommentExportRow = {
+  bank_name: string;
+  cert: number;
+  author_name: string | null;
+  body: string;
+  created_at: string;
+};
+
+/** Returns all community notes across all users, with a bank name resolved per cert.
+ *  Uses the admin client since bank_comments RLS is scoped per-user. */
+export async function getAllBankComments(): Promise<CommentExportRow[]> {
+  if (DEMO_MODE) return [];
+
+  const admin = createAdminClient();
+  const { data: comments } = await admin
+    .from("bank_comments")
+    .select("cert, author_name, body, created_at")
+    .order("cert")
+    .order("created_at", { ascending: true });
+  if (!comments?.length) return [];
+
+  const certs = [...new Set(comments.map((c) => c.cert as number))];
+  const { data: banks } = await admin
+    .from("banks")
+    .select("cert, name")
+    .in("cert", certs)
+    .is("deleted_at", null);
+
+  const nameByCert = new Map<number, string>();
+  for (const b of banks ?? []) {
+    if (!nameByCert.has(b.cert as number)) nameByCert.set(b.cert as number, b.name as string);
+  }
+
+  return comments.map((c) => ({
+    bank_name: nameByCert.get(c.cert as number) ?? `Cert ${c.cert}`,
+    cert: c.cert as number,
+    author_name: c.author_name as string | null,
+    body: c.body as string,
+    created_at: c.created_at as string,
+  }));
 }

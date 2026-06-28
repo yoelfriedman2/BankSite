@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { X, Printer } from "lucide-react";
 import type { Account } from "@/lib/types";
+import { saveLastCheckNumber } from "@/app/(app)/accounts/actions";
 
 // ── number → words ────────────────────────────────────────────────────────────
 const ONES = [
@@ -250,7 +251,9 @@ export function CheckPrintModal({
   const [payee, setPayee] = useState("");
   const [amount, setAmount] = useState("");
   const [memo, setMemo] = useState("");
-  const [checkNum, setCheckNum] = useState("");
+  const [checkNum, setCheckNum] = useState(() =>
+    account.last_check_number != null ? String(account.last_check_number + 1) : "",
+  );
   const [date, setDate] = useState(today);
 
   const words = amountWords(amount);
@@ -265,6 +268,11 @@ export function CheckPrintModal({
       buildPrintHTML({ holder, bankName, bankCity, routing, accountNum, payee, amount, amountW: words, memo, checkNum, date }),
     );
     win.document.close();
+    // Persist the check number so next print defaults to this+1
+    const num = parseInt(checkNum, 10);
+    if (account.id && !isNaN(num) && num > 0) {
+      saveLastCheckNumber(account.id, num).catch(() => {});
+    }
   }
 
   return (
@@ -305,6 +313,9 @@ export function CheckPrintModal({
             <div>
               <label className={labelCls}>Check number</label>
               <input className={inputCls} placeholder="e.g. 1001" value={checkNum} onChange={(e) => setCheckNum(e.target.value)} />
+              {account.last_check_number != null && (
+                <p className="mt-1 text-[11px] text-slate-400">Last used: {account.last_check_number}</p>
+              )}
             </div>
             <div>
               <label className={labelCls}>Date</label>

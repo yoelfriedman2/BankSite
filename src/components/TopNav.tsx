@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useRef, useEffect } from "react";
 import {
   LayoutDashboard,
   Landmark,
@@ -36,6 +37,15 @@ function isActive(pathname: string, href: string) {
 
 export function TopNav() {
   const pathname = usePathname();
+  const navRef = useRef<HTMLElement>(null);
+
+  // Scroll the active nav item into view whenever the route changes.
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const active = nav.querySelector('[data-active="true"]') as HTMLElement | null;
+    if (active) active.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [pathname]);
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur md:hidden">
@@ -55,26 +65,32 @@ export function TopNav() {
       <div className="px-3 pb-2">
         <GlobalSearch />
       </div>
-      <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
-        {LINKS.map(({ href, label, icon: Icon, tour }) => {
-          const active = isActive(pathname, href);
-          return (
-            <Link
-              key={href}
-              href={href}
-              data-tour={tour}
-              className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium ${
-                active
-                  ? "bg-amber-50 text-amber-700"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-            </Link>
-          );
-        })}
-      </nav>
+      {/* Relative wrapper lets us overlay the right-edge fade hint */}
+      <div className="relative">
+        <nav ref={navRef} className="flex gap-1 overflow-x-auto px-3 pb-2">
+          {LINKS.map(({ href, label, icon: Icon, tour }) => {
+            const active = isActive(pathname, href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                data-tour={tour}
+                data-active={active ? "true" : undefined}
+                className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium ${
+                  active
+                    ? "bg-amber-50 text-amber-700"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </Link>
+            );
+          })}
+        </nav>
+        {/* Fade gradient hints that the nav scrolls right */}
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-white/95 to-transparent" />
+      </div>
     </header>
   );
 }

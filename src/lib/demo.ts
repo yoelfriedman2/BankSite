@@ -118,6 +118,7 @@ function blankAccount(): AccountFields {
     password: null,
     access_notes: null,
     activity_log: [],
+    last_check_number: null,
     deleted_at: null,
   };
 }
@@ -141,6 +142,9 @@ function seedToBankFields(s: (typeof BANKS_SEED)[number]): BankFields {
     conversion_stage: "none",
     min_to_open: null,
     target_balance: null,
+    shared_fields_updated_at: null,
+    shared_updated_by: null,
+    shared_updated_by_name: null,
     deleted_at: null,
   };
 }
@@ -497,6 +501,9 @@ export function importDemoRows(rows: ImportRow[]): {
         conversion_stage: row.conversion_stage ?? "none",
         min_to_open: row.min_to_open ?? null,
         target_balance: null,
+        shared_fields_updated_at: null,
+        shared_updated_by: null,
+        shared_updated_by_name: null,
         deleted_at: null,
       });
       store().banks = [bank, ...store().banks];
@@ -521,6 +528,7 @@ export function importDemoRows(rows: ImportRow[]): {
         password: row.password,
         access_notes: null,
         activity_log: [],
+        last_check_number: null,
         deleted_at: null,
       });
       accountsAdded++;

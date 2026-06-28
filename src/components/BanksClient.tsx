@@ -36,8 +36,8 @@ import {
 } from "@/components/badges";
 import { BankForm } from "@/components/BankForm";
 import { ImportDialog } from "@/components/ImportDialog";
-import { exportToExcel } from "@/lib/export";
-import { setBankStatus, deleteBank, type RelatedRef } from "@/app/(app)/banks/actions";
+import { exportToExcel, exportCommentsToExcel } from "@/lib/export";
+import { setBankStatus, deleteBank, getAllBankComments, type RelatedRef } from "@/app/(app)/banks/actions";
 
 type SortKey =
   | "name"
@@ -434,6 +434,16 @@ export function BanksClient({
           >
             <Download className="h-4 w-4" />
             Export
+          </button>
+          <button
+            onClick={async () => {
+              const rows = await getAllBankComments();
+              await exportCommentsToExcel(rows);
+            }}
+            className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            <Download className="h-4 w-4" />
+            Export notes
           </button>
           <button
             onClick={openAdd}

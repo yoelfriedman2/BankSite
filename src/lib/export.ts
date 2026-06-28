@@ -58,6 +58,31 @@ export async function exportToExcel(banks: Bank[], accounts: Account[]) {
   XLSX.writeFile(wb, `bank-tracker-${date}.xlsx`);
 }
 
+export type CommentExportRow = {
+  bank_name: string;
+  cert: number;
+  author_name: string | null;
+  body: string;
+  created_at: string;
+};
+
+/** Export all community notes to a one-sheet Excel file and trigger download. */
+export async function exportCommentsToExcel(comments: CommentExportRow[]) {
+  const XLSX = await import("xlsx");
+  const rows = comments.map((c) => ({
+    Bank: c.bank_name,
+    Cert: c.cert,
+    Author: c.author_name ?? "—",
+    Date: c.created_at.slice(0, 10),
+    Note: c.body,
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Community Notes");
+  const date = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, `community-notes-${date}.xlsx`);
+}
+
 /** Download a blank import template (correct headers + one example row). */
 export async function downloadImportTemplate() {
   const XLSX = await import("xlsx");

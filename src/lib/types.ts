@@ -57,6 +57,11 @@ export interface Bank {
   target_balance: number | null;
   notes: string | null;
 
+  // Shared-field update tracking
+  shared_fields_updated_at: string | null;
+  shared_updated_by: string | null; // UUID of last user to update shared fields
+  shared_updated_by_name: string | null;
+
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
@@ -83,6 +88,7 @@ export interface Account {
   password: string | null;
   access_notes: string | null;
   activity_log: { date: string; note: string | null }[];
+  last_check_number: number | null;
 
   deleted_at: string | null;
   created_at: string;
