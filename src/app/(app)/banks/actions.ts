@@ -672,29 +672,26 @@ export async function seedBanks(): Promise<{ seeded?: number; error?: string }> 
     if (error) return { error: error.message };
   }
 
-  // Set cannot_open on the JUST-SEEDED banks whose community notes signal denial,
-  // so new users start with a more accurate status. Scoped to the inserted certs
-  // so a one-time back-fill never overwrites an existing user's own statuses.
-  const insertedCerts = new Set(payload.map((p) => p.cert));
-  if (insertedCerts.size > 0) {
-    const CANNOT_OPEN_RE = /can'?t\s+open|cannot\s+open|won'?t\s+open|will\s+not\s+open|not\s+accepting|doesn'?t\s+open|does\s+not\s+open|no\s+new\s+accounts|denied\b|rejected\b|declined?\b/i;
-    const { data: comments } = await supabase
-      .from("bank_comments")
-      .select("cert, body");
-    const cannotOpenCerts = new Set<number>();
-    for (const c of comments ?? []) {
-      const cert = c.cert as number;
-      if (insertedCerts.has(cert) && CANNOT_OPEN_RE.test(c.body as string)) {
-        cannotOpenCerts.add(cert);
-      }
-    }
-    if (cannotOpenCerts.size > 0) {
-      await supabase
-        .from("banks")
-        .update({ status: "cannot_open" })
-        .in("cert", [...cannotOpenCerts])
-        .is("deleted_at", null);
-    }
+  // Default any UNTRACKED bank with a public "can't open" note to cannot_open, so
+  // a new user inherits the team's knowledge. Scoped to status='untracked' so a
+  // one-time back-fill never overwrites a deliberate status (open / applied / …),
+  // while still catching banks the user already had as untracked — not just the
+  // ones inserted in this run.
+  const CANNOT_OPEN_RE = /can'?t\s+open|cannot\s+open|won'?t\s+open|will\s+not\s+open|not\s+accepting|doesn'?t\s+open|does\s+not\s+open|no\s+new\s+accounts|denied\b|rejected\b|declined?\b/i;
+  const { data: comments } = await supabase
+    .from("bank_comments")
+    .select("cert, body");
+  const cannotOpenCerts = new Set<number>();
+  for (const c of comments ?? []) {
+    if (CANNOT_OPEN_RE.test(c.body as string)) cannotOpenCerts.add(c.cert as number);
+  }
+  if (cannotOpenCerts.size > 0) {
+    await supabase
+      .from("banks")
+      .update({ status: "cannot_open" })
+      .in("cert", [...cannotOpenCerts])
+      .eq("status", "untracked")
+      .is("deleted_at", null);
   }
 
   // Mark seeded so this runs exactly once per user.
