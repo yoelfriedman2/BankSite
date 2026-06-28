@@ -10,6 +10,7 @@ import {
   type AccountFormValues,
 } from "@/app/(app)/accounts/actions";
 import { getBalanceHistory, type BalancePoint } from "@/app/(app)/money/actions";
+import { AccountDocuments } from "@/components/AccountDocuments";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -427,6 +428,12 @@ export function AccountModal({
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {initial?.id && (
+            <div className="border-t border-slate-100 pt-4">
+              <AccountDocuments accountId={initial.id} />
             </div>
           )}
 
