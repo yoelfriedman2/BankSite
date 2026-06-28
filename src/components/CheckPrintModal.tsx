@@ -272,6 +272,9 @@ export function CheckPrintModal({
     const num = parseInt(checkNum, 10);
     if (account.id && !isNaN(num) && num > 0) {
       saveLastCheckNumber(account.id, num).catch(() => {});
+      // Advance the field so a second print in the same session continues the sequence,
+      // even before the parent's account snapshot refreshes.
+      setCheckNum(String(num + 1));
     }
   }
 

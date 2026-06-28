@@ -1177,6 +1177,14 @@ export type CommentExportRow = {
 export async function getAllBankComments(): Promise<CommentExportRow[]> {
   if (DEMO_MODE) return [];
 
+  // Auth guard: the admin client bypasses RLS, so require a signed-in user
+  // before returning everyone's notes.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
   const admin = createAdminClient();
   const { data: comments } = await admin
     .from("bank_comments")

@@ -337,6 +337,8 @@ export async function saveLastCheckNumber(accountId: string, num: number): Promi
   } = await supabase.auth.getUser();
   if (!user) return;
   await supabase.from("accounts").update({ last_check_number: num }).eq("id", accountId);
+  revalidatePath("/checks");
+  revalidatePath("/banks");
 }
 
 /** One-click: stamp an account's last activity as today (resets dormancy clock). */
