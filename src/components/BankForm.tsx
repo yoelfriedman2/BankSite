@@ -28,6 +28,7 @@ import {
   upsertBank,
   getBankComments,
   addBankComment,
+  shareCannotOpen,
   deleteBankComment,
   markCommentsRead,
   getRelatedBanks,
@@ -264,19 +265,15 @@ export function BankForm({
     set("status", s);
   }
 
-  function handleShareCannotOpen() {
+  function handleShareCannotOpen(propagate: boolean) {
     const cert = initial?.cert;
     if (cert == null) {
       setCannotOpenPrompt(false);
       return;
     }
-    const trimmed = shareNote.trim();
-    // Always lead with "Can't open" so the note reads clearly and the new-user
-    // auto-status scan picks it up; the user's optional note rides along.
-    const body = trimmed ? `Can't open: ${trimmed}` : "Can't open.";
     setSharing(true);
     startTransition(async () => {
-      await addBankComment(cert, body, shareNotify, initial?.name);
+      await shareCannotOpen(cert, shareNote, shareNotify, propagate, initial?.name);
       const fresh = await getBankComments(cert);
       setComments(fresh);
       setSharing(false);
@@ -874,8 +871,7 @@ export function BankForm({
             <h3 className="text-base font-semibold text-slate-900">Let everyone know?</h3>
             <p className="mt-1 text-sm text-slate-500">
               You marked <span className="font-medium text-slate-700">{initial.name}</span> as
-              can&apos;t open. Post a public note so everyone sees it — new users will also start
-              with this bank set to can&apos;t open. Skip it to keep the status private to you.
+              can&apos;t open. Choose how much to share — your optional note rides along either way.
             </p>
             <textarea
               rows={3}
@@ -893,24 +889,38 @@ export function BankForm({
               />
               Also email everyone
             </label>
-            <div className="mt-5 flex justify-end gap-3">
+            <div className="mt-5 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => handleShareCannotOpen(true)}
+                disabled={sharing}
+                className="flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
+              >
+                {sharing && <Loader2 className="h-4 w-4 animate-spin" />}
+                Post note &amp; mark everyone can&apos;t open
+              </button>
+              <button
+                type="button"
+                onClick={() => handleShareCannotOpen(false)}
+                disabled={sharing}
+                className="flex items-center justify-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-60"
+              >
+                Post note only
+              </button>
               <button
                 type="button"
                 onClick={() => setCannotOpenPrompt(false)}
-                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
+                disabled={sharing}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-60"
               >
                 Keep private
               </button>
-              <button
-                type="button"
-                onClick={handleShareCannotOpen}
-                disabled={sharing}
-                className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
-              >
-                {sharing && <Loader2 className="h-4 w-4 animate-spin" />}
-                Post note
-              </button>
             </div>
+            <p className="mt-3 text-[11px] leading-snug text-slate-400">
+              &ldquo;Mark everyone&rdquo; sets this bank to can&apos;t open for all other users,
+              except anyone who already has an account open there. New users always start with it
+              set to can&apos;t open once a note exists.
+            </p>
           </div>
         </div>
       )}

@@ -807,6 +807,57 @@ export async function addBankComment(
   return {};
 }
 
+/**
+ * Shares a "Can't open" signal for a bank (by cert): always posts a public
+ * community note, and—when `propagate` is set—also flips every OTHER user's copy
+ * of this bank to `cannot_open`. Users who already have an account open there
+ * (open / open_add_account / open_add_funds) are left untouched, since for them
+ * it factually IS open. The note rides the normal rail (unread dot + optional
+ * email + new-user auto-status seed); status propagation uses the admin client
+ * because it writes other users' rows.
+ */
+export async function shareCannotOpen(
+  cert: number,
+  note: string,
+  notify: boolean,
+  propagate: boolean,
+  bankName?: string,
+): Promise<{ error?: string }> {
+  const trimmed = (note ?? "").trim();
+  const body = trimmed ? `Can't open: ${trimmed}` : "Can't open.";
+
+  if (DEMO_MODE) {
+    addDemoComment(cert, body);
+    revalidate();
+    return {};
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  // Post the public note (handles author name, read-marking, and email broadcast).
+  const res = await addBankComment(cert, body, notify, bankName);
+  if (res.error) return res;
+
+  if (propagate) {
+    const admin = createAdminClient();
+    const { error } = await admin
+      .from("banks")
+      .update({ status: "cannot_open" })
+      .eq("cert", cert)
+      .neq("user_id", user.id)
+      .not("status", "in", "(open,open_add_account,open_add_funds)")
+      .is("deleted_at", null);
+    if (error) return { error: error.message };
+  }
+
+  revalidate();
+  return {};
+}
+
 /** Deletes a comment. RLS (`comments_delete_own`) restricts this to its author. */
 export async function deleteBankComment(id: string): Promise<{ error?: string }> {
   if (DEMO_MODE) {
