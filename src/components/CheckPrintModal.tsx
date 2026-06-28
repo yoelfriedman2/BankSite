@@ -62,6 +62,18 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/** MICR line in standard personal-check order, left → right:
+ *  Transit (routing) between ⑆ symbols · On-Us (account) ending in ⑈ · check number.
+ *  (A bank-scannable line needs the E-13B font + MICR toner; this reproduces the
+ *  correct layout and symbol positions for a proper-looking printed check.) */
+function micrLine(routing: string, accountNum: string, checkNum: string): string {
+  return [
+    routing ? `⑆${routing}⑆` : "",
+    accountNum ? `${accountNum}⑈` : "",
+    checkNum || "",
+  ].filter(Boolean).join("   ");
+}
+
 // ── Build the print HTML ──────────────────────────────────────────────────────
 function buildPrintHTML(fields: {
   holder: string;
@@ -76,152 +88,115 @@ function buildPrintHTML(fields: {
   checkNum: string;
   date: string;
 }): string {
-  // MICR line in standard business-check field order, left → right:
-  //   Auxiliary On-Us (check #) · Transit (routing) · On-Us (account).
-  // NOTE: a bank-scannable MICR line requires the E-13B magnetic font printed
-  // with MICR toner; these symbols reproduce the correct layout/positions for a
-  // proper-looking printed check.
-  const auxOnUs = fields.checkNum ? `⑈${esc(fields.checkNum)}⑈` : "";
-  const transit = fields.routing ? `⑆${esc(fields.routing)}⑆` : "⑆ ⑆";
-  const onUs = fields.accountNum ? `${esc(fields.accountNum)}⑈` : "";
-  const micrLine = [auxOnUs, transit, onUs].filter(Boolean).join("   ");
+  const micr = micrLine(esc(fields.routing), esc(fields.accountNum), esc(fields.checkNum));
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <style>
-  /* Standard voucher check: the check is the top 3.5in of an 8.5x11 sheet.
+  /* The check is the top 3.5in of an 8.5x11 sheet.
      Print at 100% / "Actual size" (turn OFF "fit to page") for true alignment. */
   @page { size: 8.5in 11in; margin: 0; }
   * { box-sizing: border-box; }
   body {
     margin: 0; padding: 0;
     font-family: Arial, Helvetica, sans-serif;
+    color: #1f2a44;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
   .check {
     position: relative;
     width: 8.5in;
     height: 3.5in;
-    /* bottom padding keeps content out of the MICR clear band (bottom 5/8in) */
-    padding: 0.34in 0.46in 0.82in 0.46in;
-    page-break-inside: avoid;
+    padding: 0.4in 0.6in 0.8in 0.6in;
     overflow: hidden;
+    background: #f7f9fb;
+    border-bottom: 1px dashed #b8c4d2;   /* cut line */
   }
-  /* Card look, inset from the page edge so the border clears the printer's
-     non-printable margin and still reads as a check on plain paper. */
-  .check::before {
-    content: "";
+  .muted { color: #6b7a90; }
+
+  .top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .payer-name { font-size: 13.5pt; font-weight: 700; letter-spacing: 0.2px; }
+  .topright { text-align: right; }
+  .check-no { font-size: 12pt; font-weight: 700; }
+  .date-line { display: flex; align-items: flex-end; justify-content: flex-end; gap: 6px; margin-top: 0.2in; }
+  .date-label { font-size: 9.5pt; }
+  .date-val { font-size: 10pt; border-bottom: 1px solid #1f2a44; min-width: 1.5in; text-align: center; padding-bottom: 1px; }
+
+  .pay { display: flex; align-items: flex-end; gap: 10px; margin-top: 0.24in; }
+  .pay-label { font-size: 8pt; line-height: 1.15; white-space: nowrap; }
+  .pay-line { flex: 1; border-bottom: 1px solid #1f2a44; font-size: 12pt; padding-bottom: 2px; min-height: 20px; }
+  .dollar { font-size: 13pt; font-weight: 700; }
+  .amt-box { border: 1.5px solid #1f2a44; padding: 3px 10px; font-size: 12pt; font-weight: 700; min-width: 1.2in; text-align: right; white-space: nowrap; background: #fff; }
+
+  .words { display: flex; align-items: flex-end; gap: 8px; margin-top: 0.16in; }
+  .words-line { flex: 1; border-bottom: 1px solid #1f2a44; font-size: 10.5pt; padding-bottom: 2px; min-height: 18px; }
+  .dollars-word { font-size: 8.5pt; font-weight: 700; letter-spacing: 0.5px; white-space: nowrap; }
+
+  .bank { margin-top: 0.16in; font-size: 9pt; font-weight: 700; }
+  .bank-city { font-size: 8pt; font-weight: 400; }
+
+  .sigrow { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 0.14in; }
+  .memo, .sig { display: flex; flex-direction: column; }
+  .memo-line { border-bottom: 1px solid #1f2a44; min-width: 2.3in; font-size: 9.5pt; padding-bottom: 1px; min-height: 16px; }
+  .memo-cap { font-size: 7.5pt; margin-top: 2px; letter-spacing: 0.3px; }
+  .sig-line { border-bottom: 1px solid #1f2a44; min-width: 2.6in; min-height: 16px; }
+  .sig-cap { font-size: 7.5pt; margin-top: 2px; text-align: center; letter-spacing: 0.3px; }
+
+  .micr {
     position: absolute;
-    inset: 0.16in;
-    border: 1.5px solid #8ab4d4;
-    border-radius: 5px;
-    background: linear-gradient(to bottom, #eef5fb 0%, #f7fafd 55%, #eef5fb 100%);
-    z-index: -1;
-  }
-  .row-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.1in; }
-  .holder-name { font-size: 13pt; font-weight: bold; color: #1a3a5c; }
-  .holder-sub { font-size: 8pt; color: #4a6a8a; margin-top: 2px; }
-  .check-num-box { text-align: right; }
-  .check-num-label { font-size: 7pt; color: #4a6a8a; letter-spacing: 0.05em; text-transform: uppercase; }
-  .check-num { font-size: 11pt; font-weight: bold; color: #1a3a5c; }
-  .date-row { display: flex; justify-content: flex-end; margin-bottom: 0.12in; }
-  .date-row span { font-size: 9pt; color: #1a3a5c; border-bottom: 1px solid #4a6a8a; min-width: 1.6in; padding-bottom: 1px; text-align: center; }
-  .date-label { font-size: 9pt; color: #4a6a8a; margin-right: 6px; }
-  .payto-row { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 0.1in; }
-  .payto-label { font-size: 8pt; color: #4a6a8a; white-space: nowrap; font-weight: 600; }
-  .payto-line { flex: 1; border-bottom: 1px solid #4a6a8a; font-size: 11pt; color: #1a3a5c; padding-bottom: 1px; min-height: 18px; }
-  .amount-box { border: 1.5px solid #4a6a8a; padding: 2px 8px; font-size: 11pt; font-weight: bold; color: #1a3a5c; min-width: 1.1in; text-align: right; white-space: nowrap; background: #fff; }
-  .amount-prefix { font-size: 9pt; color: #4a6a8a; margin-right: 4px; }
-  .words-row { display: flex; align-items: flex-end; gap: 6px; margin-bottom: 0.15in; }
-  .words-line { flex: 1; border-bottom: 1px solid #4a6a8a; font-size: 10pt; color: #1a3a5c; padding-bottom: 1px; min-height: 16px; }
-  .dollars-label { font-size: 8pt; color: #4a6a8a; font-weight: 600; white-space: nowrap; }
-  .bottom-row { display: flex; align-items: flex-end; justify-content: space-between; }
-  .bank-info { font-size: 8pt; color: #1a3a5c; line-height: 1.4; }
-  .bank-name { font-size: 9pt; font-weight: bold; }
-  .memo-sig { display: flex; gap: 0.5in; align-items: flex-end; }
-  .memo-block, .sig-block { display: flex; flex-direction: column; align-items: flex-start; }
-  .field-label { font-size: 7.5pt; color: #4a6a8a; margin-bottom: 1px; }
-  .field-line { border-bottom: 1px solid #4a6a8a; min-width: 1.5in; font-size: 10pt; color: #1a3a5c; padding-bottom: 1px; min-height: 16px; }
-  .sig-block .field-line { min-width: 1.8in; }
-  .micr-row {
-    position: absolute;
-    bottom: 0.19in;   /* baseline ≈ 3/16" above the bottom edge — ANSI clear band */
-    left: 0.5in;
-    right: 0.5in;
+    left: 0; right: 0;
+    bottom: 0.3in;   /* ANSI clear band, centered across the check */
+    text-align: center;
     font-family: 'Courier New', Courier, monospace;
-    font-size: 12pt;
-    letter-spacing: 0.12em;
-    color: #000;
-  }
-  .accent-bar {
-    position: absolute;
-    top: 0.16in;
-    left: 0.16in;
-    right: 0.16in;
-    height: 5px;
-    background: linear-gradient(to right, #1a3a5c, #4a8ab4, #1a3a5c);
-    border-radius: 5px 5px 0 0;
-  }
-  /* The 3.5in voucher perforation / cut line. */
-  .cut-line {
-    position: absolute;
-    left: 0; right: 0; bottom: 0;
-    border-top: 1px dashed #aebfce;
+    font-size: 13pt;
+    letter-spacing: 0.18em;
+    color: #111827;
   }
 </style>
 </head>
 <body>
 <div class="check">
-  <div class="accent-bar"></div>
-  <div class="row-top">
-    <div>
-      <div class="holder-name">${esc(fields.holder)}</div>
-      <div class="holder-sub">${esc(fields.bankCity)}</div>
+  <div class="top">
+    <div class="payer-name">${esc(fields.holder) || "&nbsp;"}</div>
+    <div class="topright">
+      <div class="check-no">No. ${esc(fields.checkNum) || "______"}</div>
+      <div class="date-line">
+        <span class="date-label muted">Date</span>
+        <span class="date-val">${esc(fields.date)}</span>
+      </div>
     </div>
-    <div class="check-num-box">
-      <div class="check-num-label">Check No.</div>
-      <div class="check-num">${esc(fields.checkNum) || "____"}</div>
-    </div>
   </div>
 
-  <div class="date-row">
-    <span class="date-label">Date</span>
-    <span>${esc(fields.date)}</span>
+  <div class="pay">
+    <span class="pay-label">Pay to the<br>order of</span>
+    <span class="pay-line">${esc(fields.payee)}</span>
+    <span class="dollar">$</span>
+    <span class="amt-box">${esc(fmtAmount(fields.amount)) || "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"}</span>
   </div>
 
-  <div class="payto-row">
-    <span class="payto-label">PAY TO THE ORDER OF</span>
-    <span class="payto-line">${esc(fields.payee)}</span>
-    <span class="amount-prefix">$</span>
-    <span class="amount-box">${esc(fmtAmount(fields.amount)) || "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"}</span>
-  </div>
-
-  <div class="words-row">
+  <div class="words">
     <span class="words-line">${esc(fields.amountW)}</span>
-    <span class="dollars-label">DOLLARS</span>
+    <span class="dollars-word">DOLLARS</span>
   </div>
 
-  <div class="bottom-row">
-    <div class="bank-info">
-      <div class="bank-name">${esc(fields.bankName)}</div>
-      ${fields.routing ? `<div>Routing: ${esc(fields.routing)}</div>` : ""}
+  <div class="bank">
+    ${esc(fields.bankName)}${fields.bankCity ? `<span class="bank-city muted"> · ${esc(fields.bankCity)}</span>` : ""}
+  </div>
+
+  <div class="sigrow">
+    <div class="memo">
+      <span class="memo-line">${esc(fields.memo)}</span>
+      <span class="memo-cap muted">MEMO</span>
     </div>
-    <div class="memo-sig">
-      <div class="memo-block">
-        <span class="field-label">Memo</span>
-        <span class="field-line">${esc(fields.memo)}</span>
-      </div>
-      <div class="sig-block">
-        <span class="field-label">Authorized Signature</span>
-        <span class="field-line"></span>
-      </div>
+    <div class="sig">
+      <span class="sig-line"></span>
+      <span class="sig-cap muted">AUTHORIZED SIGNATURE</span>
     </div>
   </div>
 
-  <div class="micr-row">${micrLine}</div>
-  <div class="cut-line"></div>
+  <div class="micr">${micr}</div>
 </div>
 <script>window.onload = function() { window.print(); };</script>
 </body>
@@ -330,74 +305,61 @@ export function CheckPrintModal({
             </div>
           </div>
 
-          {/* Check preview */}
-          <div className="overflow-hidden rounded-xl border border-blue-200 bg-gradient-to-b from-blue-50 to-sky-50 p-4 text-slate-800">
-            {/* Top bar accent */}
-            <div className="mb-3 h-1 w-full rounded-full bg-gradient-to-r from-blue-800 via-blue-400 to-blue-800" />
-
-            {/* Row 1: holder + check# */}
-            <div className="mb-2 flex items-start justify-between">
-              <div>
-                <p className="text-sm font-bold text-blue-900">{holder || <span className="text-slate-400">Account holder</span>}</p>
-                <p className="text-xs text-blue-600">{bankCity}</p>
-              </div>
+          {/* Check preview — mirrors the printed layout */}
+          <div className="rounded-md border border-slate-300 bg-slate-50 px-5 pt-4 pb-9 text-slate-800">
+            {/* Top: payer (left) · check no. + date (right) */}
+            <div className="flex items-start justify-between">
+              <p className="text-sm font-bold text-slate-800">
+                {holder || <span className="font-normal text-slate-400">Account holder</span>}
+              </p>
               <div className="text-right">
-                <p className="text-xs uppercase tracking-wide text-slate-400">Check No.</p>
-                <p className="font-mono text-sm font-bold text-blue-900">{checkNum || "____"}</p>
-              </div>
-            </div>
-
-            {/* Date */}
-            <div className="mb-2 flex justify-end gap-2 text-xs">
-              <span className="text-slate-500">Date</span>
-              <span className="min-w-[6rem] border-b border-blue-300 pb-0.5 text-right font-medium text-blue-900">{date}</span>
-            </div>
-
-            {/* Pay to */}
-            <div className="mb-1.5 flex items-end gap-2">
-              <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-500">Pay to the order of</span>
-              <span className="flex-1 border-b border-blue-300 pb-0.5 text-sm text-blue-900">{payee || " "}</span>
-              <span className="shrink-0 text-xs text-slate-500">$</span>
-              <span className="min-w-[4.5rem] border border-blue-300 bg-white px-2 py-0.5 text-right font-bold text-blue-900">
-                {amount ? fmtAmount(amount) : "      "}
-              </span>
-            </div>
-
-            {/* Amount in words */}
-            <div className="mb-3 flex items-end gap-2">
-              <span className="flex-1 border-b border-blue-300 pb-0.5 text-xs italic text-blue-900">
-                {words || " "}
-              </span>
-              <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-500">DOLLARS</span>
-            </div>
-
-            {/* Bottom: bank + memo + sig */}
-            <div className="flex items-end justify-between gap-4">
-              <div className="text-xs text-blue-800">
-                <p className="font-bold">{bankName}</p>
-                {routing && <p className="text-blue-500">Routing: {routing}</p>}
-              </div>
-              <div className="flex gap-6">
-                <div>
-                  <p className="text-xs text-slate-400">Memo</p>
-                  <p className="min-w-[4.5rem] border-b border-blue-300 pb-0.5 text-xs text-blue-900">{memo || " "}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400">Authorized Signature</p>
-                  <p className="min-w-[5.5rem] border-b border-blue-300 pb-0.5 text-xs">&nbsp;</p>
+                <p className="text-sm font-bold text-slate-800">No. {checkNum || "______"}</p>
+                <div className="mt-2 flex items-end justify-end gap-1.5">
+                  <span className="text-xs text-slate-500">Date</span>
+                  <span className="min-w-[5rem] border-b border-slate-500 pb-0.5 text-center text-xs text-slate-800">{date}</span>
                 </div>
               </div>
             </div>
 
-            {/* MICR line — check #, routing, account (business-check order) */}
-            <div className="mt-3 border-t border-blue-200 pt-2 font-mono text-xs tracking-widest text-slate-700">
-              {[
-                checkNum ? `⑈${checkNum}⑈` : "",
-                routing ? `⑆${routing}⑆` : "⑆ ⑆",
-                accountNum ? `${accountNum}⑈` : "",
-              ]
-                .filter(Boolean)
-                .join("   ")}
+            {/* Pay to the order of + amount box */}
+            <div className="mt-4 flex items-end gap-2">
+              <span className="shrink-0 text-[10px] font-medium leading-tight text-slate-600">
+                Pay to the<br />order of
+              </span>
+              <span className="flex-1 border-b border-slate-500 pb-0.5 text-sm text-slate-800">{payee || " "}</span>
+              <span className="shrink-0 text-sm font-bold text-slate-700">$</span>
+              <span className="min-w-[4.5rem] border-[1.5px] border-slate-500 bg-white px-2 py-0.5 text-right text-sm font-bold text-slate-800">
+                {amount ? fmtAmount(amount) : "     "}
+              </span>
+            </div>
+
+            {/* Amount in words + DOLLARS */}
+            <div className="mt-3 flex items-end gap-2">
+              <span className="flex-1 border-b border-slate-500 pb-0.5 text-xs text-slate-800">{words || " "}</span>
+              <span className="shrink-0 text-[10px] font-bold tracking-wide text-slate-700">DOLLARS</span>
+            </div>
+
+            {/* Bank name */}
+            <p className="mt-3 text-xs font-bold text-slate-700">
+              {bankName}
+              {bankCity && <span className="font-normal text-slate-500"> · {bankCity}</span>}
+            </p>
+
+            {/* Memo (left) · signature (right) */}
+            <div className="mt-3 flex items-end justify-between gap-6">
+              <div className="flex flex-col">
+                <span className="min-w-[6.5rem] border-b border-slate-500 pb-0.5 text-xs text-slate-800">{memo || " "}</span>
+                <span className="mt-0.5 text-[9px] tracking-wide text-slate-400">MEMO</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="min-w-[7.5rem] border-b border-slate-500 pb-0.5 text-xs">&nbsp;</span>
+                <span className="mt-0.5 text-center text-[9px] tracking-wide text-slate-400">AUTHORIZED SIGNATURE</span>
+              </div>
+            </div>
+
+            {/* MICR line — centered: routing · account · check # */}
+            <div className="mt-4 text-center font-mono text-xs tracking-[0.18em] text-slate-800">
+              {micrLine(routing, accountNum, checkNum)}
             </div>
           </div>
 
