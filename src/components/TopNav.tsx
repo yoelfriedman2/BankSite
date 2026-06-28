@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard,
   Landmark,
@@ -14,6 +14,8 @@ import {
   Settings,
   Trash2,
   LogOut,
+  Menu,
+  X,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { GlobalSearch } from "@/components/GlobalSearch";
@@ -35,62 +37,116 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function TopNav() {
+export function TopNav({ displayName }: { displayName: string }) {
   const pathname = usePathname();
-  const navRef = useRef<HTMLElement>(null);
+  const [open, setOpen] = useState(false);
 
-  // Scroll the active nav item into view whenever the route changes.
+  // Close the drawer whenever the route changes (e.g. after tapping a link).
   useEffect(() => {
-    const nav = navRef.current;
-    if (!nav) return;
-    const active = nav.querySelector('[data-active="true"]') as HTMLElement | null;
-    if (active) active.scrollIntoView({ block: "nearest", inline: "nearest" });
+    setOpen(false);
   }, [pathname]);
 
+  // Lock background scroll while the drawer is open.
+  useEffect(() => {
+    if (!open) return;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [open]);
+
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur md:hidden">
-      <div className="flex items-center gap-2 px-4 py-2.5">
-        <Logo className="h-8 w-8" />
-        <span className="font-semibold text-slate-900">Bank Tracker</span>
-        <form action="/auth/signout" method="post" className="ml-auto">
+    <>
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur md:hidden">
+        <div className="flex items-center gap-2 px-3 py-2.5">
           <button
-            type="submit"
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-            title="Sign out"
+            type="button"
+            onClick={() => setOpen(true)}
+            className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100"
+            aria-label="Open menu"
           >
-            <LogOut className="h-5 w-5" />
+            <Menu className="h-6 w-6" />
           </button>
-        </form>
-      </div>
-      <div className="px-3 pb-2">
-        <GlobalSearch />
-      </div>
-      {/* Relative wrapper lets us overlay the right-edge fade hint */}
-      <div className="relative">
-        <nav ref={navRef} className="flex gap-1 overflow-x-auto px-3 pb-2">
-          {LINKS.map(({ href, label, icon: Icon, tour }) => {
-            const active = isActive(pathname, href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                data-tour={tour}
-                data-active={active ? "true" : undefined}
-                className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium ${
-                  active
-                    ? "bg-amber-50 text-amber-700"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
+          <Logo className="h-8 w-8" />
+          <span className="font-semibold text-slate-900">Bank Tracker</span>
+        </div>
+        <div className="px-3 pb-2">
+          <GlobalSearch />
+        </div>
+      </header>
+
+      {/* Slide-out drawer (mobile only) */}
+      <div className="md:hidden">
+        {/* Dimmed backdrop */}
+        <div
+          className={`fixed inset-0 z-40 bg-slate-900/50 transition-opacity duration-200 ${
+            open ? "opacity-100" : "pointer-events-none opacity-0"
+          }`}
+          onClick={() => setOpen(false)}
+          aria-hidden="true"
+        />
+
+        {/* Panel */}
+        <aside
+          className={`fixed inset-y-0 left-0 z-50 flex w-72 max-w-[82%] flex-col bg-slate-900 text-slate-300 shadow-2xl transition-transform duration-200 ${
+            open ? "translate-x-0" : "-translate-x-full"
+          }`}
+          aria-hidden={!open}
+        >
+          <div className="flex items-center justify-between px-5 py-5">
+            <div className="flex items-center gap-2.5">
+              <Logo className="h-9 w-9 shadow-sm" />
+              <div className="leading-tight">
+                <div className="text-sm font-semibold text-white">Bank Tracker</div>
+                <div className="text-[11px] text-slate-500">Mutual conversions</div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+              aria-label="Close menu"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
+            {LINKS.map(({ href, label, icon: Icon, tour }) => {
+              const active = isActive(pathname, href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  data-tour={tour}
+                  onClick={() => setOpen(false)}
+                  className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                    active
+                      ? "bg-slate-800 text-white"
+                      : "text-slate-400 hover:bg-slate-800/60 hover:text-white"
+                  }`}
+                >
+                  <Icon className="h-[18px] w-[18px]" />
+                  {label}
+                </Link>
+              );
+            })}
+          </nav>
+
+          <div className="border-t border-slate-800 p-3">
+            <div className="truncate px-2 pb-2 text-xs text-slate-500">{displayName}</div>
+            <form action="/auth/signout" method="post">
+              <button
+                type="submit"
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
               >
-                <Icon className="h-4 w-4" />
-                {label}
-              </Link>
-            );
-          })}
-        </nav>
-        {/* Fade gradient hints that the nav scrolls right */}
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-white/95 to-transparent" />
+                <LogOut className="h-[18px] w-[18px]" />
+                Sign out
+              </button>
+            </form>
+          </div>
+        </aside>
       </div>
-    </header>
+    </>
   );
 }
