@@ -4,6 +4,7 @@ import { SideNav } from "@/components/SideNav";
 import { TopNav } from "@/components/TopNav";
 import { DEMO_MODE, getDemoProfile } from "@/lib/demo";
 import { WalkthroughModal } from "@/components/WalkthroughModal";
+import { IdleTimeout } from "@/components/IdleTimeout";
 
 export default async function AppLayout({
   children,
@@ -42,6 +43,7 @@ export default async function AppLayout({
 
   return (
     <div className="flex min-h-screen bg-slate-50">
+      <IdleTimeout enabled={!DEMO_MODE} />
       <WalkthroughModal isDemo={DEMO_MODE} userId={userId} />
       <SideNav displayName={displayName} />
       <div className="flex min-w-0 flex-1 flex-col">

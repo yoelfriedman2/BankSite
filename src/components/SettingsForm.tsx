@@ -1,8 +1,24 @@
 "use client";
 
 import { useState, useTransition, type FormEvent } from "react";
-import { Loader2, Check, Plus, X, Bell, MessageSquare, Megaphone } from "lucide-react";
-import { updateSettings } from "@/app/(app)/settings/actions";
+import {
+  Loader2,
+  Check,
+  Plus,
+  X,
+  Bell,
+  MessageSquare,
+  Megaphone,
+  AlertTriangle,
+  Download,
+  Trash2,
+} from "lucide-react";
+import {
+  updateSettings,
+  getMyExportData,
+  deleteMyAccount,
+} from "@/app/(app)/settings/actions";
+import { exportToExcel } from "@/lib/export";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -42,6 +58,49 @@ export function SettingsForm({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  // Delete-account flow
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [exported, setExported] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleExportData() {
+    setExporting(true);
+    setDeleteError(null);
+    try {
+      const { banks, accounts } = await getMyExportData();
+      await exportToExcel(banks, accounts);
+      setExported(true);
+    } catch {
+      setDeleteError("Could not export your data. Try again.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function handleDeleteAccount() {
+    setDeleting(true);
+    setDeleteError(null);
+    startTransition(async () => {
+      const result = await deleteMyAccount();
+      if (result.error) {
+        setDeleteError(result.error);
+        setDeleting(false);
+        return;
+      }
+      window.location.href = "/login?reason=deleted";
+    });
+  }
+
+  function closeDelete() {
+    setDeleteOpen(false);
+    setConfirmText("");
+    setExported(false);
+    setDeleteError(null);
+  }
 
   function updateHolder(i: number, value: string) {
     setHoldersList((list) => list.map((h, idx) => (idx === i ? value : h)));
@@ -316,6 +375,98 @@ export function SettingsForm({
           )}
         </div>
       </form>
+
+      {/* ── Danger zone ── */}
+      <div className="mt-6 rounded-2xl border border-rose-200 bg-rose-50/40 p-6">
+        <div className="mb-1 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-rose-500" />
+          <h2 className="text-sm font-semibold text-rose-700">Danger zone</h2>
+        </div>
+        <p className="mb-4 text-sm text-slate-600">
+          Permanently delete your account and everything in it — banks, accounts,
+          balances, documents, and history. This can&apos;t be undone.
+        </p>
+        <button
+          type="button"
+          onClick={() => setDeleteOpen(true)}
+          className="flex items-center gap-2 rounded-lg border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50"
+        >
+          <Trash2 className="h-4 w-4" />
+          Delete my account
+        </button>
+      </div>
+
+      {deleteOpen && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/50 p-4"
+          onMouseDown={closeDelete}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="mb-1 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-rose-500" />
+              <h3 className="text-base font-semibold text-slate-900">Delete your account?</h3>
+            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              This permanently removes your banks, accounts, balances, documents, and
+              history. It cannot be undone. We recommend exporting a copy first.
+            </p>
+
+            <button
+              type="button"
+              onClick={handleExportData}
+              disabled={exporting}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+            >
+              {exporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : exported ? (
+                <Check className="h-4 w-4 text-emerald-600" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              {exported ? "Data exported" : "Export my data first"}
+            </button>
+
+            <label className="mt-5 block text-xs font-medium text-slate-500">
+              Type <span className="font-bold text-rose-600">DELETE</span> to confirm
+            </label>
+            <input
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder="DELETE"
+              autoComplete="off"
+            />
+
+            {deleteError && (
+              <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{deleteError}</p>
+            )}
+
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeDelete}
+                disabled={deleting}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={deleting || confirmText !== "DELETE"}
+                className="flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                {deleting && <Loader2 className="h-4 w-4 animate-spin" />}
+                Delete permanently
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -91,7 +91,7 @@ const GLYPHS: [string, number, number, number, number, number][] = [
   ["₿", 62, 22, 22,  5, 0.50],
 ];
 
-export function LoginForm({ initialError }: { initialError?: string }) {
+export function LoginForm({ initialError, notice }: { initialError?: string; notice?: string }) {
   const [error, setError] = useState<string | null>(initialError ?? null);
   const [pending, setPending] = useState<"google" | "azure" | null>(null);
   const [mouse, setMouse] = useState({ x: 0.5, y: 0.5 });
@@ -441,6 +441,19 @@ export function LoginForm({ initialError }: { initialError?: string }) {
           </div>
 
           <div className="mb-6 h-px w-full" style={{ background: "rgba(255,255,255,0.05)" }} />
+
+          {notice && !error && (
+            <div
+              className="mb-5 rounded-lg px-3 py-2.5 text-center text-sm"
+              style={{
+                background: "rgba(245,158,11,0.10)",
+                border: "1px solid rgba(245,158,11,0.25)",
+                color: "rgba(252,211,153,0.95)",
+              }}
+            >
+              {notice}
+            </div>
+          )}
 
           <div className="space-y-2.5">
             {(["google", "azure"] as const).map((provider) => (

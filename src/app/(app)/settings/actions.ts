@@ -2,7 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { DEMO_MODE, setDemoProfile } from "@/lib/demo";
+import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  DEMO_MODE,
+  setDemoProfile,
+  getDemoBanks,
+  getDemoAccounts,
+} from "@/lib/demo";
+import type { Account, Bank } from "@/lib/types";
 
 export async function updateSettings(values: {
   display_name: string;
@@ -67,5 +74,64 @@ export async function updateSettings(values: {
   revalidatePath("/banks");
   revalidatePath("/accounts");
   revalidatePath("/");
+  return {};
+}
+
+/** Fetches the current user's banks + accounts so they can export before deleting. */
+export async function getMyExportData(): Promise<{ banks: Bank[]; accounts: Account[] }> {
+  if (DEMO_MODE) {
+    return { banks: getDemoBanks(), accounts: getDemoAccounts() };
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { banks: [], accounts: [] };
+
+  const [{ data: banks }, { data: accounts }] = await Promise.all([
+    supabase.from("banks").select("*").is("deleted_at", null).order("name", { ascending: true }),
+    supabase.from("accounts").select("*").is("deleted_at", null),
+  ]);
+  return { banks: (banks ?? []) as Bank[], accounts: (accounts ?? []) as Account[] };
+}
+
+/**
+ * Permanently deletes the current user's account and all their data. Removes
+ * stored document files first (DB rows cascade on user delete, but storage
+ * objects don't), then deletes the auth user — which cascades every table that
+ * references auth.users (profiles, banks, accounts, comments, sweeps, history,
+ * document metadata). Irreversible.
+ */
+export async function deleteMyAccount(): Promise<{ error?: string }> {
+  if (DEMO_MODE) {
+    return { error: "Account deletion is disabled in demo mode." };
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const admin = createAdminClient();
+
+  // Best-effort: remove the user's stored document files from the bucket.
+  try {
+    const { data: docs } = await admin
+      .from("account_documents")
+      .select("storage_path")
+      .eq("user_id", user.id);
+    const paths = (docs ?? []).map((d) => d.storage_path as string);
+    if (paths.length) {
+      await admin.storage.from("account-documents").remove(paths);
+    }
+  } catch {
+    /* non-fatal — orphaned private files are harmless */
+  }
+
+  const { error } = await admin.auth.admin.deleteUser(user.id);
+  if (error) return { error: error.message };
+
+  // The session is now invalid; clear the local cookie too.
+  await supabase.auth.signOut();
   return {};
 }

@@ -3,50 +3,68 @@
 import { useState, useEffect, useCallback } from "react";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
 
-const BASE = "bt_tour_v1";
+const BASE = "bt_tour_v2";
 
 const STEPS = [
   {
     id: null,
     badge: "Quick Tour",
     title: "Welcome to Bank Tracker!",
-    desc: "Everything for tracking your mutual bank accounts in one place. Click Next for a 30-second tour of the main sections.",
+    desc: "Your command center for the mutual-bank conversion strategy — track accounts, keep them active, move money for IPOs, and share what the team learns. Here's a 30-second tour.",
   },
   {
     id: "dashboard",
     badge: "Dashboard",
     title: "Your overview at a glance",
-    desc: "See every account that needs activity, upcoming CD maturities, and a full summary of what you're tracking — all on one screen.",
+    desc: "Everything needing attention in one place: accounts going dormant, CDs maturing soon, money still out, and a summary of what you're tracking.",
   },
   {
     id: "banks",
     badge: "Banks",
     title: "Your main workspace",
-    desc: "Add banks, open multiple accounts under each one, log activity dates, track conversion status, and store access credentials.",
+    desc: "The full bank list, shared by the whole team. Open accounts under each bank, set your status, attach statements & scans, and read community notes others left. Marking a bank \"Can't open\" can warn everyone.",
   },
   {
     id: "accounts",
     badge: "Accounts",
-    title: "All accounts in one flat list",
-    desc: "Every account across every bank in one place. Filter by holder, sort by dormancy status, and export to Excel in one click.",
+    title: "All accounts in one list",
+    desc: "Every account across every bank together. Filter by holder, sort by dormancy, log activity to keep accounts alive, and export to Excel anytime.",
+  },
+  {
+    id: "money",
+    badge: "Money moved",
+    title: "Fund an IPO, track every dollar",
+    desc: "Sweep cash out of accounts to fund a subscription, see what's still out grouped by reason, and check it off when it's returned — real balances update as you go.",
+  },
+  {
+    id: "balances",
+    badge: "Balance by date",
+    title: "Balance as of any date",
+    desc: "Pick a date and see what every account held then — exactly what you need when a conversion sets a deposit record date for share allocation.",
+  },
+  {
+    id: "checks",
+    badge: "Print Checks",
+    title: "Print a check in seconds",
+    desc: "Fill in payee and amount and print a properly formatted check — account and routing numbers are pulled in, and the check number remembers where you left off.",
   },
   {
     id: "calendar",
     badge: "Calendar",
     title: "Upcoming events",
-    desc: "CD maturities, dormancy warnings, and activity dates shown month by month — so nothing sneaks up on you.",
+    desc: "CD maturities, dormancy warnings, and activity dates month by month — so nothing sneaks up on you.",
   },
   {
     id: "settings",
     badge: "Settings",
-    title: "Your preferences",
-    desc: "Set your display name, default dormancy threshold, and email reminder thresholds — configure when you get notified.",
+    title: "Preferences & your account",
+    desc: "Set your display name, dormancy window, and which email reminders you get. You can also export everything or delete your account here.",
   },
   {
     id: "trash",
     badge: "Trash",
     title: "Nothing is permanent",
-    desc: "Deleted banks and accounts land here first. You have 30 days to restore anything before it's removed for good.",
+    desc: "Deleted banks and accounts land here first — restore them anytime before you clear them for good.",
   },
 ];
 
