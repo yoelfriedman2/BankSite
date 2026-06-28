@@ -14,12 +14,13 @@ export async function completeOnboarding(name: string): Promise<{ error?: string
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
+  // The profile row already exists (created by the handle_new_user trigger on
+  // signup), so UPDATE it — profiles has an UPDATE policy but no INSERT policy,
+  // and an upsert would be rejected by RLS even when it only needs to update.
   const { error } = await supabase
     .from("profiles")
-    .upsert(
-      { id: user.id, display_name: trimmed, onboarded: true },
-      { onConflict: "id" },
-    );
+    .update({ display_name: trimmed, onboarded: true })
+    .eq("id", user.id);
   if (error) return { error: error.message };
   return {};
 }
