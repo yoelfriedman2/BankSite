@@ -148,6 +148,7 @@ export interface Profile {
   activity_reminder_months: number[];
   notify_new_comments: boolean;
   notify_product_updates: boolean;
+  banks_seeded: boolean;
   created_at: string;
 }
 

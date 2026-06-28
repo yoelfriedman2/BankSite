@@ -269,6 +269,7 @@ function createInitialStore(): DemoStore {
     activity_reminder_months: [9, 12],
     notify_new_comments: false,
     notify_product_updates: false,
+    banks_seeded: true,
     created_at: new Date().toISOString(),
   };
 

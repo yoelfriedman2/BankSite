@@ -587,7 +587,16 @@ export async function importBanks(
   return { banks: banksTouched, accounts: accountInserts.length, notes: notesPosted };
 }
 
-/** Real-mode only: populate a brand-new user's list with the default 426 banks. */
+/**
+ * Real-mode only: ensure a user has the full shared bank list. Seeds from the
+ * UNION of every bank across all users (by cert) so late joiners also get banks
+ * the team added beyond the original 426, falling back to the static seed for any
+ * cert no one has yet. Gated by profiles.banks_seeded (NOT by bank count) so it
+ * survives the race where a bank propagated to a brand-new user lands before
+ * their first Banks visit. Only certs the user is missing are inserted, and the
+ * "have" check includes soft-deleted rows, so it never duplicates banks or
+ * resurrects ones the user deleted. Runs exactly once per user.
+ */
 export async function seedBanks(): Promise<{ seeded?: number; error?: string }> {
   if (DEMO_MODE) return { seeded: 0 };
 
@@ -597,33 +606,99 @@ export async function seedBanks(): Promise<{ seeded?: number; error?: string }> 
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
-  const { count } = await supabase
+  // One-time gate: skip if this user has already been seeded.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("banks_seeded")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profile?.banks_seeded) return { seeded: 0 };
+
+  // Build the shared master set: union of all banks (by cert) across every user.
+  // Admin client so we can see the whole team's banks, not just this user's.
+  const admin = createAdminClient();
+  const { data: allBanks } = await admin
     .from("banks")
-    .select("id", { count: "exact", head: true })
+    .select(
+      "cert, name, city, state, regulator, assets, holding_company, open_methods, eligibility, eligibility_date, branch_location, phone, min_to_open, conversion_stage",
+    )
+    .not("cert", "is", null)
     .is("deleted_at", null);
-  if ((count ?? 0) > 0) return { seeded: 0 };
 
-  const payload = BANKS_SEED.map((s) => ({ user_id: user.id, ...s }));
-  const { error } = await supabase.from("banks").insert(payload);
-  if (error) return { error: error.message };
+  type SeedRow = Record<string, unknown> & { cert: number; name: string };
+  const byCert = new Map<number, SeedRow>();
+  for (const b of allBanks ?? []) {
+    const cert = b.cert as number;
+    if (!byCert.has(cert)) byCert.set(cert, b as SeedRow);
+  }
+  // Fall back to the static seed for any cert no user has yet.
+  for (const s of BANKS_SEED) {
+    if (s.cert != null && !byCert.has(s.cert)) {
+      byCert.set(s.cert, s as unknown as SeedRow);
+    }
+  }
 
-  // Set cannot_open on banks whose community notes contain strong denial signals,
-  // so new users start with a more accurate status rather than "untracked".
-  const CANNOT_OPEN_RE = /can'?t\s+open|cannot\s+open|won'?t\s+open|will\s+not\s+open|not\s+accepting|doesn'?t\s+open|does\s+not\s+open|no\s+new\s+accounts|denied\b|rejected\b|declined?\b/i;
-  const { data: comments } = await supabase
-    .from("bank_comments")
-    .select("cert, body");
-  const cannotOpenCerts = new Set<number>();
-  for (const c of comments ?? []) {
-    if (CANNOT_OPEN_RE.test(c.body as string)) cannotOpenCerts.add(c.cert as number);
+  // What the user already has (incl. soft-deleted) so we never duplicate a bank
+  // or resurrect one they deleted.
+  const { data: mine } = await supabase
+    .from("banks")
+    .select("cert")
+    .not("cert", "is", null);
+  const have = new Set((mine ?? []).map((b) => b.cert as number));
+
+  const payload = [...byCert.values()]
+    .filter((s) => !have.has(s.cert))
+    .map((s) => ({
+      user_id: user.id,
+      status: "untracked",
+      cert: s.cert,
+      name: s.name,
+      city: (s.city as string | null) ?? null,
+      state: (s.state as string | null) ?? null,
+      regulator: (s.regulator as string | null) ?? null,
+      assets: (s.assets as number | null) ?? null,
+      holding_company: (s.holding_company as string | null) ?? null,
+      open_methods: s.open_methods ?? null,
+      eligibility: s.eligibility ?? null,
+      eligibility_date: s.eligibility_date ?? null,
+      branch_location: s.branch_location ?? null,
+      phone: s.phone ?? null,
+      min_to_open: s.min_to_open ?? null,
+      conversion_stage: s.conversion_stage ?? "none",
+    }));
+
+  if (payload.length > 0) {
+    const { error } = await supabase.from("banks").insert(payload);
+    if (error) return { error: error.message };
   }
-  if (cannotOpenCerts.size > 0) {
-    await supabase
-      .from("banks")
-      .update({ status: "cannot_open" })
-      .in("cert", [...cannotOpenCerts])
-      .is("deleted_at", null);
+
+  // Set cannot_open on the JUST-SEEDED banks whose community notes signal denial,
+  // so new users start with a more accurate status. Scoped to the inserted certs
+  // so a one-time back-fill never overwrites an existing user's own statuses.
+  const insertedCerts = new Set(payload.map((p) => p.cert));
+  if (insertedCerts.size > 0) {
+    const CANNOT_OPEN_RE = /can'?t\s+open|cannot\s+open|won'?t\s+open|will\s+not\s+open|not\s+accepting|doesn'?t\s+open|does\s+not\s+open|no\s+new\s+accounts|denied\b|rejected\b|declined?\b/i;
+    const { data: comments } = await supabase
+      .from("bank_comments")
+      .select("cert, body");
+    const cannotOpenCerts = new Set<number>();
+    for (const c of comments ?? []) {
+      const cert = c.cert as number;
+      if (insertedCerts.has(cert) && CANNOT_OPEN_RE.test(c.body as string)) {
+        cannotOpenCerts.add(cert);
+      }
+    }
+    if (cannotOpenCerts.size > 0) {
+      await supabase
+        .from("banks")
+        .update({ status: "cannot_open" })
+        .in("cert", [...cannotOpenCerts])
+        .is("deleted_at", null);
+    }
   }
+
+  // Mark seeded so this runs exactly once per user.
+  await supabase.from("profiles").update({ banks_seeded: true }).eq("id", user.id);
 
   // No revalidatePath here: seedBanks runs during the Banks page render (which
   // re-queries immediately after), and revalidatePath can't be called mid-render.

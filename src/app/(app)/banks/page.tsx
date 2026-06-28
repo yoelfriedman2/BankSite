@@ -62,14 +62,21 @@ export default async function BanksPage({
     data: { user },
   } = await supabase.auth.getUser();
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("display_name, default_dormancy_months, holders, banks_seeded")
+    .eq("id", user!.id)
+    .maybeSingle();
+
   let { data: banks } = await supabase
     .from("banks")
     .select("*")
     .is("deleted_at", null)
     .order("name", { ascending: true });
 
-  // First visit: populate the default 426-bank list for this user.
-  if (!banks || banks.length === 0) {
+  // Seed the shared bank list once per user (gated by profiles.banks_seeded, not
+  // bank count, so a bank propagated to a brand-new user can't suppress the seed).
+  if (!profile?.banks_seeded) {
     await seedBanks();
     const reload = await supabase
       .from("banks")
@@ -83,11 +90,6 @@ export default async function BanksPage({
     .from("accounts")
     .select("*")
     .is("deleted_at", null);
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("display_name, default_dormancy_months, holders")
-    .eq("id", user!.id)
-    .maybeSingle();
 
   const accountList = (accounts ?? []) as Account[];
   const knownHolders = Array.from(
