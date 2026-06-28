@@ -168,7 +168,7 @@ export function AccountDocuments({ accountId }: { accountId: string }) {
   async function handleDelete(doc: AccountDocument) {
     if (!confirm(`Delete "${doc.filename}"?`)) return;
     try {
-      await deleteDocument(doc.id, doc.storage_path);
+      await deleteDocument(doc.id);
       setDocs((prev) => prev.filter((d) => d.id !== doc.id));
     } catch {
       setError("Delete failed");

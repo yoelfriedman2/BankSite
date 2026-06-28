@@ -73,6 +73,21 @@ export async function uploadDocument(formData: FormData): Promise<AccountDocumen
 }
 
 export async function getDocumentUrl(storagePath: string): Promise<string> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  // Ownership check: RLS returns a row only if the current user owns this file.
+  // Without this, the admin signed-URL call below would mint a URL for any path.
+  const { data: owned } = await supabase
+    .from("account_documents")
+    .select("id")
+    .eq("storage_path", storagePath)
+    .maybeSingle();
+  if (!owned) throw new Error("Not found");
+
   const admin = createAdminClient();
   const { data, error } = await admin.storage
     .from(BUCKET)
@@ -81,10 +96,25 @@ export async function getDocumentUrl(storagePath: string): Promise<string> {
   return data.signedUrl;
 }
 
-export async function deleteDocument(docId: string, storagePath: string): Promise<void> {
+export async function deleteDocument(docId: string): Promise<void> {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  // Read the row via RLS (owner-scoped) to get its real storage path — never
+  // trust a client-supplied path for the storage removal.
+  const { data: row } = await supabase
+    .from("account_documents")
+    .select("storage_path")
+    .eq("id", docId)
+    .maybeSingle();
+  if (!row) throw new Error("Not found");
+
   const { error } = await supabase.from("account_documents").delete().eq("id", docId);
   if (error) throw new Error(error.message);
+
   const admin = createAdminClient();
-  await admin.storage.from(BUCKET).remove([storagePath]);
+  await admin.storage.from(BUCKET).remove([row.storage_path as string]);
 }

@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { seedBanks } from "@/app/(app)/banks/actions";
 
 /** Saves the user's name and marks onboarding complete. */
 export async function completeOnboarding(name: string): Promise<{ error?: string }> {
@@ -22,5 +23,15 @@ export async function completeOnboarding(name: string): Promise<{ error?: string
     .update({ display_name: trimmed, onboarded: true })
     .eq("id", user.id);
   if (error) return { error: error.message };
+
+  // Seed the shared bank list now so the dashboard is populated the moment they
+  // land on it. Best-effort: it's idempotent and gated by profiles.banks_seeded,
+  // and the Banks page seeds as a fallback if this is skipped.
+  try {
+    await seedBanks();
+  } catch {
+    /* non-fatal — Banks page will seed on first visit */
+  }
+
   return {};
 }
