@@ -25,6 +25,7 @@ import {
   sendFeedback,
 } from "@/app/(app)/settings/actions";
 import { exportToExcel } from "@/lib/export";
+import { useToast } from "@/components/Toast";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -66,6 +67,7 @@ export function SettingsForm({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const toast = useToast();
 
   // Delete-account flow
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -92,10 +94,12 @@ export function SettingsForm({
       setFeedbackSending(false);
       if (res.error) {
         setFeedbackError(res.error);
+        toast.error(res.error);
         return;
       }
       setFeedback("");
       setFeedbackSent(true);
+      toast.success("Feedback sent — thank you!");
     });
   }
 
@@ -181,9 +185,11 @@ export function SettingsForm({
       });
       if (result.error) {
         setError(result.error);
+        toast.error(result.error);
         return;
       }
       setSaved(true);
+      toast.success("Settings saved");
     });
   }
 

@@ -11,6 +11,7 @@ import {
 } from "@/app/(app)/accounts/actions";
 import { getBalanceHistory, type BalancePoint } from "@/app/(app)/money/actions";
 import { AccountDocuments } from "@/components/AccountDocuments";
+import { useUnsavedChanges, confirmDiscard } from "@/components/useUnsavedChanges";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -83,6 +84,13 @@ export function AccountModal({
   );
   const [newNote, setNewNote] = useState("");
   const [balanceHistory, setBalanceHistory] = useState<BalancePoint[]>([]);
+  const [dirty, setDirty] = useState(false);
+
+  useUnsavedChanges(dirty);
+
+  function attemptClose() {
+    if (confirmDiscard(dirty)) onClose();
+  }
 
   useEffect(() => {
     if (initial?.id) {
@@ -94,11 +102,13 @@ export function AccountModal({
     key: K,
     value: AccountFormValues[K],
   ) {
+    setDirty(true);
     setValues((v) => ({ ...v, [key]: value }));
   }
 
   function addEntry() {
     if (!newDate) return;
+    setDirty(true);
     setValues((v) => ({
       ...v,
       activity_log: [...v.activity_log, { date: newDate, note: newNote }],
@@ -107,6 +117,7 @@ export function AccountModal({
   }
 
   function removeEntry(index: number) {
+    setDirty(true);
     setValues((v) => ({
       ...v,
       activity_log: v.activity_log.filter((_, i) => i !== index),
@@ -122,6 +133,7 @@ export function AccountModal({
         setError(result.error);
         return;
       }
+      setDirty(false);
       onSaved();
     });
   }
@@ -135,7 +147,7 @@ export function AccountModal({
   return (
     <div
       className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4"
-      onMouseDown={(e) => { e.stopPropagation(); onClose(); }}
+      onMouseDown={(e) => { e.stopPropagation(); attemptClose(); }}
     >
       <form
         onSubmit={handleSubmit}
@@ -148,7 +160,7 @@ export function AccountModal({
           </h2>
           <button
             type="button"
-            onClick={onClose}
+            onClick={attemptClose}
             className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
           >
             <X className="h-5 w-5" />
@@ -448,7 +460,7 @@ export function AccountModal({
         <div className="mt-6 flex justify-end gap-3">
           <button
             type="button"
-            onClick={onClose}
+            onClick={attemptClose}
             className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
           >
             Cancel

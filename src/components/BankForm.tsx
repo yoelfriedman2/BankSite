@@ -39,6 +39,7 @@ import {
   type RelatedBank,
 } from "@/app/(app)/banks/actions";
 import { deleteAccount, duplicateAccount } from "@/app/(app)/accounts/actions";
+import { useUnsavedChanges, confirmDiscard } from "@/components/useUnsavedChanges";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -160,6 +161,13 @@ export function BankForm({
   const [shareNotify, setShareNotify] = useState(false);
   const [sharing, setSharing] = useState(false);
 
+  // Unsaved-changes guard (bank detail fields)
+  const [dirty, setDirty] = useState(false);
+  useUnsavedChanges(dirty);
+  function attemptClose() {
+    if (confirmDiscard(dirty)) onClose();
+  }
+
   useEffect(() => {
     // Set readAt optimistically to NOW so "New" badges disappear immediately on open.
     // markCommentsRead persists this to the DB in the background (no revalidation needed —
@@ -243,10 +251,12 @@ export function BankForm({
   }
 
   function set<K extends keyof BankFormValues>(key: K, value: BankFormValues[K]) {
+    setDirty(true);
     setValues((v) => ({ ...v, [key]: value }));
   }
 
   function toggleMethod(m: OpenMethod) {
+    setDirty(true);
     setValues((v) => ({
       ...v,
       open_methods: v.open_methods.includes(m)
@@ -291,6 +301,7 @@ export function BankForm({
         setError(result.error);
         return;
       }
+      setDirty(false);
       onSaved();
     });
   }
@@ -324,7 +335,7 @@ export function BankForm({
   return (
     <div
       className="fixed inset-0 z-50 flex justify-end bg-slate-900/40"
-      onMouseDown={onClose}
+      onMouseDown={attemptClose}
     >
       <form
         onSubmit={handleSubmit}
@@ -337,7 +348,7 @@ export function BankForm({
           </h2>
           <button
             type="button"
-            onClick={onClose}
+            onClick={attemptClose}
             className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
           >
             <X className="h-5 w-5" />
@@ -821,7 +832,7 @@ export function BankForm({
         <footer className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
           <button
             type="button"
-            onClick={onClose}
+            onClick={attemptClose}
             className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
           >
             Close
