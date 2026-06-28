@@ -7,9 +7,9 @@ import {
   type Bank,
 } from "./types";
 
-/** Build a two-sheet workbook (Banks + Accounts) and trigger a download. */
-export async function exportToExcel(banks: Bank[], accounts: Account[]) {
-  const XLSX = await import("xlsx");
+/** Maps banks + accounts to the flat row objects used for the Excel sheets.
+ *  Pure (no xlsx / browser deps) so it can run on the server too. */
+export function buildExportRows(banks: Bank[], accounts: Account[]) {
   const bankRows = banks.map((b) => ({
     Bank: b.name,
     Cert: b.cert ?? "",
@@ -45,6 +45,14 @@ export async function exportToExcel(banks: Bank[], accounts: Account[]) {
       Notes: a.notes ?? "",
     };
   });
+
+  return { bankRows, acctRows };
+}
+
+/** Build a two-sheet workbook (Banks + Accounts) and trigger a download. */
+export async function exportToExcel(banks: Bank[], accounts: Account[]) {
+  const XLSX = await import("xlsx");
+  const { bankRows, acctRows } = buildExportRows(banks, accounts);
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(bankRows), "Banks");

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendFeedbackEmail } from "@/lib/email";
 import {
   DEMO_MODE,
   setDemoProfile,
@@ -75,6 +76,32 @@ export async function updateSettings(values: {
   revalidatePath("/accounts");
   revalidatePath("/");
   return {};
+}
+
+/** Emails the owner with a user's feedback / problem report. */
+export async function sendFeedback(message: string): Promise<{ error?: string }> {
+  const text = message.trim();
+  if (!text) return { error: "Please enter a message." };
+  if (text.length > 4000) return { error: "Message is too long." };
+  if (DEMO_MODE) return {};
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("display_name")
+    .eq("id", user.id)
+    .maybeSingle();
+  const name =
+    (profile?.display_name as string | null) ||
+    (user.user_metadata?.full_name as string | undefined) ||
+    "";
+
+  return sendFeedbackEmail(name, user.email ?? "", text);
 }
 
 /** Revokes every session for the current user across all devices. */

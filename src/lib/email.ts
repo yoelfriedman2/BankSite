@@ -257,3 +257,24 @@ export async function sendActivityReminderEmail(
     html,
   );
 }
+
+/* ── User feedback / "report a problem" sent to the owner ── */
+export async function sendFeedbackEmail(
+  fromName: string,
+  fromEmail: string,
+  message: string,
+): Promise<{ error?: string }> {
+  const adminEmail = process.env.ADMIN_EMAIL;
+  if (!adminEmail) {
+    console.warn("[email] ADMIN_EMAIL not set — skipping feedback email");
+    return { error: "Feedback isn't set up yet. Please contact the owner directly." };
+  }
+  const who = escapeHtml(fromName || fromEmail || "A user");
+  const safeEmail = escapeHtml(fromEmail);
+  const html = `
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:#0f172a;">
+  <p style="margin:0 0 4px;"><strong>${who}</strong> sent feedback${safeEmail ? ` (<a href="mailto:${safeEmail}">${safeEmail}</a>)` : ""}:</p>
+  <div style="white-space:pre-wrap;border-left:3px solid #F59E0B;padding:10px 14px;margin-top:10px;background:#f8fafc;border-radius:0 8px 8px 0;color:#1e293b;line-height:1.6;">${escapeHtml(message)}</div>
+</div>`;
+  return sendEmail(adminEmail, `Bank Tracker feedback from ${fromName || fromEmail || "a user"}`, html);
+}

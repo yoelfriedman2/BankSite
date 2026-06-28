@@ -13,12 +13,16 @@ import {
   Download,
   Trash2,
   LogOut,
+  Archive,
+  MessageCircle,
+  Send,
 } from "lucide-react";
 import {
   updateSettings,
   getMyExportData,
   deleteMyAccount,
   signOutEverywhere,
+  sendFeedback,
 } from "@/app/(app)/settings/actions";
 import { exportToExcel } from "@/lib/export";
 
@@ -71,6 +75,29 @@ export function SettingsForm({
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [signingOutAll, setSigningOutAll] = useState(false);
+
+  // Feedback
+  const [feedback, setFeedback] = useState("");
+  const [feedbackSending, setFeedbackSending] = useState(false);
+  const [feedbackSent, setFeedbackSent] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+
+  function handleSendFeedback() {
+    const msg = feedback.trim();
+    if (!msg) return;
+    setFeedbackSending(true);
+    setFeedbackError(null);
+    startTransition(async () => {
+      const res = await sendFeedback(msg);
+      setFeedbackSending(false);
+      if (res.error) {
+        setFeedbackError(res.error);
+        return;
+      }
+      setFeedback("");
+      setFeedbackSent(true);
+    });
+  }
 
   async function handleSignOutEverywhere() {
     setSigningOutAll(true);
@@ -423,6 +450,69 @@ export function SettingsForm({
           )}
           Sign out on all devices
         </button>
+      </div>
+
+      {/* ── Your data ── */}
+      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
+        <div className="mb-1 flex items-center gap-2">
+          <Archive className="h-4 w-4 text-slate-500" />
+          <h2 className="text-sm font-semibold text-slate-800">Your data</h2>
+        </div>
+        <p className="mb-4 text-sm text-slate-600">
+          Download a full backup — a spreadsheet of your banks and accounts plus every
+          document you&apos;ve uploaded, in one zip.
+        </p>
+        <a
+          href="/api/export/full"
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          <Download className="h-4 w-4" />
+          Download full backup
+        </a>
+        <p className="mt-2 text-xs text-slate-400">
+          Large document libraries may take a few seconds to bundle.
+        </p>
+      </div>
+
+      {/* ── Feedback ── */}
+      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
+        <div className="mb-1 flex items-center gap-2">
+          <MessageCircle className="h-4 w-4 text-amber-500" />
+          <h2 className="text-sm font-semibold text-slate-800">Feedback</h2>
+        </div>
+        <p className="mb-3 text-sm text-slate-600">
+          Found a bug or have an idea? Send it straight to the team.
+        </p>
+        <textarea
+          rows={3}
+          className={inputClass}
+          placeholder="What's on your mind?"
+          value={feedback}
+          onChange={(e) => {
+            setFeedback(e.target.value);
+            setFeedbackSent(false);
+          }}
+        />
+        {feedbackError && (
+          <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{feedbackError}</p>
+        )}
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleSendFeedback}
+            disabled={feedbackSending || !feedback.trim()}
+            className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
+          >
+            {feedbackSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            Send feedback
+          </button>
+          {feedbackSent && (
+            <span className="flex items-center gap-1 text-sm text-emerald-600">
+              <Check className="h-4 w-4" />
+              Sent — thank you!
+            </span>
+          )}
+        </div>
       </div>
 
       {/* ── Danger zone ── */}
