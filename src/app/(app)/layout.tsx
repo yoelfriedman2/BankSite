@@ -14,6 +14,7 @@ export default async function AppLayout({
   let displayName: string;
 
   let userId = "";
+  let isOwner = false;
 
   if (DEMO_MODE) {
     displayName = getDemoProfile().display_name ?? "Demo User";
@@ -26,6 +27,9 @@ export default async function AppLayout({
     if (!user) redirect("/login");
 
     userId = user.id;
+
+    const adminEmail = process.env.ADMIN_EMAIL;
+    isOwner = !!adminEmail && user.email?.toLowerCase() === adminEmail.toLowerCase();
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -45,9 +49,9 @@ export default async function AppLayout({
     <div className="flex min-h-screen bg-slate-50">
       <IdleTimeout enabled={!DEMO_MODE} />
       <WalkthroughModal isDemo={DEMO_MODE} userId={userId} />
-      <SideNav displayName={displayName} />
+      <SideNav displayName={displayName} isOwner={isOwner} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <TopNav displayName={displayName} />
+        <TopNav displayName={displayName} isOwner={isOwner} />
         <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
           {children}
         </main>

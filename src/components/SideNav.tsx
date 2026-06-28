@@ -10,6 +10,8 @@ import {
   CalendarSearch,
   CalendarDays,
   Printer,
+  History,
+  ShieldCheck,
   Settings,
   Trash2,
   LogOut,
@@ -17,7 +19,15 @@ import {
 import { Logo } from "@/components/Logo";
 import { GlobalSearch } from "@/components/GlobalSearch";
 
-const LINKS = [
+type NavLink = {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  tour: string;
+  ownerOnly?: boolean;
+};
+
+const LINKS: NavLink[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, tour: "dashboard" },
   { href: "/banks", label: "Banks", icon: Landmark, tour: "banks" },
   { href: "/accounts", label: "Accounts", icon: CreditCard, tour: "accounts" },
@@ -25,17 +35,26 @@ const LINKS = [
   { href: "/balances", label: "Balance by date", icon: CalendarSearch, tour: "balances" },
   { href: "/calendar", label: "Calendar", icon: CalendarDays, tour: "calendar" },
   { href: "/checks", label: "Print Checks", icon: Printer, tour: "checks" },
+  { href: "/activity", label: "Activity", icon: History, tour: "activity" },
+  { href: "/admin", label: "Admin", icon: ShieldCheck, tour: "admin", ownerOnly: true },
   { href: "/settings", label: "Settings", icon: Settings, tour: "settings" },
   { href: "/trash", label: "Trash", icon: Trash2, tour: "trash" },
-] as const;
+];
 
 function isActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function SideNav({ displayName }: { displayName: string }) {
+export function SideNav({
+  displayName,
+  isOwner = false,
+}: {
+  displayName: string;
+  isOwner?: boolean;
+}) {
   const pathname = usePathname();
+  const links = LINKS.filter((l) => !l.ownerOnly || isOwner);
 
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-800 bg-slate-900 text-slate-300 md:flex md:sticky md:top-0 md:h-screen md:overflow-y-auto">
@@ -52,7 +71,7 @@ export function SideNav({ displayName }: { displayName: string }) {
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-2">
-        {LINKS.map(({ href, label, icon: Icon, tour }) => {
+        {links.map(({ href, label, icon: Icon, tour }) => {
           const active = isActive(pathname, href);
           return (
             <Link

@@ -15,6 +15,7 @@ export default async function SettingsPage() {
         activityReminderMonths={p.activity_reminder_months ?? [9, 12]}
         notifyNewComments={p.notify_new_comments ?? false}
         notifyProductUpdates={p.notify_product_updates ?? false}
+        lastSignInAt={null}
       />
     );
   }
@@ -42,6 +43,7 @@ export default async function SettingsPage() {
       activityReminderMonths={profile?.activity_reminder_months ?? [9, 12]}
       notifyNewComments={profile?.notify_new_comments ?? true}
       notifyProductUpdates={profile?.notify_product_updates ?? true}
+      lastSignInAt={user?.last_sign_in_at ?? null}
     />
   );
 }

@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendCommunityNoteEmail } from "@/lib/email";
+import { logAudit, type AuditEntry } from "@/lib/audit";
+import type { User } from "@supabase/supabase-js";
 import {
   DEMO_MODE,
   addDemoBank,
@@ -99,6 +101,24 @@ function revalidate() {
   revalidatePath("/banks");
   revalidatePath("/accounts");
   revalidatePath("/");
+}
+
+/** Resolves a human display name for the actor for the audit log. */
+async function actorName(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  user: User,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("profiles")
+    .select("display_name")
+    .eq("id", user.id)
+    .maybeSingle();
+  return (
+    (data?.display_name as string | null) ||
+    (user.user_metadata?.full_name as string | undefined) ||
+    user.email ||
+    null
+  );
 }
 
 export async function upsertBank(
@@ -199,6 +219,14 @@ export async function upsertBank(
       .eq("cert", patch.cert)
       .neq("user_id", user.id)
       .is("deleted_at", null);
+
+    await logAudit({
+      actorId: user.id,
+      actorName: updaterName,
+      action: values.id ? "bank_shared_update" : "bank_add",
+      summary: `${updaterName ?? "Someone"} ${values.id ? "updated shared info for" : "added"} ${patch.name}`,
+      cert: patch.cert,
+    });
   }
 
   revalidate();
@@ -837,6 +865,14 @@ export async function addBankComment(
     .insert({ cert, author_id: user.id, author_name: authorName, body: text });
   if (error) return { error: error.message };
 
+  await logAudit({
+    actorId: user.id,
+    actorName: authorName,
+    action: "note_add",
+    summary: `${authorName} posted a note on ${bankName ?? `cert #${cert}`}`,
+    cert,
+  });
+
   // The author has obviously just seen this thread.
   await supabase.from("bank_comment_reads").upsert(
     { user_id: user.id, cert, last_read_at: new Date().toISOString() },
@@ -924,6 +960,15 @@ export async function shareCannotOpen(
       .not("status", "in", "(open,open_add_account,open_add_funds)")
       .is("deleted_at", null);
     if (error) return { error: error.message };
+
+    const name = await actorName(supabase, user);
+    await logAudit({
+      actorId: user.id,
+      actorName: name,
+      action: "cannot_open_all",
+      summary: `${name ?? "Someone"} marked ${bankName ?? `cert #${cert}`} can't open for everyone`,
+      cert,
+    });
   }
 
   revalidate();
@@ -944,8 +989,24 @@ export async function deleteBankComment(id: string): Promise<{ error?: string }>
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
+  // Capture the cert before deleting, for the audit entry.
+  const { data: existing } = await supabase
+    .from("bank_comments")
+    .select("cert")
+    .eq("id", id)
+    .maybeSingle();
+
   const { error } = await supabase.from("bank_comments").delete().eq("id", id);
   if (error) return { error: error.message };
+
+  const name = await actorName(supabase, user);
+  await logAudit({
+    actorId: user.id,
+    actorName: name,
+    action: "note_delete",
+    summary: `${name ?? "Someone"} deleted a community note`,
+    cert: (existing?.cert as number | null) ?? null,
+  });
 
   revalidate();
   return {};
@@ -1224,6 +1285,20 @@ export async function addBankRelationship(
     .upsert({ cert_a: lo, cert_b: hi, created_by: user.id }, { onConflict: "cert_a,cert_b" });
   if (error) return { error: error.message };
 
+  const [name, { data: bks }] = await Promise.all([
+    actorName(supabase, user),
+    supabase.from("banks").select("cert, name").in("cert", [certA, certB]).eq("user_id", user.id),
+  ]);
+  const nm = (c: number) =>
+    (bks ?? []).find((b) => b.cert === c)?.name ?? `cert #${c}`;
+  await logAudit({
+    actorId: user.id,
+    actorName: name,
+    action: "bank_link",
+    summary: `${name ?? "Someone"} linked ${nm(certA)} ↔ ${nm(certB)}`,
+    cert: certA,
+  });
+
   revalidate();
   return {};
 }
@@ -1248,6 +1323,20 @@ export async function removeBankRelationship(
     .eq("cert_a", lo)
     .eq("cert_b", hi);
   if (error) return { error: error.message };
+
+  const [name, { data: bks }] = await Promise.all([
+    actorName(supabase, user),
+    supabase.from("banks").select("cert, name").in("cert", [certA, certB]).eq("user_id", user.id),
+  ]);
+  const nm = (c: number) =>
+    (bks ?? []).find((b) => b.cert === c)?.name ?? `cert #${c}`;
+  await logAudit({
+    actorId: user.id,
+    actorName: name,
+    action: "bank_unlink",
+    summary: `${name ?? "Someone"} unlinked ${nm(certA)} ↔ ${nm(certB)}`,
+    cert: certA,
+  });
 
   revalidate();
   return {};
@@ -1335,4 +1424,20 @@ export async function getAllBankComments(): Promise<CommentExportRow[]> {
     body: c.body as string,
     created_at: c.created_at as string,
   }));
+}
+
+/** Recent shared-data activity, newest first. Readable by any signed-in user. */
+export async function getAuditLog(limit = 200): Promise<AuditEntry[]> {
+  if (DEMO_MODE) return [];
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data } = await supabase
+    .from("audit_log")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []) as AuditEntry[];
 }

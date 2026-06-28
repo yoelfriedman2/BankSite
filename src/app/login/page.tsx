@@ -5,6 +5,7 @@ import { LoginForm } from "@/components/LoginForm";
 const NOTICES: Record<string, string> = {
   timeout: "You were signed out after a period of inactivity. Please sign in again.",
   deleted: "Your account has been permanently deleted.",
+  signedout: "You've been signed out on all devices. Please sign in again.",
 };
 
 export default async function LoginPage({

@@ -12,11 +12,13 @@ import {
   AlertTriangle,
   Download,
   Trash2,
+  LogOut,
 } from "lucide-react";
 import {
   updateSettings,
   getMyExportData,
   deleteMyAccount,
+  signOutEverywhere,
 } from "@/app/(app)/settings/actions";
 import { exportToExcel } from "@/lib/export";
 
@@ -33,6 +35,7 @@ export function SettingsForm({
   activityReminderMonths,
   notifyNewComments,
   notifyProductUpdates,
+  lastSignInAt,
 }: {
   email: string;
   displayName: string;
@@ -42,6 +45,7 @@ export function SettingsForm({
   activityReminderMonths: number[];
   notifyNewComments: boolean;
   notifyProductUpdates: boolean;
+  lastSignInAt: string | null;
 }) {
   const [name, setName] = useState(displayName);
   const [months, setMonths] = useState(String(defaultDormancyMonths));
@@ -66,6 +70,17 @@ export function SettingsForm({
   const [exported, setExported] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [signingOutAll, setSigningOutAll] = useState(false);
+
+  async function handleSignOutEverywhere() {
+    setSigningOutAll(true);
+    try {
+      await signOutEverywhere();
+    } catch {
+      /* redirect regardless */
+    }
+    window.location.href = "/login?reason=signedout";
+  }
 
   async function handleExportData() {
     setExporting(true);
@@ -160,6 +175,18 @@ export function SettingsForm({
             value={email}
             disabled
           />
+          {lastSignInAt && (
+            <p className="mt-1 text-xs text-slate-400">
+              Last signed in:{" "}
+              {new Date(lastSignInAt).toLocaleString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </p>
+          )}
         </div>
 
         <div>
@@ -375,6 +402,28 @@ export function SettingsForm({
           )}
         </div>
       </form>
+
+      {/* ── Security ── */}
+      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
+        <h2 className="mb-1 text-sm font-semibold text-slate-800">Security</h2>
+        <p className="mb-4 text-sm text-slate-600">
+          Signed in somewhere you shouldn&apos;t be? Sign out of every device — you&apos;ll
+          need to sign in again here.
+        </p>
+        <button
+          type="button"
+          onClick={handleSignOutEverywhere}
+          disabled={signingOutAll}
+          className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+        >
+          {signingOutAll ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <LogOut className="h-4 w-4" />
+          )}
+          Sign out on all devices
+        </button>
+      </div>
 
       {/* ── Danger zone ── */}
       <div className="mt-6 rounded-2xl border border-rose-200 bg-rose-50/40 p-6">

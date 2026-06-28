@@ -77,6 +77,15 @@ export async function updateSettings(values: {
   return {};
 }
 
+/** Revokes every session for the current user across all devices. */
+export async function signOutEverywhere(): Promise<{ error?: string }> {
+  if (DEMO_MODE) return {};
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signOut({ scope: "global" });
+  if (error) return { error: error.message };
+  return {};
+}
+
 /** Fetches the current user's banks + accounts so they can export before deleting. */
 export async function getMyExportData(): Promise<{ banks: Bank[]; accounts: Account[] }> {
   if (DEMO_MODE) {
