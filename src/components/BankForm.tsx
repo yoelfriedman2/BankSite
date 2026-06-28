@@ -14,6 +14,7 @@ import {
   type Account,
   type Bank,
   type BankComment,
+  type BankStatus,
   type OpenMethod,
   type ConversionStage,
 } from "@/lib/types";
@@ -152,6 +153,12 @@ export function BankForm({
   // Bank info expand/collapse
   const [infoExpanded, setInfoExpanded] = useState(false);
 
+  // "Can't open" share prompt
+  const [cannotOpenPrompt, setCannotOpenPrompt] = useState(false);
+  const [shareNote, setShareNote] = useState("");
+  const [shareNotify, setShareNotify] = useState(false);
+  const [sharing, setSharing] = useState(false);
+
   useEffect(() => {
     // Set readAt optimistically to NOW so "New" badges disappear immediately on open.
     // markCommentsRead persists this to the DB in the background (no revalidation needed —
@@ -247,6 +254,37 @@ export function BankForm({
     }));
   }
 
+  function handleStatusClick(s: BankStatus) {
+    // Newly choosing "Can't open" on a bank with a cert: offer to share it publicly.
+    if (s === "cannot_open" && values.status !== "cannot_open" && initial?.cert != null) {
+      setShareNote("");
+      setShareNotify(false);
+      setCannotOpenPrompt(true);
+    }
+    set("status", s);
+  }
+
+  function handleShareCannotOpen() {
+    const cert = initial?.cert;
+    if (cert == null) {
+      setCannotOpenPrompt(false);
+      return;
+    }
+    const trimmed = shareNote.trim();
+    // Always lead with "Can't open" so the note reads clearly and the new-user
+    // auto-status scan picks it up; the user's optional note rides along.
+    const body = trimmed ? `Can't open: ${trimmed}` : "Can't open.";
+    setSharing(true);
+    startTransition(async () => {
+      await addBankComment(cert, body, shareNotify, initial?.name);
+      const fresh = await getBankComments(cert);
+      setComments(fresh);
+      setSharing(false);
+      setCannotOpenPrompt(false);
+      setShareNote("");
+    });
+  }
+
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
@@ -319,7 +357,7 @@ export function BankForm({
                 <button
                   key={s}
                   type="button"
-                  onClick={() => set("status", s)}
+                  onClick={() => handleStatusClick(s)}
                   className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
                     values.status === s
                       ? "border-amber-500 bg-amber-500 text-white"
@@ -822,6 +860,59 @@ export function BankForm({
           bankCity={[initial.city, initial.state].filter(Boolean).join(", ")}
           onClose={() => setPrintCheck(null)}
         />
+      )}
+
+      {cannotOpenPrompt && initial?.cert != null && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/50 p-4"
+          onMouseDown={(e) => { e.stopPropagation(); setCannotOpenPrompt(false); }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold text-slate-900">Let everyone know?</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              You marked <span className="font-medium text-slate-700">{initial.name}</span> as
+              can&apos;t open. Post a public note so everyone sees it — new users will also start
+              with this bank set to can&apos;t open. Skip it to keep the status private to you.
+            </p>
+            <textarea
+              rows={3}
+              className={`${inputClass} mt-3`}
+              placeholder="Optional note for everyone (e.g. local residents only, rejected by mail)…"
+              value={shareNote}
+              onChange={(e) => setShareNote(e.target.value)}
+            />
+            <label className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+              <input
+                type="checkbox"
+                checked={shareNotify}
+                onChange={(e) => setShareNotify(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 accent-amber-600"
+              />
+              Also email everyone
+            </label>
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setCannotOpenPrompt(false)}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
+              >
+                Keep private
+              </button>
+              <button
+                type="button"
+                onClick={handleShareCannotOpen}
+                disabled={sharing}
+                className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
+              >
+                {sharing && <Loader2 className="h-4 w-4 animate-spin" />}
+                Post note
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
