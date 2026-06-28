@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import {
   Sparkles,
   History,
@@ -60,63 +60,23 @@ export function UpdatesClient({
   changelog: ChangelogEntry[];
   activity: AuditEntry[];
 }) {
-  const [tab, setTab] = useState<"whats-new" | "activity">("whats-new");
-
   // Opening the page = the user has seen the latest update; clear the nav dot.
   useEffect(() => {
     markChangelogSeen();
   }, []);
 
-  const tabBtn = (key: typeof tab, label: string) => (
-    <button
-      type="button"
-      onClick={() => setTab(key)}
-      className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-        tab === key
-          ? "bg-amber-50 text-amber-700"
-          : "text-slate-500 hover:bg-slate-100"
-      }`}
-    >
-      {label}
-    </button>
-  );
-
   return (
-    <div className="max-w-2xl">
-      <h1 className="mb-4 text-2xl font-semibold text-slate-900">Updates</h1>
+    <div className="max-w-5xl">
+      <h1 className="mb-5 text-2xl font-semibold text-slate-900">Updates</h1>
 
-      <div className="mb-5 flex gap-1.5">
-        {tabBtn("whats-new", "What's new")}
-        {tabBtn("activity", "Activity")}
-      </div>
-
-      {tab === "whats-new" ? (
-        <div className="space-y-5">
-          {changelog.map((entry) => (
-            <div
-              key={entry.date}
-              className="rounded-2xl border border-slate-200 bg-white p-5"
-            >
-              <div className="mb-2 flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-amber-500" />
-                <h2 className="text-sm font-semibold text-slate-900">{entry.title}</h2>
-                <span className="ml-auto text-xs text-slate-400">{fmtDate(entry.date)}</span>
-              </div>
-              <ul className="space-y-1.5">
-                {entry.items.map((it, i) => (
-                  <li key={i} className="flex gap-2 text-sm text-slate-600">
-                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
-                    <span>{it}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <>
-          <p className="mb-3 flex items-center gap-2 text-sm text-slate-500">
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* ── Activity (left) ── */}
+        <section>
+          <div className="mb-2 flex items-center gap-2">
             <History className="h-4 w-4 text-slate-400" />
+            <h2 className="text-sm font-semibold text-slate-800">Activity</h2>
+          </div>
+          <p className="mb-3 text-xs text-slate-400">
             Changes to shared data — notes, shared bank info, can&apos;t-open broadcasts,
             and bank links. Visible to the whole team.
           </p>
@@ -142,8 +102,40 @@ export function UpdatesClient({
               ))}
             </ul>
           )}
-        </>
-      )}
+        </section>
+
+        {/* ── What's new (right) ── */}
+        <section>
+          <div className="mb-2 flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-amber-500" />
+            <h2 className="text-sm font-semibold text-slate-800">What&apos;s new</h2>
+          </div>
+          <p className="mb-3 text-xs text-slate-400">
+            New features and improvements, most recent first.
+          </p>
+          <div className="space-y-4">
+            {changelog.map((entry) => (
+              <div
+                key={entry.date}
+                className="rounded-2xl border border-slate-200 bg-white p-5"
+              >
+                <div className="mb-2 flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-slate-900">{entry.title}</h3>
+                  <span className="ml-auto text-xs text-slate-400">{fmtDate(entry.date)}</span>
+                </div>
+                <ul className="space-y-1.5">
+                  {entry.items.map((it, i) => (
+                    <li key={i} className="flex gap-2 text-sm text-slate-600">
+                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+                      <span>{it}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
