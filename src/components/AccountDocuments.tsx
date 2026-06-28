@@ -22,6 +22,43 @@ function formatBytes(bytes: number | null) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// Compress images to JPEG at max 1600px / 82% quality before upload.
+// PDFs are left as-is (bank statements are already compressed by the issuer).
+async function compressImage(file: File): Promise<File> {
+  const MAX_PX = 1600;
+  const QUALITY = 0.82;
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (width > MAX_PX || height > MAX_PX) {
+        const ratio = MAX_PX / Math.max(width, height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { resolve(file); return; }
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) { resolve(file); return; }
+          const name = file.name.replace(/\.[^.]+$/, "") + ".jpg";
+          resolve(new File([blob], name, { type: "image/jpeg" }));
+        },
+        "image/jpeg",
+        QUALITY,
+      );
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+
 export function AccountDocuments({ accountId }: { accountId: string }) {
   const [docs, setDocs] = useState<AccountDocument[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -33,14 +70,15 @@ export function AccountDocuments({ accountId }: { accountId: string }) {
     getAccountDocuments(accountId).then(setDocs).catch(() => {});
   }, [accountId]);
 
-  async function handleFile(file: File) {
-    if (file.size > 15 * 1024 * 1024) {
+  async function handleFile(rawFile: File) {
+    if (rawFile.size > 15 * 1024 * 1024) {
       setError("File too large (max 15 MB)");
       return;
     }
     setUploading(true);
     setError(null);
     try {
+      const file = rawFile.type.startsWith("image/") ? await compressImage(rawFile) : rawFile;
       const fd = new FormData();
       fd.append("file", file);
       fd.append("accountId", accountId);
