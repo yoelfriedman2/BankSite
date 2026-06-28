@@ -672,19 +672,19 @@ export async function seedBanks(): Promise<{ seeded?: number; error?: string }> 
     if (error) return { error: error.message };
   }
 
-  // Default any UNTRACKED bank with a public "can't open" note to cannot_open, so
-  // a new user inherits the team's knowledge. Scoped to status='untracked' so a
-  // one-time back-fill never overwrites a deliberate status (open / applied / …),
-  // while still catching banks the user already had as untracked — not just the
-  // ones inserted in this run.
-  const CANNOT_OPEN_RE = /can'?t\s+open|cannot\s+open|won'?t\s+open|will\s+not\s+open|not\s+accepting|doesn'?t\s+open|does\s+not\s+open|no\s+new\s+accounts|denied\b|rejected\b|declined?\b/i;
-  const { data: comments } = await supabase
-    .from("bank_comments")
-    .select("cert, body");
-  const cannotOpenCerts = new Set<number>();
-  for (const c of comments ?? []) {
-    if (CANNOT_OPEN_RE.test(c.body as string)) cannotOpenCerts.add(c.cert as number);
-  }
+  // Default any UNTRACKED bank to cannot_open if the team already knows it can't be
+  // opened — i.e. another user has it as cannot_open. Status is the reliable shared
+  // signal; the community note is just the human explanation. Scoped to
+  // status='untracked' so a one-time back-fill never overwrites a deliberate status
+  // (open / applied / …), and it catches banks the user already had as untracked,
+  // not only the ones inserted in this run.
+  const { data: teamCannotOpen } = await admin
+    .from("banks")
+    .select("cert")
+    .eq("status", "cannot_open")
+    .not("cert", "is", null)
+    .is("deleted_at", null);
+  const cannotOpenCerts = new Set((teamCannotOpen ?? []).map((b) => b.cert as number));
   if (cannotOpenCerts.size > 0) {
     await supabase
       .from("banks")
