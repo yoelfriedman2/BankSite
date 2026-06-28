@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { BanksClient } from "@/components/BanksClient";
+import { BankSetupNotice } from "@/components/BankSetupNotice";
 import {
   DEMO_MODE,
   DEMO_USER,
@@ -84,6 +85,13 @@ export default async function BanksPage({
       .is("deleted_at", null)
       .order("name", { ascending: true });
     banks = reload.data ?? [];
+  }
+
+  // If the seed hasn't produced banks yet (e.g. a cold-start timeout on the very
+  // first request), show a friendly setup screen that auto-refreshes, rather than
+  // an empty list.
+  if (!profile?.banks_seeded && (banks?.length ?? 0) === 0) {
+    return <BankSetupNotice />;
   }
 
   const { data: accounts } = await supabase
