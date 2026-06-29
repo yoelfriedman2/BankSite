@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X, Printer } from "lucide-react";
 import type { Account } from "@/lib/types";
 import { saveLastCheckNumber } from "@/app/(app)/accounts/actions";
@@ -62,10 +62,7 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** MICR line in standard personal-check order, left → right:
- *  Transit (routing) between ⑆ symbols · On-Us (account) ending in ⑈ · check number.
- *  (A bank-scannable line needs the E-13B font + MICR toner; this reproduces the
- *  correct layout and symbol positions for a proper-looking printed check.) */
+/** MICR line in standard personal-check order: ⑆routing⑆ · account⑈ · check#. */
 function micrLine(routing: string, accountNum: string, checkNum: string): string {
   return [
     routing ? `⑆${routing}⑆` : "",
@@ -74,8 +71,10 @@ function micrLine(routing: string, accountNum: string, checkNum: string): string
   ].filter(Boolean).join("   ");
 }
 
-// ── Build the print HTML ──────────────────────────────────────────────────────
-function buildPrintHTML(fields: {
+type PrintMode = "blank" | "preprinted";
+interface PrintOpts { mode: PrintMode; dx: number; dy: number }
+
+interface CheckFields {
   holder: string;
   bankName: string;
   bankCity: string;
@@ -87,8 +86,73 @@ function buildPrintHTML(fields: {
   memo: string;
   checkNum: string;
   date: string;
-}): string {
-  const micr = micrLine(esc(fields.routing), esc(fields.accountNum), esc(fields.checkNum));
+}
+
+// Standard voucher-check field positions (inches from the top-left of the page),
+// for printing ONLY the variable data onto pre-printed check stock. Vendors vary
+// slightly, which is what the X/Y alignment nudge is for.
+const PP = {
+  date:   "left: 6.35in; top: 0.70in;",
+  payee:  "left: 1.20in; top: 1.30in;",
+  amount: "right: 0.65in; top: 1.26in;",
+  words:  "left: 0.50in; top: 1.68in;",
+  memo:   "left: 0.75in; top: 2.80in;",
+};
+
+// ── Build the print HTML ──────────────────────────────────────────────────────
+function buildPrintHTML(f: CheckFields, opts: PrintOpts): string {
+  const micr = micrLine(esc(f.routing), esc(f.accountNum), esc(f.checkNum));
+  const shift = `transform: translate(${opts.dx}in, ${opts.dy}in);`;
+
+  // Pre-printed stock: lay down ONLY the filled-in values at standard positions —
+  // the name, bank info, borders, and MICR line are already on the check.
+  const preprintedBody = `
+<div class="ppcheck" style="${shift}">
+  <span class="pp" style="${PP.date}">${esc(f.date)}</span>
+  <span class="pp" style="${PP.payee}">${esc(f.payee)}</span>
+  <span class="pp amt" style="${PP.amount}">${esc(fmtAmount(f.amount))}</span>
+  <span class="pp" style="${PP.words}">${esc(f.amountW)}</span>
+  <span class="pp" style="${PP.memo}">${esc(f.memo)}</span>
+</div>`;
+
+  // Blank stock: draw the entire check, including the MICR line.
+  const blankBody = `
+<div class="check" style="${shift}">
+  <div class="top">
+    <div class="payer-name">${esc(f.holder) || "&nbsp;"}</div>
+    <div class="topright">
+      <div class="check-no">No. ${esc(f.checkNum) || "______"}</div>
+      <div class="date-line">
+        <span class="date-label muted">Date</span>
+        <span class="date-val">${esc(f.date)}</span>
+      </div>
+    </div>
+  </div>
+  <div class="pay">
+    <span class="pay-label">Pay to the<br>order of</span>
+    <span class="pay-line">${esc(f.payee)}</span>
+    <span class="dollar">$</span>
+    <span class="amt-box">${esc(fmtAmount(f.amount)) || "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"}</span>
+  </div>
+  <div class="words">
+    <span class="words-line">${esc(f.amountW)}</span>
+    <span class="dollars-word">DOLLARS</span>
+  </div>
+  <div class="bank">
+    ${esc(f.bankName)}${f.bankCity ? `<span class="bank-city muted"> · ${esc(f.bankCity)}</span>` : ""}
+  </div>
+  <div class="sigrow">
+    <div class="memo">
+      <span class="memo-line">${esc(f.memo)}</span>
+      <span class="memo-cap muted">MEMO</span>
+    </div>
+    <div class="sig">
+      <span class="sig-line"></span>
+      <span class="sig-cap muted">AUTHORIZED SIGNATURE</span>
+    </div>
+  </div>
+  <div class="micr">${micr}</div>
+</div>`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -105,17 +169,19 @@ function buildPrintHTML(fields: {
     color: #1f2a44;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
-  .check {
-    position: relative;
-    width: 8.5in;
-    height: 3.5in;
-    padding: 0.4in 0.6in 0.8in 0.6in;
-    overflow: hidden;
-    background: #f7f9fb;
-    border-bottom: 1px dashed #b8c4d2;   /* cut line */
-  }
   .muted { color: #6b7a90; }
 
+  /* Pre-printed mode — data only, absolutely positioned */
+  .ppcheck { position: relative; width: 8.5in; height: 3.5in; color: #000; }
+  .pp { position: absolute; font-size: 11pt; white-space: nowrap; }
+  .pp.amt { font-weight: 700; }
+
+  /* Blank mode — full drawn check */
+  .check {
+    position: relative; width: 8.5in; height: 3.5in;
+    padding: 0.4in 0.6in 0.8in 0.6in; overflow: hidden;
+    background: #f7f9fb; border-bottom: 1px dashed #b8c4d2;
+  }
   .top { display: flex; justify-content: space-between; align-items: flex-start; }
   .payer-name { font-size: 13.5pt; font-weight: 700; letter-spacing: 0.2px; }
   .topright { text-align: right; }
@@ -123,81 +189,32 @@ function buildPrintHTML(fields: {
   .date-line { display: flex; align-items: flex-end; justify-content: flex-end; gap: 6px; margin-top: 0.2in; }
   .date-label { font-size: 9.5pt; }
   .date-val { font-size: 10pt; border-bottom: 1px solid #1f2a44; min-width: 1.5in; text-align: center; padding-bottom: 1px; }
-
   .pay { display: flex; align-items: flex-end; gap: 10px; margin-top: 0.24in; }
   .pay-label { font-size: 8pt; line-height: 1.15; white-space: nowrap; }
   .pay-line { flex: 1; border-bottom: 1px solid #1f2a44; font-size: 12pt; padding-bottom: 2px; min-height: 20px; }
   .dollar { font-size: 13pt; font-weight: 700; }
   .amt-box { border: 1.5px solid #1f2a44; padding: 3px 10px; font-size: 12pt; font-weight: 700; min-width: 1.2in; text-align: right; white-space: nowrap; background: #fff; }
-
   .words { display: flex; align-items: flex-end; gap: 8px; margin-top: 0.16in; }
   .words-line { flex: 1; border-bottom: 1px solid #1f2a44; font-size: 10.5pt; padding-bottom: 2px; min-height: 18px; }
   .dollars-word { font-size: 8.5pt; font-weight: 700; letter-spacing: 0.5px; white-space: nowrap; }
-
   .bank { margin-top: 0.16in; font-size: 9pt; font-weight: 700; }
   .bank-city { font-size: 8pt; font-weight: 400; }
-
   .sigrow { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 0.14in; }
   .memo, .sig { display: flex; flex-direction: column; }
   .memo-line { border-bottom: 1px solid #1f2a44; min-width: 2.3in; font-size: 9.5pt; padding-bottom: 1px; min-height: 16px; }
   .memo-cap { font-size: 7.5pt; margin-top: 2px; letter-spacing: 0.3px; }
   .sig-line { border-bottom: 1px solid #1f2a44; min-width: 2.6in; min-height: 16px; }
   .sig-cap { font-size: 7.5pt; margin-top: 2px; text-align: center; letter-spacing: 0.3px; }
-
   .micr {
-    position: absolute;
-    left: 0; right: 0;
-    bottom: 0.3in;   /* ANSI clear band, centered across the check */
+    position: absolute; left: 0; right: 0; bottom: 0.3in;
     text-align: center;
     font-family: 'Courier New', Courier, monospace;
-    font-size: 13pt;
-    letter-spacing: 0.18em;
-    color: #111827;
+    font-size: 13pt; letter-spacing: 0.18em; color: #111827;
   }
 </style>
 </head>
 <body>
-<div class="check">
-  <div class="top">
-    <div class="payer-name">${esc(fields.holder) || "&nbsp;"}</div>
-    <div class="topright">
-      <div class="check-no">No. ${esc(fields.checkNum) || "______"}</div>
-      <div class="date-line">
-        <span class="date-label muted">Date</span>
-        <span class="date-val">${esc(fields.date)}</span>
-      </div>
-    </div>
-  </div>
-
-  <div class="pay">
-    <span class="pay-label">Pay to the<br>order of</span>
-    <span class="pay-line">${esc(fields.payee)}</span>
-    <span class="dollar">$</span>
-    <span class="amt-box">${esc(fmtAmount(fields.amount)) || "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"}</span>
-  </div>
-
-  <div class="words">
-    <span class="words-line">${esc(fields.amountW)}</span>
-    <span class="dollars-word">DOLLARS</span>
-  </div>
-
-  <div class="bank">
-    ${esc(fields.bankName)}${fields.bankCity ? `<span class="bank-city muted"> · ${esc(fields.bankCity)}</span>` : ""}
-  </div>
-
-  <div class="sigrow">
-    <div class="memo">
-      <span class="memo-line">${esc(fields.memo)}</span>
-      <span class="memo-cap muted">MEMO</span>
-    </div>
-    <div class="sig">
-      <span class="sig-line"></span>
-      <span class="sig-cap muted">AUTHORIZED SIGNATURE</span>
-    </div>
-  </div>
-
-  <div class="micr">${micr}</div>
-</div>
+${opts.mode === "preprinted" ? preprintedBody : blankBody}
 <script>window.onload = function() { window.print(); };</script>
 </body>
 </html>`;
@@ -231,6 +248,23 @@ export function CheckPrintModal({
   );
   const [date, setDate] = useState(today);
 
+  // Print settings — printer/stock-specific, saved per device.
+  const [mode, setMode] = useState<PrintMode>("blank");
+  const [dx, setDx] = useState("0");
+  const [dy, setDy] = useState("0");
+
+  useEffect(() => {
+    try {
+      const m = localStorage.getItem("bt_check_mode");
+      if (m === "preprinted" || m === "blank") setMode(m);
+      setDx(localStorage.getItem("bt_check_dx") ?? "0");
+      setDy(localStorage.getItem("bt_check_dy") ?? "0");
+    } catch { /* storage blocked */ }
+  }, []);
+  useEffect(() => { try { localStorage.setItem("bt_check_mode", mode); } catch {} }, [mode]);
+  useEffect(() => { try { localStorage.setItem("bt_check_dx", dx); } catch {} }, [dx]);
+  useEffect(() => { try { localStorage.setItem("bt_check_dy", dy); } catch {} }, [dy]);
+
   const words = amountWords(amount);
   const holder = account.holder ?? "";
   const routing = account.routing_number ?? "";
@@ -240,15 +274,16 @@ export function CheckPrintModal({
     const win = window.open("", "_blank", "width=900,height=600");
     if (!win) return;
     win.document.write(
-      buildPrintHTML({ holder, bankName, bankCity, routing, accountNum, payee, amount, amountW: words, memo, checkNum, date }),
+      buildPrintHTML(
+        { holder, bankName, bankCity, routing, accountNum, payee, amount, amountW: words, memo, checkNum, date },
+        { mode, dx: Number(dx) || 0, dy: Number(dy) || 0 },
+      ),
     );
     win.document.close();
     // Persist the check number so next print defaults to this+1
     const num = parseInt(checkNum, 10);
     if (account.id && !isNaN(num) && num > 0) {
       saveLastCheckNumber(account.id, num).catch(() => {});
-      // Advance the field so a second print in the same session continues the sequence,
-      // even before the parent's account snapshot refreshes.
       setCheckNum(String(num + 1));
     }
   }
@@ -305,9 +340,8 @@ export function CheckPrintModal({
             </div>
           </div>
 
-          {/* Check preview — mirrors the printed layout */}
+          {/* Check preview — mirrors the printed layout (blank-mode view) */}
           <div className="rounded-md border border-slate-300 bg-slate-50 px-5 pt-4 pb-9 text-slate-800">
-            {/* Top: payer (left) · check no. + date (right) */}
             <div className="flex items-start justify-between">
               <p className="text-sm font-bold text-slate-800">
                 {holder || <span className="font-normal text-slate-400">Account holder</span>}
@@ -320,35 +354,27 @@ export function CheckPrintModal({
                 </div>
               </div>
             </div>
-
-            {/* Pay to the order of + amount box */}
             <div className="mt-4 flex items-end gap-2">
               <span className="shrink-0 text-[10px] font-medium leading-tight text-slate-600">
                 Pay to the<br />order of
               </span>
-              <span className="flex-1 border-b border-slate-500 pb-0.5 text-sm text-slate-800">{payee || " "}</span>
+              <span className="flex-1 border-b border-slate-500 pb-0.5 text-sm text-slate-800">{payee || " "}</span>
               <span className="shrink-0 text-sm font-bold text-slate-700">$</span>
               <span className="min-w-[4.5rem] border-[1.5px] border-slate-500 bg-white px-2 py-0.5 text-right text-sm font-bold text-slate-800">
-                {amount ? fmtAmount(amount) : "     "}
+                {amount ? fmtAmount(amount) : "     "}
               </span>
             </div>
-
-            {/* Amount in words + DOLLARS */}
             <div className="mt-3 flex items-end gap-2">
-              <span className="flex-1 border-b border-slate-500 pb-0.5 text-xs text-slate-800">{words || " "}</span>
+              <span className="flex-1 border-b border-slate-500 pb-0.5 text-xs text-slate-800">{words || " "}</span>
               <span className="shrink-0 text-[10px] font-bold tracking-wide text-slate-700">DOLLARS</span>
             </div>
-
-            {/* Bank name */}
             <p className="mt-3 text-xs font-bold text-slate-700">
               {bankName}
               {bankCity && <span className="font-normal text-slate-500"> · {bankCity}</span>}
             </p>
-
-            {/* Memo (left) · signature (right) */}
             <div className="mt-3 flex items-end justify-between gap-6">
               <div className="flex flex-col">
-                <span className="min-w-[6.5rem] border-b border-slate-500 pb-0.5 text-xs text-slate-800">{memo || " "}</span>
+                <span className="min-w-[6.5rem] border-b border-slate-500 pb-0.5 text-xs text-slate-800">{memo || " "}</span>
                 <span className="mt-0.5 text-[9px] tracking-wide text-slate-400">MEMO</span>
               </div>
               <div className="flex flex-col">
@@ -356,17 +382,40 @@ export function CheckPrintModal({
                 <span className="mt-0.5 text-center text-[9px] tracking-wide text-slate-400">AUTHORIZED SIGNATURE</span>
               </div>
             </div>
-
-            {/* MICR line — centered: routing · account · check # */}
             <div className="mt-4 text-center font-mono text-xs tracking-[0.18em] text-slate-800">
               {micrLine(routing, accountNum, checkNum)}
             </div>
           </div>
 
-          {/* Pre-filled info note */}
-          <p className="text-xs text-slate-400">
-            Holder, routing, and account number are pulled from this account&apos;s saved data.
-          </p>
+          {/* Print settings: stock type + alignment */}
+          <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Print settings</p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:gap-5">
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input type="radio" name="checkmode" checked={mode === "blank"} onChange={() => setMode("blank")} className="accent-amber-600" />
+                Blank paper <span className="text-slate-400">(draw full check)</span>
+              </label>
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input type="radio" name="checkmode" checked={mode === "preprinted"} onChange={() => setMode("preprinted")} className="accent-amber-600" />
+                Pre-printed check stock
+              </label>
+            </div>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-1.5 text-xs text-slate-500">
+                Nudge right (in)
+                <input type="number" step="0.05" value={dx} onChange={(e) => setDx(e.target.value)} className="w-16 rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-900" />
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-slate-500">
+                Nudge down (in)
+                <input type="number" step="0.05" value={dy} onChange={(e) => setDy(e.target.value)} className="w-16 rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-900" />
+              </label>
+            </div>
+            <p className="text-xs text-slate-400">
+              {mode === "preprinted"
+                ? "Only the date, payee, amount, and memo print — onto your pre-printed check. Print a test, then nudge to line it up. Saved for next time."
+                : "Draws the whole check on blank paper, including the bottom MICR line. Use the nudge if your printer shifts it. Saved for next time."}
+            </p>
+          </div>
         </div>
 
         {/* Footer */}
