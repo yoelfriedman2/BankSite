@@ -489,10 +489,12 @@ export function BankForm({
             )}
           </section>
 
-          {/* ── Shared-field update notice ── */}
+          {/* ── Shared-field update notice ── only shown when we have the detail
+              of what actually changed (older/empty stamps are suppressed). ── */}
           {initial?.shared_updated_by &&
             initial.shared_updated_by !== currentUserId &&
-            initial.shared_updated_by_name && (
+            initial.shared_updated_by_name &&
+            initial.shared_updated_summary && (
               <div className="mx-6 mt-0 mb-0 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
                 <p className="text-xs text-amber-800">
                   <span className="font-semibold">{initial.shared_updated_by_name}</span>
@@ -501,12 +503,9 @@ export function BankForm({
                     <> on {formatDate(initial.shared_fields_updated_at.slice(0, 10))}</>
                   )}
                 </p>
-                {initial.shared_updated_summary && (
-                  <p className="mt-1 text-xs text-amber-700">
-                    <span className="font-medium">Changed:</span>{" "}
-                    {initial.shared_updated_summary}
-                  </p>
-                )}
+                <p className="mt-1 text-xs text-amber-700">
+                  <span className="font-medium">Changed:</span> {initial.shared_updated_summary}
+                </p>
               </div>
             )}
 

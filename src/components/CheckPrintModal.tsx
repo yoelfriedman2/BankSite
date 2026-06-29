@@ -62,12 +62,14 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** MICR line in standard personal-check order: ⑆routing⑆ · account⑈ · check#. */
+/** MICR line in standard ANSI X9 field order, left → right:
+ *  Auxiliary On-Us (check #) ⑈…⑈ · Transit (routing) ⑆…⑆ · On-Us (account) …⑈.
+ *  Printed right-anchored in the bottom clear band (see .micr CSS). */
 function micrLine(routing: string, accountNum: string, checkNum: string): string {
   return [
+    checkNum ? `⑈${checkNum}⑈` : "",
     routing ? `⑆${routing}⑆` : "",
     accountNum ? `${accountNum}⑈` : "",
-    checkNum || "",
   ].filter(Boolean).join("   ");
 }
 
@@ -166,7 +168,7 @@ function buildPrintHTML(f: CheckFields, opts: PrintOpts): string {
   body {
     margin: 0; padding: 0;
     font-family: Arial, Helvetica, sans-serif;
-    color: #1f2a44;
+    color: #111;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
   .muted { color: #6b7a90; }
@@ -176,11 +178,11 @@ function buildPrintHTML(f: CheckFields, opts: PrintOpts): string {
   .pp { position: absolute; font-size: 11pt; white-space: nowrap; }
   .pp.amt { font-weight: 700; }
 
-  /* Blank mode — full drawn check */
+  /* Blank mode — full drawn check, printed on (blank) check paper: black ink,
+     no background fill, and the bottom 5/8in kept clear for the MICR band. */
   .check {
     position: relative; width: 8.5in; height: 3.5in;
-    padding: 0.4in 0.6in 0.8in 0.6in; overflow: hidden;
-    background: #f7f9fb; border-bottom: 1px dashed #b8c4d2;
+    padding: 0.4in 0.55in 0.72in 0.55in; overflow: hidden;
   }
   .top { display: flex; justify-content: space-between; align-items: flex-start; }
   .payer-name { font-size: 13.5pt; font-weight: 700; letter-spacing: 0.2px; }
@@ -188,28 +190,30 @@ function buildPrintHTML(f: CheckFields, opts: PrintOpts): string {
   .check-no { font-size: 12pt; font-weight: 700; }
   .date-line { display: flex; align-items: flex-end; justify-content: flex-end; gap: 6px; margin-top: 0.2in; }
   .date-label { font-size: 9.5pt; }
-  .date-val { font-size: 10pt; border-bottom: 1px solid #1f2a44; min-width: 1.5in; text-align: center; padding-bottom: 1px; }
+  .date-val { font-size: 10pt; border-bottom: 1px solid #111; min-width: 1.5in; text-align: center; padding-bottom: 1px; }
   .pay { display: flex; align-items: flex-end; gap: 10px; margin-top: 0.24in; }
   .pay-label { font-size: 8pt; line-height: 1.15; white-space: nowrap; }
-  .pay-line { flex: 1; border-bottom: 1px solid #1f2a44; font-size: 12pt; padding-bottom: 2px; min-height: 20px; }
+  .pay-line { flex: 1; border-bottom: 1px solid #111; font-size: 12pt; padding-bottom: 2px; min-height: 20px; }
   .dollar { font-size: 13pt; font-weight: 700; }
-  .amt-box { border: 1.5px solid #1f2a44; padding: 3px 10px; font-size: 12pt; font-weight: 700; min-width: 1.2in; text-align: right; white-space: nowrap; background: #fff; }
+  .amt-box { border: 1.5px solid #111; padding: 3px 10px; font-size: 12pt; font-weight: 700; min-width: 1.2in; text-align: right; white-space: nowrap; background: #fff; }
   .words { display: flex; align-items: flex-end; gap: 8px; margin-top: 0.16in; }
-  .words-line { flex: 1; border-bottom: 1px solid #1f2a44; font-size: 10.5pt; padding-bottom: 2px; min-height: 18px; }
+  .words-line { flex: 1; border-bottom: 1px solid #111; font-size: 10.5pt; padding-bottom: 2px; min-height: 18px; }
   .dollars-word { font-size: 8.5pt; font-weight: 700; letter-spacing: 0.5px; white-space: nowrap; }
   .bank { margin-top: 0.16in; font-size: 9pt; font-weight: 700; }
   .bank-city { font-size: 8pt; font-weight: 400; }
   .sigrow { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 0.14in; }
   .memo, .sig { display: flex; flex-direction: column; }
-  .memo-line { border-bottom: 1px solid #1f2a44; min-width: 2.3in; font-size: 9.5pt; padding-bottom: 1px; min-height: 16px; }
+  .memo-line { border-bottom: 1px solid #111; min-width: 2.3in; font-size: 9.5pt; padding-bottom: 1px; min-height: 16px; }
   .memo-cap { font-size: 7.5pt; margin-top: 2px; letter-spacing: 0.3px; }
-  .sig-line { border-bottom: 1px solid #1f2a44; min-width: 2.6in; min-height: 16px; }
+  .sig-line { border-bottom: 1px solid #111; min-width: 2.6in; min-height: 16px; }
   .sig-cap { font-size: 7.5pt; margin-top: 2px; text-align: center; letter-spacing: 0.3px; }
+  /* MICR line: ANSI clear band — right edge 5/16in from the check's right edge,
+     baseline ~1/4in up from the bottom. Right-anchored, not centered. */
   .micr {
-    position: absolute; left: 0; right: 0; bottom: 0.3in;
-    text-align: center;
+    position: absolute; right: 0.3125in; bottom: 0.22in;
+    white-space: nowrap; text-align: right;
     font-family: 'Courier New', Courier, monospace;
-    font-size: 13pt; letter-spacing: 0.18em; color: #111827;
+    font-size: 12pt; letter-spacing: 0.12em; color: #000;
   }
 </style>
 </head>
@@ -341,7 +345,7 @@ export function CheckPrintModal({
           </div>
 
           {/* Check preview — mirrors the printed layout (blank-mode view) */}
-          <div className="rounded-md border border-slate-300 bg-slate-50 px-5 pt-4 pb-9 text-slate-800">
+          <div className="rounded-md border border-slate-300 bg-white px-5 pt-4 pb-9 text-slate-900">
             <div className="flex items-start justify-between">
               <p className="text-sm font-bold text-slate-800">
                 {holder || <span className="font-normal text-slate-400">Account holder</span>}
@@ -382,7 +386,7 @@ export function CheckPrintModal({
                 <span className="mt-0.5 text-center text-[9px] tracking-wide text-slate-400">AUTHORIZED SIGNATURE</span>
               </div>
             </div>
-            <div className="mt-4 text-center font-mono text-xs tracking-[0.18em] text-slate-800">
+            <div className="mt-4 text-right font-mono text-xs tracking-[0.12em] text-slate-900">
               {micrLine(routing, accountNum, checkNum)}
             </div>
           </div>
