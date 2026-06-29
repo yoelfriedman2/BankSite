@@ -62,15 +62,16 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** MICR line in standard ANSI X9 field order, left → right:
+/** MICR fields in standard ANSI X9 order, left → right:
  *  Auxiliary On-Us (check #) ⑈…⑈ · Transit (routing) ⑆…⑆ · On-Us (account) …⑈.
- *  Printed right-anchored in the bottom clear band (see .micr CSS). */
-function micrLine(routing: string, accountNum: string, checkNum: string): string {
-  return [
-    checkNum ? `⑈${checkNum}⑈` : "",
-    routing ? `⑆${routing}⑆` : "",
-    accountNum ? `${accountNum}⑈` : "",
-  ].filter(Boolean).join("   ");
+ *  Rendered spread across the bottom clear band so the routing field sits in the
+ *  center and the on-us (account) field ends near the right — like a real check. */
+function micrParts(routing: string, accountNum: string, checkNum: string) {
+  return {
+    aux: checkNum ? `⑈${checkNum}⑈` : "",
+    transit: routing ? `⑆${routing}⑆` : "",
+    onus: accountNum ? `${accountNum}⑈` : "",
+  };
 }
 
 type PrintMode = "blank" | "preprinted";
@@ -103,7 +104,7 @@ const PP = {
 
 // ── Build the print HTML ──────────────────────────────────────────────────────
 function buildPrintHTML(f: CheckFields, opts: PrintOpts): string {
-  const micr = micrLine(esc(f.routing), esc(f.accountNum), esc(f.checkNum));
+  const micr = micrParts(esc(f.routing), esc(f.accountNum), esc(f.checkNum));
   const shift = `transform: translate(${opts.dx}in, ${opts.dy}in);`;
 
   // Pre-printed stock: lay down ONLY the filled-in values at standard positions —
@@ -153,7 +154,11 @@ function buildPrintHTML(f: CheckFields, opts: PrintOpts): string {
       <span class="sig-cap muted">AUTHORIZED SIGNATURE</span>
     </div>
   </div>
-  <div class="micr">${micr}</div>
+  <div class="micr">
+    <span>${micr.aux}</span>
+    <span>${micr.transit}</span>
+    <span>${micr.onus}</span>
+  </div>
 </div>`;
 
   return `<!DOCTYPE html>
@@ -207,11 +212,13 @@ function buildPrintHTML(f: CheckFields, opts: PrintOpts): string {
   .memo-cap { font-size: 7.5pt; margin-top: 2px; letter-spacing: 0.3px; }
   .sig-line { border-bottom: 1px solid #111; min-width: 2.6in; min-height: 16px; }
   .sig-cap { font-size: 7.5pt; margin-top: 2px; text-align: center; letter-spacing: 0.3px; }
-  /* MICR line: ANSI clear band — right edge 5/16in from the check's right edge,
-     baseline ~1/4in up from the bottom. Right-anchored, not centered. */
+  /* MICR line in the bottom 5/8in clear band. Spread across the width so the
+     transit (routing) field is centered and the on-us (account) field ends near
+     the right edge — the standard real-check arrangement. */
   .micr {
-    position: absolute; right: 0.3125in; bottom: 0.22in;
-    white-space: nowrap; text-align: right;
+    position: absolute; left: 0.7in; right: 0.55in; bottom: 0.22in;
+    display: flex; justify-content: space-between; align-items: baseline;
+    white-space: nowrap;
     font-family: 'Courier New', Courier, monospace;
     font-size: 12pt; letter-spacing: 0.12em; color: #000;
   }
@@ -244,12 +251,15 @@ export function CheckPrintModal({
     month: "2-digit", day: "2-digit", year: "numeric",
   });
 
+  // A check must have a number, so default to the next one (last + 1, or 1001 to
+  // start). Pre-filled rather than just suggested — the user can still change it.
+  const defaultCheckNum =
+    account.last_check_number != null ? String(account.last_check_number + 1) : "1001";
+
   const [payee, setPayee] = useState("");
   const [amount, setAmount] = useState("");
   const [memo, setMemo] = useState("");
-  const [checkNum, setCheckNum] = useState(() =>
-    account.last_check_number != null ? String(account.last_check_number + 1) : "",
-  );
+  const [checkNum, setCheckNum] = useState(defaultCheckNum);
   const [date, setDate] = useState(today);
 
   // Print settings — printer/stock-specific, saved per device.
@@ -275,17 +285,21 @@ export function CheckPrintModal({
   const accountNum = account.account_number ?? "";
 
   function handlePrint() {
+    // Never print a check with no number — fall back to the default if cleared.
+    const cn = checkNum.trim() || defaultCheckNum;
+    if (cn !== checkNum) setCheckNum(cn);
+
     const win = window.open("", "_blank", "width=900,height=600");
     if (!win) return;
     win.document.write(
       buildPrintHTML(
-        { holder, bankName, bankCity, routing, accountNum, payee, amount, amountW: words, memo, checkNum, date },
+        { holder, bankName, bankCity, routing, accountNum, payee, amount, amountW: words, memo, checkNum: cn, date },
         { mode, dx: Number(dx) || 0, dy: Number(dy) || 0 },
       ),
     );
     win.document.close();
     // Persist the check number so next print defaults to this+1
-    const num = parseInt(checkNum, 10);
+    const num = parseInt(cn, 10);
     if (account.id && !isNaN(num) && num > 0) {
       saveLastCheckNumber(account.id, num).catch(() => {});
       setCheckNum(String(num + 1));
@@ -386,8 +400,10 @@ export function CheckPrintModal({
                 <span className="mt-0.5 text-center text-[9px] tracking-wide text-slate-400">AUTHORIZED SIGNATURE</span>
               </div>
             </div>
-            <div className="mt-4 text-right font-mono text-xs tracking-[0.12em] text-slate-900">
-              {micrLine(routing, accountNum, checkNum)}
+            <div className="mt-4 flex justify-between px-4 font-mono text-xs tracking-[0.12em] text-slate-900">
+              <span>{micrParts(routing, accountNum, checkNum).aux}</span>
+              <span>{micrParts(routing, accountNum, checkNum).transit}</span>
+              <span>{micrParts(routing, accountNum, checkNum).onus}</span>
             </div>
           </div>
 
