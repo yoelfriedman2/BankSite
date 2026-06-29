@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -173,6 +173,7 @@ export function BanksClient({
   relatedByCert,
   initialStatus,
   initialQuery,
+  initialOpenCert,
 }: {
   banks: Bank[];
   accounts: Account[];
@@ -184,6 +185,7 @@ export function BanksClient({
   relatedByCert: Record<number, RelatedRef[]>;
   initialStatus?: BankStatus | "all";
   initialQuery?: string;
+  initialOpenCert?: number;
 }) {
   const [localReadCerts, setLocalReadCerts] = useState<Set<number>>(() => new Set());
   const unreadSet = useMemo(
@@ -339,6 +341,14 @@ export function BanksClient({
       setLocalReadCerts((prev) => new Set([...prev, b.cert!]));
     }
   }
+
+  // Deep link: /banks?cert=<n> (e.g. from the Activity log) opens that bank.
+  useEffect(() => {
+    if (initialOpenCert == null) return;
+    const target = bankByCert.get(initialOpenCert);
+    if (target) openBank(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialOpenCert]);
 
   /** Always-visible, clickable related-bank chips for a row. Styled distinctly
    *  from the gray holding-company line (link icon + indigo pills). Clicking a

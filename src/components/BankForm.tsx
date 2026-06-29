@@ -501,6 +501,12 @@ export function BankForm({
                     <> on {formatDate(initial.shared_fields_updated_at.slice(0, 10))}</>
                   )}
                 </p>
+                {initial.shared_updated_summary && (
+                  <p className="mt-1 text-xs text-amber-700">
+                    <span className="font-medium">Changed:</span>{" "}
+                    {initial.shared_updated_summary}
+                  </p>
+                )}
               </div>
             )}
 

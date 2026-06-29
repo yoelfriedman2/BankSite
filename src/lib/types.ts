@@ -61,6 +61,7 @@ export interface Bank {
   shared_fields_updated_at: string | null;
   shared_updated_by: string | null; // UUID of last user to update shared fields
   shared_updated_by_name: string | null;
+  shared_updated_summary: string | null; // what changed, human-readable
 
   deleted_at: string | null;
   created_at: string;

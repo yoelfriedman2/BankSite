@@ -145,6 +145,7 @@ function seedToBankFields(s: (typeof BANKS_SEED)[number]): BankFields {
     shared_fields_updated_at: null,
     shared_updated_by: null,
     shared_updated_by_name: null,
+    shared_updated_summary: null,
     deleted_at: null,
   };
 }
@@ -506,6 +507,7 @@ export function importDemoRows(rows: ImportRow[]): {
         shared_fields_updated_at: null,
         shared_updated_by: null,
         shared_updated_by_name: null,
+        shared_updated_summary: null,
         deleted_at: null,
       });
       store().banks = [bank, ...store().banks];

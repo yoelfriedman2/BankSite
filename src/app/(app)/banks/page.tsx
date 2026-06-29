@@ -26,7 +26,7 @@ const VALID_STATUSES: Array<BankStatus | "all"> = [
 export default async function BanksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; cert?: string }>;
 }) {
   const sp = await searchParams;
   const initialStatus = VALID_STATUSES.includes(
@@ -35,6 +35,8 @@ export default async function BanksPage({
     ? (sp.status as BankStatus | "all")
     : undefined;
   const initialQuery = typeof sp.q === "string" ? sp.q : undefined;
+  const certNum = sp.cert ? parseInt(sp.cert, 10) : NaN;
+  const initialOpenCert = Number.isFinite(certNum) ? certNum : undefined;
 
   if (DEMO_MODE) {
     const [unreadCerts, relatedByCert] = await Promise.all([
@@ -54,6 +56,7 @@ export default async function BanksPage({
         relatedByCert={relatedByCert}
         initialStatus={initialStatus}
         initialQuery={initialQuery}
+        initialOpenCert={initialOpenCert}
       />
     );
   }
@@ -124,6 +127,7 @@ export default async function BanksPage({
       relatedByCert={relatedByCert}
       initialStatus={initialStatus}
       initialQuery={initialQuery}
+      initialOpenCert={initialOpenCert}
     />
   );
 }

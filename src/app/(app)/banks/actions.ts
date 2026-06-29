@@ -27,6 +27,11 @@ import {
   type ImportRow,
 } from "@/lib/demo";
 import { BANKS_SEED } from "@/lib/banks-seed";
+import {
+  OPEN_METHOD_LABELS,
+  ELIGIBILITY_LABELS,
+  CONVERSION_STAGE_LABELS,
+} from "@/lib/types";
 import type {
   BankStatus,
   OpenMethod,
@@ -35,6 +40,37 @@ import type {
   Bank,
   Account,
 } from "@/lib/types";
+
+// Shared bank fields, with how to render each for a "what changed" summary.
+const SHARED_FIELDS: {
+  key: string;
+  label: string;
+  fmt: (v: unknown) => string;
+}[] = [
+  { key: "open_methods", label: "Open methods", fmt: (v) => Array.isArray(v) && v.length ? (v as OpenMethod[]).map((m) => OPEN_METHOD_LABELS[m]).join(", ") : "none" },
+  { key: "eligibility", label: "Who can open", fmt: (v) => v ? ELIGIBILITY_LABELS[v as keyof typeof ELIGIBILITY_LABELS] : "—" },
+  { key: "eligibility_date", label: "Eligibility date", fmt: (v) => (v as string) || "—" },
+  { key: "branch_location", label: "Branch / address", fmt: (v) => (v as string) || "—" },
+  { key: "phone", label: "Contact", fmt: (v) => (v as string) || "—" },
+  { key: "min_to_open", label: "Minimum to open", fmt: (v) => v != null ? `$${v}` : "—" },
+  { key: "conversion_stage", label: "Conversion stage", fmt: (v) => CONVERSION_STAGE_LABELS[(v as ConversionStage) ?? "none"] },
+];
+
+function normShared(v: unknown): string {
+  if (Array.isArray(v)) return JSON.stringify([...v].sort());
+  return v == null ? "" : String(v);
+}
+
+/** Returns "Label → value" strings for each shared field that differs between old and patch. */
+function sharedFieldChanges(
+  oldRow: Record<string, unknown> | null,
+  patch: Record<string, unknown>,
+): string[] {
+  if (!oldRow) return [];
+  return SHARED_FIELDS.filter((f) => normShared(oldRow[f.key]) !== normShared(patch[f.key])).map(
+    (f) => `${f.label} → ${f.fmt(patch[f.key])}`,
+  );
+}
 
 export type BankFormValues = {
   id?: string;
@@ -140,6 +176,17 @@ export async function upsertBank(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
+  // Capture the OLD shared values before updating, so we can report what changed.
+  let oldShared: Record<string, unknown> | null = null;
+  if (values.id) {
+    const { data: prev } = await supabase
+      .from("banks")
+      .select("open_methods, eligibility, eligibility_date, branch_location, phone, min_to_open, conversion_stage")
+      .eq("id", values.id)
+      .maybeSingle();
+    oldShared = prev ?? null;
+  }
+
   if (values.id) {
     const { error } = await supabase.from("banks").update(patch).eq("id", values.id);
     if (error) return { error: error.message };
@@ -187,8 +234,14 @@ export async function upsertBank(
   // Private fields (status, priority, notes, target_balance) are intentionally excluded.
   // shared_fields_updated_at / shared_updated_by are stamped on OTHER users' rows so the
   // amber unread dot fires for them — never on the editor's own row.
-  if (patch.cert != null) {
-    // Resolve updater display name once so the notification can show it without a profile lookup.
+  //
+  // Only fires when shared fields ACTUALLY changed (for edits): saving just a
+  // private field (status/notes) no longer flags everyone with a meaningless
+  // "updated shared info." New banks always propagate.
+  const changes = sharedFieldChanges(oldShared, patch as Record<string, unknown>);
+  const shouldPropagate = patch.cert != null && (!values.id || changes.length > 0);
+
+  if (shouldPropagate) {
     const { data: updaterProfile } = await supabase
       .from("profiles")
       .select("display_name")
@@ -199,6 +252,8 @@ export async function upsertBank(
       (user.user_metadata?.full_name as string | undefined) ||
       user.email ||
       null;
+
+    const summary = changes.length ? changes.join("; ") : null;
 
     const sharedPatch = {
       open_methods: patch.open_methods,
@@ -211,6 +266,7 @@ export async function upsertBank(
       shared_fields_updated_at: new Date().toISOString(),
       shared_updated_by: user.id,
       shared_updated_by_name: updaterName,
+      shared_updated_summary: summary,
     };
     const admin = createAdminClient();
     await admin
@@ -224,7 +280,9 @@ export async function upsertBank(
       actorId: user.id,
       actorName: updaterName,
       action: values.id ? "bank_shared_update" : "bank_add",
-      summary: `${updaterName ?? "Someone"} ${values.id ? "updated shared info for" : "added"} ${patch.name}`,
+      summary: values.id
+        ? `${updaterName ?? "Someone"} updated ${patch.name}${summary ? ` — ${summary}` : ""}`
+        : `${updaterName ?? "Someone"} added ${patch.name}`,
       cert: patch.cert,
     });
   }

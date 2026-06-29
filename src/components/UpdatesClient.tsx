@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import {
   Sparkles,
   History,
@@ -71,14 +72,14 @@ export function UpdatesClient({
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* ── Activity (left) ── */}
-        <section>
+        <section className="min-w-0">
           <div className="mb-2 flex items-center gap-2">
             <History className="h-4 w-4 text-slate-400" />
             <h2 className="text-sm font-semibold text-slate-800">Activity</h2>
           </div>
           <p className="mb-3 text-xs text-slate-400">
             Changes to shared data — notes, shared bank info, can&apos;t-open broadcasts,
-            and bank links. Visible to the whole team.
+            and bank links. Tap one to open that bank.
           </p>
           {activity.length === 0 ? (
             <p className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-400">
@@ -86,26 +87,43 @@ export function UpdatesClient({
             </p>
           ) : (
             <ul className="space-y-1.5">
-              {activity.map((e) => (
-                <li
-                  key={e.id}
-                  className="flex items-center gap-3 rounded-lg border border-slate-100 bg-white px-3 py-2.5"
-                >
-                  <span className="shrink-0">{iconFor(e.action)}</span>
-                  <span className="min-w-0 flex-1 truncate text-sm text-slate-700">
-                    {e.summary}
-                  </span>
-                  <span className="shrink-0 text-xs text-slate-400">
-                    {timeAgo(e.created_at)}
-                  </span>
-                </li>
-              ))}
+              {activity.map((e) => {
+                const body = (
+                  <>
+                    <span className="mt-0.5 shrink-0">{iconFor(e.action)}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block break-words text-sm text-slate-700">
+                        {e.summary}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-slate-400">
+                        {timeAgo(e.created_at)}
+                      </span>
+                    </span>
+                  </>
+                );
+                return (
+                  <li key={e.id}>
+                    {e.cert != null ? (
+                      <Link
+                        href={`/banks?cert=${e.cert}`}
+                        className="flex gap-3 rounded-lg border border-slate-100 bg-white px-3 py-2.5 hover:bg-slate-50"
+                      >
+                        {body}
+                      </Link>
+                    ) : (
+                      <div className="flex gap-3 rounded-lg border border-slate-100 bg-white px-3 py-2.5">
+                        {body}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
 
         {/* ── What's new (right) ── */}
-        <section>
+        <section className="min-w-0">
           <div className="mb-2 flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-amber-500" />
             <h2 className="text-sm font-semibold text-slate-800">What&apos;s new</h2>
