@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   ArrowRight,
   CircleCheck,
-  TrendingUp,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -24,7 +23,6 @@ import {
 } from "@/lib/dormancy";
 import {
   ACCOUNT_TYPE_LABELS,
-  CONVERSION_STAGE_LABELS,
   type Account,
   type Bank,
 } from "@/lib/types";
@@ -160,24 +158,6 @@ export default async function DashboardPage() {
 
   const openReminders = await getOpenReminders();
 
-  const conversionWatch = banks
-    .filter(
-      (b) =>
-        b.conversion_stage === "filed" || b.conversion_stage === "subscription",
-    )
-    .map((b) => {
-      let reason = "Filed — prepare to subscribe";
-      if (b.conversion_stage === "subscription") {
-        reason = "Subscription open";
-      }
-      return { bank: b, reason };
-    })
-    .sort(
-      (a, b) =>
-        (a.bank.conversion_stage === "subscription" ? 0 : 1) -
-        (b.bank.conversion_stage === "subscription" ? 0 : 1),
-    );
-
   return (
     <div>
       <h1 className="mb-6 text-2xl font-semibold text-slate-900">Dashboard</h1>
@@ -212,61 +192,6 @@ export default async function DashboardPage() {
           href="/accounts?attention=1"
         />
       </div>
-
-      <DashboardReminders reminders={openReminders} />
-
-      {conversionWatch.length > 0 && (
-        <div className="mt-8 rounded-2xl border border-amber-200 bg-white">
-          <div className="flex items-center justify-between border-b border-amber-100 px-5 py-4">
-            <h2 className="flex items-center gap-2 font-semibold text-slate-900">
-              <TrendingUp className="h-5 w-5 text-amber-600" />
-              Conversion watch
-            </h2>
-            <Link
-              href="/banks"
-              className="flex items-center gap-1 text-sm font-medium text-amber-600 hover:underline"
-            >
-              All banks
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-          <ul>
-            {conversionWatch.map(({ bank, reason }) => (
-              <li key={bank.id}>
-                <Link
-                  href="/banks"
-                  className="flex items-center gap-3 border-b border-amber-100 px-5 py-3 last:border-0 hover:bg-amber-50/50"
-                >
-                  <span
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                      bank.conversion_stage === "subscription"
-                        ? "bg-rose-50 text-rose-600"
-                        : "bg-amber-50 text-amber-600"
-                    }`}
-                  >
-                    <TrendingUp className="h-5 w-5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium text-slate-900">
-                      {bank.name}
-                    </p>
-                    <p className="text-sm text-slate-500">{reason}</p>
-                  </div>
-                  <span
-                    className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                      bank.conversion_stage === "subscription"
-                        ? "bg-rose-100 text-rose-700"
-                        : "bg-amber-100 text-amber-800"
-                    }`}
-                  >
-                    {CONVERSION_STAGE_LABELS[bank.conversion_stage]}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
 
       <div className="mt-8 rounded-2xl border border-slate-200 bg-white">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
@@ -340,6 +265,8 @@ export default async function DashboardPage() {
           </ul>
         )}
       </div>
+
+      <DashboardReminders reminders={openReminders} />
     </div>
   );
 }
