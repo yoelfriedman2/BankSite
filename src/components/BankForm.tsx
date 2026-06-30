@@ -181,6 +181,7 @@ export function BankForm({
   const [reminderNote, setReminderNote] = useState("");
   const [reminderDate, setReminderDate] = useState("");
   const [reminderBusy, setReminderBusy] = useState(false);
+  const [reminderError, setReminderError] = useState<string | null>(null);
 
   function refreshReminders() {
     if (initial?.id) getReminders(initial.id).then(setReminders).catch(() => {});
@@ -189,8 +190,14 @@ export function BankForm({
     if (!initial?.id || !reminderNote.trim() || !reminderDate) return;
     const bankId = initial.id;
     setReminderBusy(true);
+    setReminderError(null);
     startTransition(async () => {
-      await addReminder(bankId, reminderNote, reminderDate);
+      const res = await addReminder(bankId, reminderNote, reminderDate);
+      if (res?.error) {
+        setReminderError(res.error);
+        setReminderBusy(false);
+        return; // keep what they typed so it isn't lost
+      }
       setReminderNote("");
       setReminderDate("");
       setReminders(await getReminders(bankId));
@@ -528,6 +535,9 @@ export function BankForm({
                     Add
                   </button>
                 </div>
+                {reminderError && (
+                  <p className="mt-1 text-xs text-rose-600">{reminderError}</p>
+                )}
                 <p className="mt-1 text-xs text-slate-400">
                   We&apos;ll email you on the date. Only you can see these.
                 </p>
