@@ -62,15 +62,25 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+// Real E-13B MICR font (self-hosted at /public/fonts). The standard E-13B symbol
+// mapping (shared across font vendors) is: A = Transit, B = Amount, C = On-Us,
+// D = Dash. We use A and C. An absolute URL is required so the about:blank print
+// window can load it.
+const MICR_FONT = "BT-MICR-E13B";
+const MICR_STACK = `'${MICR_FONT}', 'Courier New', monospace`;
+function micrFontFace(): string {
+  const base = typeof window !== "undefined" ? window.location.origin : "";
+  return `@font-face { font-family: '${MICR_FONT}'; src: url('${base}/fonts/micr-e13b.ttf') format('truetype'); font-display: swap; }`;
+}
+
 /** MICR fields in standard ANSI X9 order, left → right:
  *  Auxiliary On-Us (check #) ⑈…⑈ · Transit (routing) ⑆…⑆ · On-Us (account) …⑈.
- *  Rendered spread across the bottom clear band so the routing field sits in the
- *  center and the on-us (account) field ends near the right — like a real check. */
+ *  Encoded with the E-13B font's A/C symbols so it renders as real MICR glyphs. */
 function micrParts(routing: string, accountNum: string, checkNum: string) {
   return {
-    aux: checkNum ? `⑈${checkNum}⑈` : "",
-    transit: routing ? `⑆${routing}⑆` : "",
-    onus: accountNum ? `${accountNum}⑈` : "",
+    aux: checkNum ? `C${checkNum}C` : "",
+    transit: routing ? `A${routing}A` : "",
+    onus: accountNum ? `${accountNum}C` : "",
   };
 }
 
@@ -159,6 +169,7 @@ function buildPrintHTML(f: CheckFields, opts: PrintOpts): string {
 <head>
 <meta charset="UTF-8">
 <style>
+  ${micrFontFace()}
   /* The check is the top 3.5in of an 8.5x11 sheet.
      Print at 100% / "Actual size" (turn OFF "fit to page") for true alignment. */
   @page { size: 8.5in 11in; margin: 0; }
@@ -201,12 +212,12 @@ function buildPrintHTML(f: CheckFields, opts: PrintOpts): string {
   .sig { display: flex; flex-direction: column; }
   .sig-line { border-bottom: 1px solid #2a3340; min-width: 2.6in; min-height: 15px; }
   .sig-cap { font-size: 6.5pt; color: #7a828e; text-align: center; margin-top: 1px; letter-spacing: 0.3px; }
-  /* MICR line: centered group in the bottom 5/8in clear band, like a real check. */
+  /* MICR line: centered group in the bottom 5/8in clear band, in real E-13B font. */
   .micr {
     position: absolute; left: 0; right: 0; bottom: 0.2in;
     text-align: center; white-space: nowrap;
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 12pt; letter-spacing: 0.08em; color: #000;
+    font-family: ${MICR_STACK};
+    font-size: 13pt; letter-spacing: 0.04em; color: #000;
   }
 </style>
 </head>
@@ -387,8 +398,12 @@ export function CheckPrintModal({
                 <span className="mt-0.5 text-center text-[8px] uppercase tracking-wide text-slate-400">Authorized signature</span>
               </div>
             </div>
-            {/* MICR — centered group */}
-            <div className="mt-4 text-center font-mono text-xs tracking-[0.1em] text-slate-900">
+            {/* MICR — centered group, real E-13B font */}
+            <style>{micrFontFace()}</style>
+            <div
+              className="mt-4 text-center text-base text-slate-900"
+              style={{ fontFamily: MICR_STACK, letterSpacing: "0.04em" }}
+            >
               {[
                 micrParts(routing, accountNum, checkNum).aux,
                 micrParts(routing, accountNum, checkNum).transit,
