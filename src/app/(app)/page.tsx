@@ -29,6 +29,8 @@ import {
 import { formatCurrency } from "@/lib/format";
 import { getOpenReminders } from "@/app/(app)/reminders";
 import { DashboardReminders } from "@/components/DashboardReminders";
+import { getOutstandingSweeps } from "@/app/(app)/money/actions";
+import { DashboardMoneyOut } from "@/components/DashboardMoneyOut";
 
 type AttentionItem = {
   account: Account;
@@ -157,6 +159,7 @@ export default async function DashboardPage() {
   );
 
   const openReminders = await getOpenReminders();
+  const outstandingSweeps = await getOutstandingSweeps();
 
   return (
     <div>
@@ -267,6 +270,8 @@ export default async function DashboardPage() {
       </div>
 
       <DashboardReminders reminders={openReminders} />
+
+      <DashboardMoneyOut sweeps={outstandingSweeps} />
     </div>
   );
 }
