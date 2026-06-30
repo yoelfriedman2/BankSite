@@ -134,21 +134,25 @@ export function UpdatesClient({
           <div className="space-y-4">
             {changelog.map((entry) => (
               <div
-                key={entry.date}
+                key={`${entry.date}-${entry.title}`}
                 className="rounded-2xl border border-slate-200 bg-white p-5"
               >
                 <div className="mb-2 flex items-center gap-2">
                   <h3 className="text-sm font-semibold text-slate-900">{entry.title}</h3>
                   <span className="ml-auto text-xs text-slate-400">{fmtDate(entry.date)}</span>
                 </div>
-                <ul className="space-y-1.5">
-                  {entry.items.map((it, i) => (
-                    <li key={i} className="flex gap-2 text-sm text-slate-600">
-                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
-                      <span>{it}</span>
-                    </li>
-                  ))}
-                </ul>
+                {entry.items.length === 1 ? (
+                  <p className="text-sm leading-relaxed text-slate-600">{entry.items[0]}</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {entry.items.map((it, i) => (
+                      <li key={i} className="flex gap-2 text-sm text-slate-600">
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+                        <span>{it}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             ))}
           </div>

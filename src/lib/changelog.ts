@@ -1,7 +1,7 @@
 // Curated, user-facing changelog shown on the Updates page ("What's New").
-// Add a new entry at the TOP when you ship something. Keep it plain-English —
-// these are read by your family/team, not developers. Big features only; skip
-// internal/security/structure changes that don't matter to end users.
+// One UPDATE per entry (one feature = one bubble). A single feature can have a
+// couple of sub-points; separate features get separate entries. Add new ones at
+// the TOP. Plain English, big features only — skip internal/security fixes.
 
 export interface ChangelogEntry {
   date: string; // YYYY-MM-DD
@@ -11,76 +11,111 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    date: "2026-06-29",
-    title: "Reminders, a guide, and better checks",
+    date: "2026-06-30",
+    title: "Reminders",
     items: [
-      "Reminders — set a private follow-up on any bank with a date, and get an email when it's due. All your open reminders show on the dashboard.",
-      "New Guide — an interactive walkthrough of every part of the app and how each piece works.",
-      "Print checks redone — it now looks like a real check and prints the bottom line in a genuine MICR font, on blank or pre-printed check stock with an alignment nudge.",
-      "Cleaner dashboard — the things that need your attention and your reminders are now front and center.",
-      "The activity log now shows exactly what changed when someone edits a bank's shared info.",
+      "Set a private follow-up on any bank with a date, and get an email when it's due. All your open reminders show on the dashboard.",
+    ],
+  },
+  {
+    date: "2026-06-30",
+    title: "Guide",
+    items: [
+      "A new interactive walkthrough of every part of the app and how each piece works.",
+    ],
+  },
+  {
+    date: "2026-06-30",
+    title: "Print checks redone",
+    items: [
+      "Looks like a real check and prints the bottom line in a genuine MICR font — on blank or pre-printed check stock, with an alignment nudge.",
+    ],
+  },
+  {
+    date: "2026-06-30",
+    title: "Cleaner dashboard",
+    items: [
+      "What needs your attention, your reminders, and money moved out are now front and center.",
+    ],
+  },
+  {
+    date: "2026-06-30",
+    title: "Activity shows what changed",
+    items: [
+      "The activity log now spells out exactly what changed when someone edits a bank's shared info.",
     ],
   },
   {
     date: "2026-06-28",
     title: "Print checks",
     items: [
-      "Print a properly formatted check from any account — payee, amount in words, and your routing and account numbers filled in for you.",
-      "The check number remembers where you left off and continues automatically.",
+      "Print a check from any account — payee, amount in words, and your routing and account numbers filled in.",
+      "The check number remembers where you left off.",
     ],
   },
   {
     date: "2026-06-25",
     title: "Balance by date",
     items: [
-      "Pick any date and see what every account held then — exactly what you need when a conversion sets a deposit record date.",
+      "Pick any date and see what every account held then — for a conversion's deposit record date.",
     ],
   },
   {
     date: "2026-06-22",
     title: "Money moved",
     items: [
-      "Sweep cash out of your accounts to fund an IPO and see everything that's still out, grouped by reason.",
-      "Check it back in when it's returned — real balances update as you go.",
+      "Sweep cash out to fund an IPO and see what's still out, grouped by reason.",
+      "Check it back in when it's returned — balances update as you go.",
     ],
   },
   {
     date: "2026-06-19",
     title: "Document vault",
     items: [
-      "Snap a photo or upload statements, confirmations, and forms, and keep them on each account.",
-      "Photos and PDFs are compressed automatically so they barely take any space.",
+      "Snap a photo or upload statements and forms, kept on each account.",
+      "Photos and PDFs are compressed automatically.",
+    ],
+  },
+  {
+    date: "2026-06-17",
+    title: "“Can't open” sharing",
+    items: [
+      "Mark a bank can't open and choose to let everyone know — new members start with those already flagged.",
     ],
   },
   {
     date: "2026-06-16",
-    title: "Community notes & “Can't open”",
+    title: "Community notes",
     items: [
-      "Leave shared notes on any bank so the whole team benefits from what each of us learns.",
-      "Mark a bank “Can't open” and let everyone know — new members start with those already flagged.",
+      "Leave shared notes on any bank so the whole team benefits from what each of you learns.",
     ],
   },
   {
     date: "2026-06-13",
     title: "Calendar",
     items: [
-      "CD maturities, dormancy warnings, and activity dates laid out month by month, so nothing sneaks up on you.",
+      "CD maturities, dormancy warnings, and activity dates laid out month by month.",
+    ],
+  },
+  {
+    date: "2026-06-12",
+    title: "Staying active",
+    items: [
+      "Accounts that go quiet turn orange then red, with email reminders, so they don't go dormant.",
     ],
   },
   {
     date: "2026-06-11",
-    title: "Accounts & staying active",
+    title: "Accounts",
     items: [
       "Track multiple accounts per bank with balances, holders, and login details.",
-      "Log activity to keep accounts from going dormant — color-coded warnings and email reminders included.",
     ],
   },
   {
     date: "2026-06-09",
     title: "Welcome to Bank Tracker",
     items: [
-      "A shared list of mutual banks, pre-filled with reference data and which ones can't be opened.",
-      "Set your status per bank, search everything instantly, and export to Excel anytime.",
+      "A shared list of mutual banks, pre-filled with reference data and which ones can't be opened — set your status, search, and export anytime.",
     ],
   },
 ];
