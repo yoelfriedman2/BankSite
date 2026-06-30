@@ -35,34 +35,24 @@ export function DashboardMoneyOut({ sweeps }: { sweeps: OutstandingSweep[] }) {
         </div>
       </div>
 
-      <div>
+      <ul>
         {[...groups.entries()].map(([reason, items]) => {
           const subtotal = items.reduce((s, x) => s + x.amount, 0);
           return (
-            <div key={reason} className="border-b border-slate-100 px-5 py-3 last:border-0">
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-slate-800">{reason}</span>
-                <span className="text-sm font-semibold text-indigo-700">
+            <li key={reason}>
+              <Link
+                href="/money"
+                className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-3 last:border-0 hover:bg-slate-50"
+              >
+                <span className="min-w-0 truncate font-medium text-slate-800">{reason}</span>
+                <span className="shrink-0 text-sm font-semibold tabular-nums text-indigo-700">
                   {formatCurrency(subtotal)}
                 </span>
-              </div>
-              <ul className="mt-1.5 space-y-1">
-                {items.map((s) => (
-                  <li key={s.id} className="flex items-center justify-between gap-3 text-sm">
-                    <span className="min-w-0 truncate text-slate-500">
-                      {s.bankName}
-                      {s.holder && <span className="text-slate-400"> · {s.holder}</span>}
-                    </span>
-                    <span className="shrink-0 tabular-nums text-slate-600">
-                      {formatCurrency(s.amount)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+              </Link>
+            </li>
           );
         })}
-      </div>
+      </ul>
     </div>
   );
 }
