@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendActivityReminderEmail, escapeHtml } from "@/lib/email";
+import {
+  sendActivityReminderEmail,
+  sendReminderDueEmail,
+  escapeHtml,
+} from "@/lib/email";
 
 /* Called once daily by Vercel Cron (see vercel.json).
    Checks every user who has notify_email=true and sends activity reminders. */
@@ -89,5 +93,55 @@ export async function GET(req: NextRequest) {
     sent++;
   }
 
-  return NextResponse.json({ ok: true, reminded: sent });
+  // ── Personal follow-up reminders due today (or overdue) ──
+  // These are explicitly user-created, so they're sent regardless of the
+  // notify_email toggle. emailed_at guards against re-sending.
+  const todayStr = today.toISOString().slice(0, 10);
+  const { data: due } = await admin
+    .from("reminders")
+    .select("id, user_id, bank_id, note")
+    .lte("due_date", todayStr)
+    .is("done_at", null)
+    .is("emailed_at", null);
+
+  let remindersEmailed = 0;
+  if (due?.length) {
+    const bankIds = [...new Set(due.map((r) => r.bank_id as string))];
+    const userIds = [...new Set(due.map((r) => r.user_id as string))];
+    const [{ data: banks }, { data: profs }] = await Promise.all([
+      admin.from("banks").select("id, name").in("id", bankIds),
+      admin.from("profiles").select("id, display_name").in("id", userIds),
+    ]);
+    const bankName = new Map((banks ?? []).map((b) => [b.id as string, b.name as string]));
+    const nameMap = new Map(
+      (profs ?? []).map((p) => [p.id as string, (p.display_name as string | null) ?? "there"]),
+    );
+
+    const byUser = new Map<string, { ids: string[]; items: { note: string; bankName: string }[] }>();
+    for (const r of due) {
+      const uid = r.user_id as string;
+      const g = byUser.get(uid) ?? { ids: [], items: [] };
+      g.ids.push(r.id as string);
+      g.items.push({
+        note: r.note as string,
+        bankName: bankName.get(r.bank_id as string) ?? "a bank",
+      });
+      byUser.set(uid, g);
+    }
+
+    for (const [uid, g] of byUser) {
+      const email = emailMap[uid];
+      if (!email) continue;
+      const { error: sendErr } = await sendReminderDueEmail(email, nameMap.get(uid) ?? "there", g.items);
+      if (!sendErr) {
+        await admin
+          .from("reminders")
+          .update({ emailed_at: new Date().toISOString() })
+          .in("id", g.ids);
+        remindersEmailed += g.items.length;
+      }
+    }
+  }
+
+  return NextResponse.json({ ok: true, reminded: sent, remindersEmailed });
 }

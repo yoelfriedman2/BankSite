@@ -258,6 +258,33 @@ export async function sendActivityReminderEmail(
   );
 }
 
+/* ── Personal follow-up reminders due (sent by daily cron) ── */
+export async function sendReminderDueEmail(
+  to: string,
+  name: string,
+  items: { note: string; bankName: string }[],
+) {
+  if (!to || !items.length) return {};
+  const appUrl = APP_URL;
+  const rows = items
+    .map(
+      (i) =>
+        `<li style="margin-bottom:6px;"><strong>${escapeHtml(i.bankName)}</strong> — ${escapeHtml(i.note)}</li>`,
+    )
+    .join("");
+  const html = `
+<p style="font-family:sans-serif;">Hi ${escapeHtml(name)},</p>
+<p style="font-family:sans-serif;">You asked to be reminded:</p>
+<ul style="font-family:sans-serif;">${rows}</ul>
+<p style="font-family:sans-serif;"><a href="${appUrl}/banks">Open Bank Tracker</a></p>
+<p style="color:#888;font-size:12px;font-family:sans-serif;">— Bank Tracker</p>`;
+  return sendEmail(
+    to,
+    `Bank Tracker — ${items.length === 1 ? "a reminder is" : `${items.length} reminders are`} due`,
+    html,
+  );
+}
+
 /* ── User feedback / "report a problem" sent to the owner ── */
 export async function sendFeedbackEmail(
   fromName: string,

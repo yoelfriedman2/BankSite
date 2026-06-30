@@ -140,6 +140,18 @@ export interface BankRelationship {
   created_at: string;
 }
 
+/** A private, user-owned follow-up reminder on a bank. Never shared. */
+export interface Reminder {
+  id: string;
+  user_id: string;
+  bank_id: string;
+  note: string;
+  due_date: string;
+  done_at: string | null;
+  emailed_at: string | null;
+  created_at: string;
+}
+
 export interface Profile {
   id: string;
   display_name: string | null;

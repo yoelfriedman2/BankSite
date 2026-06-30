@@ -17,6 +17,7 @@ import {
   type BankStatus,
   type OpenMethod,
   type ConversionStage,
+  type Reminder,
 } from "@/lib/types";
 import { getActivityLevel } from "@/lib/dormancy";
 import { formatCurrency, formatDate, maskAccountNumber } from "@/lib/format";
@@ -39,6 +40,12 @@ import {
   type RelatedBank,
 } from "@/app/(app)/banks/actions";
 import { deleteAccount, duplicateAccount } from "@/app/(app)/accounts/actions";
+import {
+  getReminders,
+  addReminder,
+  toggleReminderDone,
+  deleteReminder,
+} from "@/app/(app)/reminders";
 import { useUnsavedChanges, confirmDiscard } from "@/components/useUnsavedChanges";
 
 const inputClass =
@@ -168,12 +175,53 @@ export function BankForm({
     if (confirmDiscard(dirty)) onClose();
   }
 
+  // Private reminders (per-bank, never shared)
+  const today = new Date().toISOString().slice(0, 10);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [reminderNote, setReminderNote] = useState("");
+  const [reminderDate, setReminderDate] = useState("");
+  const [reminderBusy, setReminderBusy] = useState(false);
+
+  function refreshReminders() {
+    if (initial?.id) getReminders(initial.id).then(setReminders).catch(() => {});
+  }
+  function handleAddReminder() {
+    if (!initial?.id || !reminderNote.trim() || !reminderDate) return;
+    const bankId = initial.id;
+    setReminderBusy(true);
+    startTransition(async () => {
+      await addReminder(bankId, reminderNote, reminderDate);
+      setReminderNote("");
+      setReminderDate("");
+      setReminders(await getReminders(bankId));
+      setReminderBusy(false);
+    });
+  }
+  function handleToggleReminder(r: Reminder) {
+    const bankId = initial?.id;
+    if (!bankId) return;
+    startTransition(async () => {
+      await toggleReminderDone(r.id, !r.done_at);
+      setReminders(await getReminders(bankId));
+    });
+  }
+  function handleDeleteReminder(id: string) {
+    const bankId = initial?.id;
+    if (!bankId) return;
+    startTransition(async () => {
+      await deleteReminder(id);
+      setReminders(await getReminders(bankId));
+    });
+  }
+
   useEffect(() => {
     // Set readAt optimistically to NOW so "New" badges disappear immediately on open.
     // markCommentsRead persists this to the DB in the background (no revalidation needed —
     // the unread dot is already cleared optimistically in BanksClient via localReadCerts).
     setReadAt(new Date().toISOString());
     setRelatedBanks([]);
+    setReminders([]);
+    if (initial?.id) getReminders(initial.id).then(setReminders).catch(() => {});
     if (initial?.cert != null) {
       const cert = initial.cert;
       getBankComments(cert).then(setComments).catch(() => {});
@@ -413,6 +461,78 @@ export function BankForm({
                 onChange={(e) => set("notes", e.target.value)}
               />
             </div>
+
+            {/* Private reminders — emailed to you on the due date */}
+            {initial?.id && (
+              <div className="mt-4">
+                <label className={labelClass}>Reminders (private)</label>
+                {reminders.length > 0 && (
+                  <ul className="mb-2 space-y-1">
+                    {reminders.map((r) => {
+                      const done = !!r.done_at;
+                      const overdue = !done && r.due_date < today;
+                      return (
+                        <li
+                          key={r.id}
+                          className="flex items-center gap-2 rounded-md bg-slate-50 px-2 py-1.5 text-sm"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={done}
+                            onChange={() => handleToggleReminder(r)}
+                            className="h-4 w-4 shrink-0 rounded border-slate-300 accent-amber-600"
+                          />
+                          <span
+                            className={`min-w-0 flex-1 truncate ${done ? "text-slate-400 line-through" : "text-slate-700"}`}
+                          >
+                            {r.note}
+                          </span>
+                          <span
+                            className={`shrink-0 text-xs ${overdue ? "font-medium text-rose-600" : "text-slate-400"}`}
+                          >
+                            {formatDate(r.due_date)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteReminder(r.id)}
+                            className="shrink-0 text-slate-300 hover:text-rose-500"
+                            title="Delete reminder"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                <div className="flex items-center gap-2">
+                  <input
+                    className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                    placeholder="Remind me to…"
+                    value={reminderNote}
+                    onChange={(e) => setReminderNote(e.target.value)}
+                  />
+                  <div className="w-40 shrink-0">
+                    <DateInput
+                      value={reminderDate}
+                      onChange={setReminderDate}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddReminder}
+                    disabled={reminderBusy || !reminderNote.trim() || !reminderDate}
+                    className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                  >
+                    Add
+                  </button>
+                </div>
+                <p className="mt-1 text-xs text-slate-400">
+                  We&apos;ll email you on the date. Only you can see these.
+                </p>
+              </div>
+            )}
           </section>
 
           {/* ── Accounts (private) ── */}
