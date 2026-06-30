@@ -29,6 +29,8 @@ import {
   type Bank,
 } from "@/lib/types";
 import { formatCurrency } from "@/lib/format";
+import { getOpenReminders } from "@/app/(app)/reminders";
+import { DashboardReminders } from "@/components/DashboardReminders";
 
 type AttentionItem = {
   account: Account;
@@ -156,6 +158,8 @@ export default async function DashboardPage() {
     (a, b) => (a.level === "red" ? 0 : 1) - (b.level === "red" ? 0 : 1),
   );
 
+  const openReminders = await getOpenReminders();
+
   const conversionWatch = banks
     .filter(
       (b) =>
@@ -208,6 +212,8 @@ export default async function DashboardPage() {
           href="/accounts?attention=1"
         />
       </div>
+
+      <DashboardReminders reminders={openReminders} />
 
       {conversionWatch.length > 0 && (
         <div className="mt-8 rounded-2xl border border-amber-200 bg-white">

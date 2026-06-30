@@ -1,0 +1,62 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { Bell, Check } from "lucide-react";
+import { toggleReminderDone, type OpenReminder } from "@/app/(app)/reminders";
+import { formatDate } from "@/lib/format";
+
+export function DashboardReminders({ reminders }: { reminders: OpenReminder[] }) {
+  const [items, setItems] = useState(reminders);
+  const today = new Date().toISOString().slice(0, 10);
+
+  function markDone(id: string) {
+    setItems((prev) => prev.filter((r) => r.id !== id)); // optimistic
+    toggleReminderDone(id, true).catch(() => {});
+  }
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="mt-8 rounded-2xl border border-slate-200 bg-white">
+      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+        <h2 className="flex items-center gap-2 font-semibold text-slate-900">
+          <Bell className="h-5 w-5 text-amber-600" />
+          Reminders
+        </h2>
+        <span className="text-sm text-slate-400">{items.length}</span>
+      </div>
+      <ul>
+        {items.map((r) => {
+          const overdue = r.due_date < today;
+          return (
+            <li
+              key={r.id}
+              className="flex items-center gap-3 border-b border-slate-100 px-5 py-3 last:border-0 hover:bg-slate-50"
+            >
+              <button
+                type="button"
+                onClick={() => markDone(r.id)}
+                title="Mark done"
+                aria-label="Mark done"
+                className="group flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-300 text-transparent hover:border-emerald-500 hover:text-emerald-500"
+              >
+                <Check className="h-3.5 w-3.5" />
+              </button>
+              <Link href={r.cert != null ? `/banks?cert=${r.cert}` : "/banks"} className="min-w-0 flex-1">
+                <p className="truncate font-medium text-slate-900">{r.note}</p>
+                <p className="text-sm text-slate-500">
+                  {r.bank_name} ·{" "}
+                  <span className={overdue ? "font-medium text-rose-600" : ""}>
+                    {overdue ? "Overdue · " : ""}
+                    {formatDate(r.due_date)}
+                  </span>
+                </p>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}

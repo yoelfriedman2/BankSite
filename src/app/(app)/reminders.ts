@@ -10,6 +10,41 @@ function revalidate() {
   revalidatePath("/");
 }
 
+export interface OpenReminder {
+  id: string;
+  note: string;
+  due_date: string;
+  bank_name: string;
+  cert: number | null;
+}
+
+/** All of the current user's not-yet-done reminders, with their bank, for a central view. */
+export async function getOpenReminders(): Promise<OpenReminder[]> {
+  if (DEMO_MODE) return [];
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data } = await supabase
+    .from("reminders")
+    .select("id, note, due_date, bank:banks(name, cert)")
+    .is("done_at", null)
+    .order("due_date", { ascending: true });
+
+  return (data ?? []).map((r) => {
+    const bank = Array.isArray(r.bank) ? r.bank[0] : r.bank;
+    return {
+      id: r.id as string,
+      note: r.note as string,
+      due_date: r.due_date as string,
+      bank_name: (bank?.name as string | undefined) ?? "—",
+      cert: (bank?.cert as number | null | undefined) ?? null,
+    };
+  });
+}
+
 export async function getReminders(bankId: string): Promise<Reminder[]> {
   if (DEMO_MODE) return [];
   const supabase = await createClient();
