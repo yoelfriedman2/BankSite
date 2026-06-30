@@ -13,6 +13,7 @@ import {
   Printer,
   Sparkles,
   ShieldCheck,
+  BookOpen,
   Settings,
   Trash2,
   LogOut,
@@ -41,6 +42,7 @@ const LINKS: NavLink[] = [
   { href: "/checks", label: "Print Checks", icon: Printer, tour: "checks" },
   { href: "/updates", label: "Updates", icon: Sparkles, tour: "updates" },
   { href: "/admin", label: "Admin", icon: ShieldCheck, tour: "admin", ownerOnly: true },
+  { href: "/help", label: "Help", icon: BookOpen, tour: "help" },
   { href: "/settings", label: "Settings", icon: Settings, tour: "settings" },
   { href: "/trash", label: "Trash", icon: Trash2, tour: "trash" },
 ];
