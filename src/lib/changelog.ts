@@ -11,6 +11,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-06-29",
+    title: "Reminders, a guide, and better checks",
+    items: [
+      "Reminders — set a private follow-up on any bank with a date, and get an email when it's due. All your open reminders show on the dashboard.",
+      "New Guide — an interactive walkthrough of every part of the app and how each piece works.",
+      "Print checks redone — it now looks like a real check and prints the bottom line in a genuine MICR font, on blank or pre-printed check stock with an alignment nudge.",
+      "Cleaner dashboard — the things that need your attention and your reminders are now front and center.",
+      "The activity log now shows exactly what changed when someone edits a bank's shared info.",
+    ],
+  },
+  {
     date: "2026-06-28",
     title: "Print checks",
     items: [
