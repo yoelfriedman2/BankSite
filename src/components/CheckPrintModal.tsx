@@ -118,10 +118,10 @@ function buildPrintHTML(f: CheckFields, opts: PrintOpts): string {
   <span class="pp" style="${PP.memo}">${esc(f.memo)}</span>
 </div>`;
 
-  // Blank stock: draw the entire check, styled like a standard personal check.
+  // Blank stock: draw the check's text + lines only — NO background fill, so it
+  // overlays cleanly on check paper (which already has its own background).
   const blankBody = `
 <div class="check" style="${shift}">
-  <div class="topbar"></div>
   <div class="row1">
     <div class="payer-name">${esc(f.holder) || "&nbsp;"}</div>
     <div class="bankname">${esc(f.bankName)}</div>
@@ -174,16 +174,11 @@ function buildPrintHTML(f: CheckFields, opts: PrintOpts): string {
   .pp { position: absolute; font-size: 11pt; white-space: nowrap; }
   .pp.amt { font-weight: 700; }
 
-  /* Blank mode — full drawn check, styled like a standard personal check. */
+  /* Blank mode — draw the check's text + lines only, no background fill. */
   .check {
     position: relative; width: 8.5in; height: 3.5in;
     padding: 0.3in 0.5in 0.7in 0.5in; overflow: hidden;
-    background: #e9eef6;            /* faint security tint, like real check stock */
     color: #1a2230;
-  }
-  .topbar {
-    position: absolute; top: 0; left: 0; right: 0; height: 0.13in;
-    background: linear-gradient(90deg, #16335f, #5a82b8 50%, #16335f);
   }
   .lbl { font-size: 7.5pt; color: #5a6675; letter-spacing: 0.3px; }
   .row1 { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 0.08in; }
@@ -349,9 +344,9 @@ export function CheckPrintModal({
             </div>
           </div>
 
-          {/* Check preview — mirrors the printed layout (blank-mode view) */}
-          <div className="relative overflow-hidden rounded-md border border-slate-300 bg-[#e9eef6] px-5 pb-8 pt-5">
-            <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#16335f] via-[#5a82b8] to-[#16335f]" />
+          {/* Check preview — mirrors the printed layout (blank-mode view). No
+              background fill: the app only prints the ink onto your check paper. */}
+          <div className="relative overflow-hidden rounded-md border border-slate-300 bg-white px-5 pb-8 pt-5">
             {/* Row 1: payer · bank · check # */}
             <div className="flex items-start justify-between gap-2">
               <p className="text-sm font-bold text-[#16335f]">
