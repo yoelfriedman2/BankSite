@@ -84,7 +84,11 @@ export async function GET(req: NextRequest) {
     const { error: sendErr } = await sendActivityReminderEmail(email, name, alerts);
     // Only stamp the cooldown if the email actually went out, so a transient
     // send failure doesn't silently suppress the reminder for 30 days.
-    if (!sendErr && remindedIds.length) {
+    if (sendErr) {
+      console.error(`[cron/reminders] activity email to ${email} failed:`, sendErr);
+      continue;
+    }
+    if (remindedIds.length) {
       await admin
         .from("accounts")
         .update({ last_reminded_at: new Date().toISOString() })

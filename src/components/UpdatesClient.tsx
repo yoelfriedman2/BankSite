@@ -16,7 +16,9 @@ import type { AuditEntry } from "@/lib/audit";
 import { markChangelogSeen } from "@/components/useChangelogUnread";
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
+  // Parse as local time — a bare YYYY-MM-DD is treated as UTC midnight, which
+  // renders as the previous day for US users.
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-US", {
     month: "long",
     day: "numeric",
     year: "numeric",

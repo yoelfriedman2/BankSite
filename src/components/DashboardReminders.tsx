@@ -11,8 +11,15 @@ export function DashboardReminders({ reminders }: { reminders: OpenReminder[] })
   const today = new Date().toISOString().slice(0, 10);
 
   function markDone(id: string) {
+    const before = items;
     setItems((prev) => prev.filter((r) => r.id !== id)); // optimistic
-    toggleReminderDone(id, true).catch(() => {});
+    // If the server update fails, put the reminder back — otherwise it looks
+    // done but is still open (and will still be emailed when due).
+    toggleReminderDone(id, true)
+      .then((res) => {
+        if (res?.error) setItems(before);
+      })
+      .catch(() => setItems(before));
   }
 
   if (items.length === 0) return null;

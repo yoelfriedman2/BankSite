@@ -120,5 +120,9 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
 ];
 
-/** Identifier for the newest entry — used to show an "unread" dot until seen. */
-export const CHANGELOG_LATEST = CHANGELOG[0]?.date ?? "";
+/** Identifier for the newest entry — used to show an "unread" dot until seen.
+ *  Includes the title (not just the date) because several entries can share a
+ *  date; a second same-day entry must still re-trigger the dot. */
+export const CHANGELOG_LATEST = CHANGELOG[0]
+  ? `${CHANGELOG[0].date}:${CHANGELOG[0].title}`
+  : "";
