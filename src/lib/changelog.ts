@@ -12,6 +12,13 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-07-03",
+    title: "Address change tracker",
+    items: [
+      "Moving? The new Address change page builds a checklist of every bank you hold accounts at — with each bank's phone and website — and you check them off as they get your new address.",
+    ],
+  },
+  {
+    date: "2026-07-03",
     title: "Bank websites & current names",
     items: [
       "Every bank now has a website field with an Open site link, pre-filled from official FDIC records for ~384 banks (each address was checked to actually load). Banks that rebranded now show as “New Name (formerly Old Name)” — search finds them under either name.",

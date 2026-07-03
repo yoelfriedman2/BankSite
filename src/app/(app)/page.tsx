@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   Landmark,
   Wallet,
@@ -86,6 +87,7 @@ export default async function DashboardPage() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
+    if (!user) redirect("/login");
     const { data: banksData } = await supabase
       .from("banks")
       .select("*")
@@ -97,7 +99,7 @@ export default async function DashboardPage() {
     const { data: profile } = await supabase
       .from("profiles")
       .select("default_dormancy_months")
-      .eq("id", user!.id)
+      .eq("id", user.id)
       .maybeSingle();
     banks = (banksData ?? []) as Bank[];
     accounts = (acctData ?? []) as Account[];

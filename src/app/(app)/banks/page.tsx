@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { BanksClient } from "@/components/BanksClient";
 import { BankSetupNotice } from "@/components/BankSetupNotice";
@@ -65,11 +66,12 @@ export default async function BanksPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("display_name, default_dormancy_months, holders, banks_seeded")
-    .eq("id", user!.id)
+    .eq("id", user.id)
     .maybeSingle();
 
   let { data: banks } = await supabase

@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SettingsForm } from "@/components/SettingsForm";
 import { DEMO_MODE, DEMO_USER, getDemoProfile } from "@/lib/demo";
@@ -24,18 +25,21 @@ export default async function SettingsPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  // The session can vanish mid-request (expired, or the account was just
+  // deleted) — bail to login instead of crashing on user.id.
+  if (!user) redirect("/login");
 
   const { data: profile } = await supabase
     .from("profiles")
     .select(
       "display_name, default_dormancy_months, holders, notify_email, activity_reminder_months, notify_new_comments, notify_product_updates",
     )
-    .eq("id", user!.id)
+    .eq("id", user.id)
     .maybeSingle();
 
   return (
     <SettingsForm
-      email={user!.email ?? ""}
+      email={user.email ?? ""}
       displayName={profile?.display_name ?? ""}
       defaultDormancyMonths={profile?.default_dormancy_months ?? 12}
       holders={profile?.holders ?? []}

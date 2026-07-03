@@ -2,6 +2,23 @@
 
 Running list of things to review and decide. (Feature ideas live in IDEAS.md — this is for open work items.)
 
+## Build: FDIC API sync (revisit)
+
+Keep the app aligned with FDIC BankFind automatically (the 2026-07-03 pull was one-off).
+Open decisions before building:
+- Which fields sync automatically vs. propose-for-review (owner was clear: NOT everything —
+  some app data is deliberately different from FDIC's).
+- Candidates to auto-sync: assets (quarterly), active/closed flag (alert when a bank drops off).
+- Candidates to propose-only: name changes, website changes, city/state.
+- Cadence: monthly via the existing daily cron (like the Monday backup) vs. manual button.
+- Where diffs surface: admin-only page vs. a "Check against FDIC" button for everyone.
+The comparison pipeline already exists in scripts form (see `fdic-comparison-2026-07-03.xlsx`).
+
+## One-time setup pending
+
+- Run migration **0024_address_change.sql** in the Supabase SQL editor to enable the new
+  Address change page (the page shows a setup notice until then).
+
 ## Review: 21 banks that no longer exist (from FDIC check, 2026-07-03)
 
 The FDIC says these are no longer insured institutions — merged, acquired, converted, or closed.

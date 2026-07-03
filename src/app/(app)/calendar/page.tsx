@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { CalendarClient, type CalEvent } from "@/components/CalendarClient";
 import {
@@ -31,6 +32,7 @@ export default async function CalendarPage() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
+    if (!user) redirect("/login");
     const { data: banksData } = await supabase
       .from("banks")
       .select("*")
@@ -42,7 +44,7 @@ export default async function CalendarPage() {
     const { data: profile } = await supabase
       .from("profiles")
       .select("default_dormancy_months")
-      .eq("id", user!.id)
+      .eq("id", user.id)
       .maybeSingle();
     banks = (banksData ?? []) as Bank[];
     accounts = (acctData ?? []) as Account[];

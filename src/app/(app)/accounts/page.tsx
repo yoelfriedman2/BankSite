@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AccountsClient, type AccountRow } from "@/components/AccountsClient";
 import {
@@ -35,6 +36,7 @@ export default async function AccountsPage({
     const {
       data: { user },
     } = await supabase.auth.getUser();
+    if (!user) redirect("/login");
 
     const { data: banksData } = await supabase
       .from("banks")
@@ -48,7 +50,7 @@ export default async function AccountsPage({
     const { data: profile } = await supabase
       .from("profiles")
       .select("default_dormancy_months, holders")
-      .eq("id", user!.id)
+      .eq("id", user.id)
       .maybeSingle();
 
     banks = (banksData ?? []) as BankRef[];
