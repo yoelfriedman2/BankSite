@@ -19,10 +19,13 @@ import {
   getActivityLevel,
   isCdMaturingSoon,
   isBelowMinBalance,
-  MIN_BALANCE,
+  hasNoActivityRecorded,
+  attentionPrefsFromProfile,
+  DEFAULT_ATTENTION_PREFS,
   monthsSince,
   daysUntil,
   type ActivityLevel,
+  type AttentionPrefs,
 } from "@/lib/dormancy";
 import {
   ACCOUNT_TYPE_LABELS,
@@ -77,11 +80,13 @@ export default async function DashboardPage() {
   let banks: Bank[];
   let accounts: Account[];
   let defaultMonths: number;
+  let prefs: AttentionPrefs;
 
   if (DEMO_MODE) {
     banks = getDemoBanks();
     accounts = getDemoAccounts();
     defaultMonths = getDemoProfile().default_dormancy_months;
+    prefs = DEFAULT_ATTENTION_PREFS;
   } else {
     const supabase = await createClient();
     const {
@@ -96,14 +101,16 @@ export default async function DashboardPage() {
       .from("accounts")
       .select("*")
       .is("deleted_at", null);
+    // select * so the page keeps working before migration 0025 adds the alert columns
     const { data: profile } = await supabase
       .from("profiles")
-      .select("default_dormancy_months")
+      .select("*")
       .eq("id", user.id)
       .maybeSingle();
     banks = (banksData ?? []) as Bank[];
     accounts = (acctData ?? []) as Account[];
     defaultMonths = profile?.default_dormancy_months ?? 12;
+    prefs = attentionPrefsFromProfile(profile);
   }
 
   const now = new Date();
@@ -148,7 +155,15 @@ export default async function DashboardPage() {
         }`,
       });
     }
-    if (isCdMaturingSoon(a, 30, now) && a.cd_maturity_date) {
+    if (prefs.alertNoActivity && hasNoActivityRecorded(a)) {
+      attention.push({
+        account: a,
+        bankName,
+        level: "red",
+        reason: "No activity ever recorded — log activity or set a date",
+      });
+    }
+    if (prefs.alertCdMaturity && isCdMaturingSoon(a, 30, now) && a.cd_maturity_date) {
       const days = daysUntil(a.cd_maturity_date, now);
       attention.push({
         account: a,
@@ -157,12 +172,12 @@ export default async function DashboardPage() {
         reason: days >= 0 ? `CD matures in ${days} days` : "CD has matured",
       });
     }
-    if (isBelowMinBalance(a)) {
+    if (prefs.alertLowBalance && isBelowMinBalance(a, prefs.minBalance)) {
       attention.push({
         account: a,
         bankName,
         level: "orange",
-        reason: `Only ${formatCurrency(a.balance)} in the account — add money to reach the ${formatCurrency(MIN_BALANCE)} minimum`,
+        reason: `Only ${formatCurrency(a.balance)} in the account — add money to reach the ${formatCurrency(prefs.minBalance)} minimum`,
       });
     }
   }

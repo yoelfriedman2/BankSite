@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { attentionPrefsFromProfile, DEFAULT_ATTENTION_PREFS } from "@/lib/dormancy";
 import { AccountsClient, type AccountRow } from "@/components/AccountsClient";
 import {
   DEMO_MODE,
@@ -25,6 +26,7 @@ export default async function AccountsPage({
   let accounts: Account[];
   let defaultMonths: number;
   let knownHolders: string[];
+  let prefs = DEFAULT_ATTENTION_PREFS;
 
   if (DEMO_MODE) {
     banks = getDemoBanks().map((b) => ({ id: b.id, name: b.name, state: b.state }));
@@ -47,11 +49,13 @@ export default async function AccountsPage({
       .select("*")
       .is("deleted_at", null)
       .order("created_at", { ascending: true });
+    // select * so the page keeps working before migration 0025 adds the alert columns
     const { data: profile } = await supabase
       .from("profiles")
-      .select("default_dormancy_months, holders")
+      .select("*")
       .eq("id", user.id)
       .maybeSingle();
+    prefs = attentionPrefsFromProfile(profile);
 
     banks = (banksData ?? []) as BankRef[];
     accounts = (acctData ?? []) as Account[];
@@ -76,6 +80,7 @@ export default async function AccountsPage({
       rows={rows}
       defaultDormancyMonths={defaultMonths}
       knownHolders={knownHolders}
+      attentionPrefs={prefs}
       initialAttention={initialAttention}
       initialQuery={initialQuery}
     />

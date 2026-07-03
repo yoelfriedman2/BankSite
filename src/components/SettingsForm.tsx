@@ -16,6 +16,12 @@ import {
   Archive,
   MessageCircle,
   Send,
+  User,
+  FileSpreadsheet,
+  ShieldAlert,
+  Wallet,
+  CalendarClock,
+  CircleAlert,
 } from "lucide-react";
 import {
   updateSettings,
@@ -31,6 +37,75 @@ const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
 const labelClass = "mb-1 block text-sm font-medium text-slate-700";
 
+type TabId = "profile" | "alerts" | "data" | "account";
+
+const TABS: { id: TabId; label: string }[] = [
+  { id: "profile", label: "Profile" },
+  { id: "alerts", label: "Alerts & emails" },
+  { id: "data", label: "Your data" },
+  { id: "account", label: "Account" },
+];
+
+/** A titled white card — every settings group lives in one. */
+function Card({
+  title,
+  icon,
+  description,
+  children,
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-6">
+      <div className="mb-1 flex items-center gap-2">
+        {icon}
+        <h2 className="text-sm font-semibold text-slate-800">{title}</h2>
+      </div>
+      {description && <p className="mb-4 text-sm text-slate-500">{description}</p>}
+      {children}
+    </div>
+  );
+}
+
+/** A labelled on/off toggle row. */
+function ToggleRow({
+  checked,
+  onChange,
+  icon,
+  title,
+  description,
+  children,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  icon?: React.ReactNode;
+  title: string;
+  description: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-amber-600"
+      />
+      <div className="flex-1 text-sm">
+        <div className="flex items-center gap-2">
+          {icon}
+          <span className="font-medium text-slate-700">{title}</span>
+        </div>
+        <span className="block text-xs text-slate-400">{description}</span>
+        {children}
+      </div>
+    </label>
+  );
+}
+
 export function SettingsForm({
   email,
   displayName,
@@ -40,6 +115,10 @@ export function SettingsForm({
   activityReminderMonths,
   notifyNewComments,
   notifyProductUpdates,
+  alertNoActivity,
+  alertLowBalance,
+  alertCdMaturity,
+  minBalance,
   lastSignInAt,
 }: {
   email: string;
@@ -50,8 +129,14 @@ export function SettingsForm({
   activityReminderMonths: number[];
   notifyNewComments: boolean;
   notifyProductUpdates: boolean;
+  alertNoActivity: boolean;
+  alertLowBalance: boolean;
+  alertCdMaturity: boolean;
+  minBalance: number;
   lastSignInAt: string | null;
 }) {
+  const [tab, setTab] = useState<TabId>("profile");
+
   const [name, setName] = useState(displayName);
   const [months, setMonths] = useState(String(defaultDormancyMonths));
   const [holdersList, setHoldersList] = useState<string[]>(
@@ -64,6 +149,10 @@ export function SettingsForm({
   const [newReminderMonth, setNewReminderMonth] = useState("");
   const [notifyComments, setNotifyComments] = useState(notifyNewComments);
   const [notifyUpdates, setNotifyUpdates] = useState(notifyProductUpdates);
+  const [noActivityAlert, setNoActivityAlert] = useState(alertNoActivity);
+  const [lowBalanceAlert, setLowBalanceAlert] = useState(alertLowBalance);
+  const [cdAlert, setCdAlert] = useState(alertCdMaturity);
+  const [minBal, setMinBal] = useState(String(minBalance));
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -169,8 +258,8 @@ export function SettingsForm({
     setReminderMonths((prev) => prev.filter((x) => x !== m));
   }
 
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  function handleSubmit(e?: FormEvent<HTMLFormElement>) {
+    e?.preventDefault();
     setError(null);
     setSaved(false);
     startTransition(async () => {
@@ -182,6 +271,10 @@ export function SettingsForm({
         activity_reminder_months: reminderMonths,
         notify_new_comments: notifyComments,
         notify_product_updates: notifyUpdates,
+        alert_no_activity: noActivityAlert,
+        alert_low_balance: lowBalanceAlert,
+        alert_cd_maturity: cdAlert,
+        min_balance: minBal,
       });
       if (result.error) {
         setError(result.error);
@@ -193,353 +286,416 @@ export function SettingsForm({
     });
   }
 
-  return (
-    <div className="max-w-xl">
-      <h1 className="mb-6 text-2xl font-semibold text-slate-900">Settings</h1>
-
-      <form
-        onSubmit={handleSubmit}
-        className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6"
+  const saveBar = (
+    <div className="flex items-center gap-3">
+      <button
+        type="submit"
+        disabled={isPending}
+        className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
       >
-        <div>
-          <label className={labelClass}>Email</label>
-          <input
-            className={`${inputClass} bg-slate-50 text-slate-500`}
-            value={email}
-            disabled
-          />
-          {lastSignInAt && (
-            <p className="mt-1 text-xs text-slate-400">
-              Last signed in:{" "}
-              {new Date(lastSignInAt).toLocaleString("en-US", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-                hour: "numeric",
-                minute: "2-digit",
-              })}
-            </p>
-          )}
-        </div>
+        {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+        Save settings
+      </button>
+      {saved && (
+        <span className="flex items-center gap-1 text-sm text-emerald-600">
+          <Check className="h-4 w-4" />
+          Saved
+        </span>
+      )}
+      {error && <span className="text-sm text-rose-600">{error}</span>}
+    </div>
+  );
 
-        <div>
-          <label className={labelClass} htmlFor="display_name">
-            Display name
-          </label>
-          <input
-            id="display_name"
-            className={inputClass}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </div>
+  return (
+    <div className="max-w-2xl">
+      <h1 className="mb-4 text-2xl font-semibold text-slate-900">Settings</h1>
 
-        <div>
-          <label className={labelClass} htmlFor="default_dormancy_months">
-            Default dormancy window (months)
-          </label>
-          <input
-            id="default_dormancy_months"
-            type="number"
-            min="1"
-            className={inputClass}
-            value={months}
-            onChange={(e) => setMonths(e.target.value)}
-          />
-          <p className="mt-1 text-xs text-slate-400">
-            Accounts turn{" "}
-            <span className="font-medium text-amber-600">orange</span> ~3 months
-            before this window and{" "}
-            <span className="font-medium text-rose-600">red</span> in the final
-            month.
-          </p>
-        </div>
-
-        <div>
-          <label className={labelClass}>Account holder names</label>
-          <p className="mb-2 text-xs text-slate-400">
-            These show up as suggestions whenever you add an account (e.g.
-            yourself, your spouse). The first name is used as the default.
-          </p>
-          <div className="space-y-2">
-            {holdersList.map((h, i) => (
-              <div key={i} className="flex gap-2">
-                <input
-                  className={inputClass}
-                  value={h}
-                  placeholder="e.g. John"
-                  onChange={(e) => updateHolder(i, e.target.value)}
-                />
-                <button
-                  type="button"
-                  onClick={() => removeHolder(i)}
-                  className="shrink-0 rounded-lg border border-slate-200 px-2.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                  title="Remove"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
-          </div>
+      {/* ── Tabs ── */}
+      <div className="mb-6 flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+        {TABS.map((t) => (
           <button
+            key={t.id}
             type="button"
-            onClick={addHolder}
-            className="mt-2 flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+            onClick={() => setTab(t.id)}
+            className={`shrink-0 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${
+              tab === t.id
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
           >
-            <Plus className="h-4 w-4" />
-            Add name
+            {t.label}
           </button>
-        </div>
+        ))}
+      </div>
 
-        {/* ── Notification preferences ── */}
-        <div className="border-t border-slate-100 pt-5">
-          <div className="mb-4 flex items-center gap-2">
-            <Bell className="h-4 w-4 text-amber-500" />
-            <h2 className="text-sm font-semibold text-slate-800">
-              Notification preferences
-            </h2>
-          </div>
-          <p className="mb-4 text-xs text-slate-400">
-            Choose which emails you&apos;d like to receive.
-          </p>
-
-          {/* Master email toggle */}
-          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3">
-            <input
-              type="checkbox"
-              checked={notify}
-              onChange={(e) => setNotify(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-amber-600"
-            />
-            <div className="text-sm">
-              <span className="font-medium text-slate-700">Enable email notifications</span>
-              <span className="block text-xs text-slate-400">
-                Master switch — individual toggles below take effect only when this is on.
-              </span>
+      {/* ══ PROFILE ══ */}
+      {tab === "profile" && (
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <Card
+            title="Your profile"
+            icon={<User className="h-4 w-4 text-amber-500" />}
+          >
+            <div className="space-y-4">
+              <div>
+                <label className={labelClass}>Email</label>
+                <input
+                  className={`${inputClass} bg-slate-50 text-slate-500`}
+                  value={email}
+                  disabled
+                />
+                {lastSignInAt && (
+                  <p className="mt-1 text-xs text-slate-400">
+                    Last signed in:{" "}
+                    {new Date(lastSignInAt).toLocaleString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className={labelClass} htmlFor="display_name">
+                  Display name
+                </label>
+                <input
+                  id="display_name"
+                  className={inputClass}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
             </div>
-          </label>
+          </Card>
 
-          {/* Activity reminder thresholds */}
-          <div className="mt-4 space-y-2 rounded-lg border border-slate-200 p-3">
-            <div className="flex items-center gap-2">
-              <Bell className="h-3.5 w-3.5 text-slate-400" />
-              <span className="text-sm font-medium text-slate-700">
-                Account inactivity reminders
-              </span>
-            </div>
-            <p className="text-xs text-slate-400">
-              Get a reminder when an account has had no activity for each
-              threshold below. Default is 9 and 12 months.
-            </p>
-            <div className="flex flex-wrap gap-2 pt-1">
-              {reminderMonths.map((m) => (
-                <span
-                  key={m}
-                  className="flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-200"
-                >
-                  {m} mo
+          <Card
+            title="Account holder names"
+            icon={<User className="h-4 w-4 text-slate-400" />}
+            description="Suggested whenever you add an account (e.g. yourself, your spouse). The first name is the default."
+          >
+            <div className="space-y-2">
+              {holdersList.map((h, i) => (
+                <div key={i} className="flex gap-2">
+                  <input
+                    className={inputClass}
+                    value={h}
+                    placeholder="e.g. John"
+                    onChange={(e) => updateHolder(i, e.target.value)}
+                  />
                   <button
                     type="button"
-                    onClick={() => removeReminderMonth(m)}
-                    className="ml-1 rounded-full text-amber-500 hover:text-amber-700"
+                    onClick={() => removeHolder(i)}
+                    className="shrink-0 rounded-lg border border-slate-200 px-2.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                    title="Remove"
                   >
-                    <X className="h-3 w-3" />
+                    <X className="h-4 w-4" />
                   </button>
-                </span>
+                </div>
               ))}
-              {reminderMonths.length === 0 && (
-                <span className="text-xs text-slate-400">No thresholds — add one below.</span>
-              )}
             </div>
-            <div className="flex gap-2 pt-1">
-              <input
-                type="number"
-                min="1"
-                max="120"
-                placeholder="months"
-                className="w-28 rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-                value={newReminderMonth}
-                onChange={(e) => setNewReminderMonth(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addReminderMonth())}
+            <button
+              type="button"
+              onClick={addHolder}
+              className="mt-2 flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+            >
+              <Plus className="h-4 w-4" />
+              Add name
+            </button>
+          </Card>
+
+          {saveBar}
+        </form>
+      )}
+
+      {/* ══ ALERTS & EMAILS ══ */}
+      {tab === "alerts" && (
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <Card
+            title="Needs attention"
+            icon={<AlertTriangle className="h-4 w-4 text-amber-500" />}
+            description="What shows up on the dashboard's Needs attention list and the Accounts filter."
+          >
+            <div className="space-y-3">
+              <div>
+                <label className={labelClass} htmlFor="default_dormancy_months">
+                  Default dormancy window (months)
+                </label>
+                <input
+                  id="default_dormancy_months"
+                  type="number"
+                  min="1"
+                  className={inputClass}
+                  value={months}
+                  onChange={(e) => setMonths(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  Accounts turn{" "}
+                  <span className="font-medium text-amber-600">orange</span> ~3 months
+                  before this window and{" "}
+                  <span className="font-medium text-rose-600">red</span> in the final
+                  month.
+                </p>
+              </div>
+
+              <ToggleRow
+                checked={noActivityAlert}
+                onChange={setNoActivityAlert}
+                icon={<CircleAlert className="h-3.5 w-3.5 text-slate-400" />}
+                title="Accounts with no activity recorded"
+                description="Flag accounts that have no activity date at all (typical after an import) until activity is logged or a date is set."
               />
+
+              <ToggleRow
+                checked={lowBalanceAlert}
+                onChange={setLowBalanceAlert}
+                icon={<Wallet className="h-3.5 w-3.5 text-slate-400" />}
+                title="Accounts below the minimum balance"
+                description="Flag accounts holding less than your minimum, so you know to add money."
+              >
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-xs text-slate-500">Minimum ($)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    className="w-28 rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                    value={minBal}
+                    onChange={(e) => setMinBal(e.target.value)}
+                    onClick={(e) => e.preventDefault()}
+                  />
+                </div>
+              </ToggleRow>
+
+              <ToggleRow
+                checked={cdAlert}
+                onChange={setCdAlert}
+                icon={<CalendarClock className="h-3.5 w-3.5 text-slate-400" />}
+                title="CDs maturing soon"
+                description="Flag CDs that mature within the next 30 days (or already matured)."
+              />
+            </div>
+          </Card>
+
+          <Card
+            title="Email notifications"
+            icon={<Bell className="h-4 w-4 text-amber-500" />}
+            description="Which emails you'd like to receive."
+          >
+            <div className="space-y-3">
+              <ToggleRow
+                checked={notify}
+                onChange={setNotify}
+                title="Enable email notifications"
+                description="Master switch — the toggles below take effect only when this is on."
+              />
+
+              <div className="space-y-2 rounded-lg border border-slate-200 p-3">
+                <div className="flex items-center gap-2">
+                  <Bell className="h-3.5 w-3.5 text-slate-400" />
+                  <span className="text-sm font-medium text-slate-700">
+                    Account inactivity reminders
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Get an email when an account has had no activity for each threshold
+                  below. Default is 9 and 12 months.
+                </p>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {reminderMonths.map((m) => (
+                    <span
+                      key={m}
+                      className="flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-200"
+                    >
+                      {m} mo
+                      <button
+                        type="button"
+                        onClick={() => removeReminderMonth(m)}
+                        className="ml-1 rounded-full text-amber-500 hover:text-amber-700"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                  {reminderMonths.length === 0 && (
+                    <span className="text-xs text-slate-400">No thresholds — add one below.</span>
+                  )}
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <input
+                    type="number"
+                    min="1"
+                    max="120"
+                    placeholder="months"
+                    className="w-28 rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                    value={newReminderMonth}
+                    onChange={(e) => setNewReminderMonth(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addReminderMonth())}
+                  />
+                  <button
+                    type="button"
+                    onClick={addReminderMonth}
+                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add
+                  </button>
+                </div>
+              </div>
+
+              <ToggleRow
+                checked={notifyComments}
+                onChange={setNotifyComments}
+                icon={<MessageSquare className="h-3.5 w-3.5 text-slate-400" />}
+                title="New community notes"
+                description="Email me when someone posts a community note on any bank."
+              />
+
+              <ToggleRow
+                checked={notifyUpdates}
+                onChange={setNotifyUpdates}
+                icon={<Megaphone className="h-3.5 w-3.5 text-slate-400" />}
+                title="Product & feature updates"
+                description="Occasional emails about new features and improvements."
+              />
+            </div>
+          </Card>
+
+          {saveBar}
+        </form>
+      )}
+
+      {/* ══ YOUR DATA ══ */}
+      {tab === "data" && (
+        <div className="space-y-5">
+          <Card
+            title="Full backup"
+            icon={<Archive className="h-4 w-4 text-slate-500" />}
+            description="Everything in one zip: a spreadsheet of your banks and accounts plus every document you've uploaded."
+          >
+            <a
+              href="/api/export/full"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              <Download className="h-4 w-4" />
+              Download full backup
+            </a>
+            <p className="mt-2 text-xs text-slate-400">
+              Large document libraries may take a few seconds to bundle.
+            </p>
+          </Card>
+
+          <Card
+            title="Spreadsheet export"
+            icon={<FileSpreadsheet className="h-4 w-4 text-emerald-600" />}
+            description="Just the Excel file — your banks and accounts, no documents."
+          >
+            <button
+              type="button"
+              onClick={handleExportData}
+              disabled={exporting}
+              className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            >
+              {exporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : exported ? (
+                <Check className="h-4 w-4 text-emerald-600" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              {exported ? "Exported" : "Export to Excel"}
+            </button>
+            {deleteError && !deleteOpen && (
+              <p className="mt-2 text-xs text-rose-600">{deleteError}</p>
+            )}
+            <p className="mt-2 text-xs text-slate-400">
+              Your export contains only your own data — never other users&apos;.
+            </p>
+          </Card>
+        </div>
+      )}
+
+      {/* ══ ACCOUNT ══ */}
+      {tab === "account" && (
+        <div className="space-y-5">
+          <Card
+            title="Security"
+            icon={<ShieldAlert className="h-4 w-4 text-slate-500" />}
+            description="Signed in somewhere you shouldn't be? Sign out of every device — you'll need to sign in again here."
+          >
+            <button
+              type="button"
+              onClick={handleSignOutEverywhere}
+              disabled={signingOutAll}
+              className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            >
+              {signingOutAll ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <LogOut className="h-4 w-4" />
+              )}
+              Sign out on all devices
+            </button>
+          </Card>
+
+          <Card
+            title="Feedback"
+            icon={<MessageCircle className="h-4 w-4 text-amber-500" />}
+            description="Found a bug or have an idea? Send it straight to the team."
+          >
+            <textarea
+              rows={3}
+              className={inputClass}
+              placeholder="What's on your mind?"
+              value={feedback}
+              onChange={(e) => {
+                setFeedback(e.target.value);
+                setFeedbackSent(false);
+              }}
+            />
+            {feedbackError && (
+              <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{feedbackError}</p>
+            )}
+            <div className="mt-3 flex items-center gap-3">
               <button
                 type="button"
-                onClick={addReminderMonth}
-                className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100"
+                onClick={handleSendFeedback}
+                disabled={feedbackSending || !feedback.trim()}
+                className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
               >
-                <Plus className="h-3.5 w-3.5" />
-                Add
+                {feedbackSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                Send feedback
               </button>
+              {feedbackSent && (
+                <span className="flex items-center gap-1 text-sm text-emerald-600">
+                  <Check className="h-4 w-4" />
+                  Sent — thank you!
+                </span>
+              )}
             </div>
+          </Card>
+
+          <div className="rounded-2xl border border-rose-200 bg-rose-50/40 p-6">
+            <div className="mb-1 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-rose-500" />
+              <h2 className="text-sm font-semibold text-rose-700">Danger zone</h2>
+            </div>
+            <p className="mb-4 text-sm text-slate-600">
+              Permanently delete your account and everything in it — banks, accounts,
+              balances, documents, and history. This can&apos;t be undone.
+            </p>
+            <button
+              type="button"
+              onClick={() => setDeleteOpen(true)}
+              className="flex items-center gap-2 rounded-lg border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete my account
+            </button>
           </div>
-
-          {/* Community comments */}
-          <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3">
-            <input
-              type="checkbox"
-              checked={notifyComments}
-              onChange={(e) => setNotifyComments(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-amber-600"
-            />
-            <div className="flex-1 text-sm">
-              <div className="flex items-center gap-2">
-                <MessageSquare className="h-3.5 w-3.5 text-slate-400" />
-                <span className="font-medium text-slate-700">New community notes</span>
-              </div>
-              <span className="block text-xs text-slate-400">
-                Email me when someone posts a community note on any bank in the tracker.
-              </span>
-            </div>
-          </label>
-
-          {/* Product updates */}
-          <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3">
-            <input
-              type="checkbox"
-              checked={notifyUpdates}
-              onChange={(e) => setNotifyUpdates(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-amber-600"
-            />
-            <div className="flex-1 text-sm">
-              <div className="flex items-center gap-2">
-                <Megaphone className="h-3.5 w-3.5 text-slate-400" />
-                <span className="font-medium text-slate-700">Product &amp; feature updates</span>
-              </div>
-              <span className="block text-xs text-slate-400">
-                Occasional emails about new features and improvements to Bank Tracker.
-              </span>
-            </div>
-          </label>
         </div>
-
-        {error && (
-          <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
-            {error}
-          </p>
-        )}
-
-        <div className="flex items-center gap-3">
-          <button
-            type="submit"
-            disabled={isPending}
-            className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
-          >
-            {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-            Save settings
-          </button>
-          {saved && (
-            <span className="flex items-center gap-1 text-sm text-emerald-600">
-              <Check className="h-4 w-4" />
-              Saved
-            </span>
-          )}
-        </div>
-      </form>
-
-      {/* ── Security ── */}
-      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
-        <h2 className="mb-1 text-sm font-semibold text-slate-800">Security</h2>
-        <p className="mb-4 text-sm text-slate-600">
-          Signed in somewhere you shouldn&apos;t be? Sign out of every device — you&apos;ll
-          need to sign in again here.
-        </p>
-        <button
-          type="button"
-          onClick={handleSignOutEverywhere}
-          disabled={signingOutAll}
-          className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-        >
-          {signingOutAll ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <LogOut className="h-4 w-4" />
-          )}
-          Sign out on all devices
-        </button>
-      </div>
-
-      {/* ── Your data ── */}
-      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
-        <div className="mb-1 flex items-center gap-2">
-          <Archive className="h-4 w-4 text-slate-500" />
-          <h2 className="text-sm font-semibold text-slate-800">Your data</h2>
-        </div>
-        <p className="mb-4 text-sm text-slate-600">
-          Download a full backup — a spreadsheet of your banks and accounts plus every
-          document you&apos;ve uploaded, in one zip.
-        </p>
-        <a
-          href="/api/export/full"
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-        >
-          <Download className="h-4 w-4" />
-          Download full backup
-        </a>
-        <p className="mt-2 text-xs text-slate-400">
-          Large document libraries may take a few seconds to bundle.
-        </p>
-      </div>
-
-      {/* ── Feedback ── */}
-      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
-        <div className="mb-1 flex items-center gap-2">
-          <MessageCircle className="h-4 w-4 text-amber-500" />
-          <h2 className="text-sm font-semibold text-slate-800">Feedback</h2>
-        </div>
-        <p className="mb-3 text-sm text-slate-600">
-          Found a bug or have an idea? Send it straight to the team.
-        </p>
-        <textarea
-          rows={3}
-          className={inputClass}
-          placeholder="What's on your mind?"
-          value={feedback}
-          onChange={(e) => {
-            setFeedback(e.target.value);
-            setFeedbackSent(false);
-          }}
-        />
-        {feedbackError && (
-          <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{feedbackError}</p>
-        )}
-        <div className="mt-3 flex items-center gap-3">
-          <button
-            type="button"
-            onClick={handleSendFeedback}
-            disabled={feedbackSending || !feedback.trim()}
-            className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
-          >
-            {feedbackSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            Send feedback
-          </button>
-          {feedbackSent && (
-            <span className="flex items-center gap-1 text-sm text-emerald-600">
-              <Check className="h-4 w-4" />
-              Sent — thank you!
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* ── Danger zone ── */}
-      <div className="mt-6 rounded-2xl border border-rose-200 bg-rose-50/40 p-6">
-        <div className="mb-1 flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-rose-500" />
-          <h2 className="text-sm font-semibold text-rose-700">Danger zone</h2>
-        </div>
-        <p className="mb-4 text-sm text-slate-600">
-          Permanently delete your account and everything in it — banks, accounts,
-          balances, documents, and history. This can&apos;t be undone.
-        </p>
-        <button
-          type="button"
-          onClick={() => setDeleteOpen(true)}
-          className="flex items-center gap-2 rounded-lg border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50"
-        >
-          <Trash2 className="h-4 w-4" />
-          Delete my account
-        </button>
-      </div>
+      )}
 
       {deleteOpen && (
         <div

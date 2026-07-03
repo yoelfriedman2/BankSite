@@ -20,10 +20,18 @@ export async function updateSettings(values: {
   activity_reminder_months: number[];
   notify_new_comments: boolean;
   notify_product_updates: boolean;
+  alert_no_activity: boolean;
+  alert_low_balance: boolean;
+  alert_cd_maturity: boolean;
+  min_balance: string;
 }): Promise<{ error?: string }> {
   const months = parseInt(values.default_dormancy_months, 10);
   if (!Number.isFinite(months) || months < 1) {
     return { error: "Default dormancy window must be at least 1 month." };
+  }
+  const minBalance = parseFloat(values.min_balance);
+  if (!Number.isFinite(minBalance) || minBalance < 0) {
+    return { error: "Minimum balance must be zero or more." };
   }
   const displayName = values.display_name.trim() || null;
   const holders = Array.from(
@@ -42,6 +50,10 @@ export async function updateSettings(values: {
       activity_reminder_months: reminderMonths,
       notify_new_comments: values.notify_new_comments,
       notify_product_updates: values.notify_product_updates,
+      alert_no_activity: values.alert_no_activity,
+      alert_low_balance: values.alert_low_balance,
+      alert_cd_maturity: values.alert_cd_maturity,
+      min_balance: minBalance,
     });
     revalidatePath("/settings");
     revalidatePath("/banks");
@@ -66,10 +78,19 @@ export async function updateSettings(values: {
       activity_reminder_months: reminderMonths,
       notify_new_comments: values.notify_new_comments,
       notify_product_updates: values.notify_product_updates,
+      alert_no_activity: values.alert_no_activity,
+      alert_low_balance: values.alert_low_balance,
+      alert_cd_maturity: values.alert_cd_maturity,
+      min_balance: minBalance,
     })
     .eq("id", user.id);
 
-  if (error) return { error: error.message };
+  if (error) {
+    if (/alert_no_activity|min_balance|column/.test(error.message)) {
+      return { error: "One-time setup needed: run migration 0025 in the Supabase SQL editor, then save again." };
+    }
+    return { error: error.message };
+  }
 
   revalidatePath("/settings");
   revalidatePath("/banks");

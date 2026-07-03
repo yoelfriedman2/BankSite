@@ -12,6 +12,13 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-07-03",
+    title: "Alert settings & a cleaner Settings page",
+    items: [
+      "Settings is now organized into tabs (Profile, Alerts & emails, Your data, Account). New alert options: accounts with no activity recorded are flagged until you log something, and you can set your own minimum balance (default $100) — or turn any of these alerts off.",
+    ],
+  },
+  {
+    date: "2026-07-03",
     title: "Address change tracker",
     items: [
       "Moving? The new Address change page builds a checklist of every bank you hold accounts at — with each bank's phone and website — and you check them off as they get your new address.",

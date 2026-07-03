@@ -20,6 +20,8 @@ import {
   needsAttention,
   monthsSince,
   daysUntil,
+  DEFAULT_ATTENTION_PREFS,
+  type AttentionPrefs,
 } from "@/lib/dormancy";
 import { formatCurrency, formatDateShort, maskAccountNumber } from "@/lib/format";
 import { ActivityDot } from "@/components/badges";
@@ -90,12 +92,14 @@ export function AccountsClient({
   rows,
   defaultDormancyMonths,
   knownHolders,
+  attentionPrefs = DEFAULT_ATTENTION_PREFS,
   initialAttention,
   initialQuery,
 }: {
   rows: AccountRow[];
   defaultDormancyMonths: number;
   knownHolders: string[];
+  attentionPrefs?: AttentionPrefs;
   initialAttention: boolean;
   initialQuery?: string;
 }) {
@@ -130,14 +134,14 @@ export function AccountsClient({
   }, [rows]);
 
   const attentionCount = useMemo(
-    () => rows.filter((r) => needsAttention(r, defaultDormancyMonths)).length,
-    [rows, defaultDormancyMonths],
+    () => rows.filter((r) => needsAttention(r, defaultDormancyMonths, new Date(), attentionPrefs)).length,
+    [rows, defaultDormancyMonths, attentionPrefs],
   );
 
   const filtered = useMemo(() => {
     let list = rows;
     if (attentionOnly)
-      list = list.filter((r) => needsAttention(r, defaultDormancyMonths));
+      list = list.filter((r) => needsAttention(r, defaultDormancyMonths, new Date(), attentionPrefs));
     if (holderFilter !== "all")
       list = list.filter((r) => r.holder === holderFilter);
     if (typeFilter !== "all")
@@ -151,7 +155,7 @@ export function AccountsClient({
       );
     }
     return list;
-  }, [rows, attentionOnly, holderFilter, typeFilter, query, defaultDormancyMonths]);
+  }, [rows, attentionOnly, holderFilter, typeFilter, query, defaultDormancyMonths, attentionPrefs]);
 
   return (
     <div>

@@ -16,6 +16,10 @@ export default async function SettingsPage() {
         activityReminderMonths={p.activity_reminder_months ?? [9, 12]}
         notifyNewComments={p.notify_new_comments ?? false}
         notifyProductUpdates={p.notify_product_updates ?? false}
+        alertNoActivity={p.alert_no_activity ?? true}
+        alertLowBalance={p.alert_low_balance ?? true}
+        alertCdMaturity={p.alert_cd_maturity ?? true}
+        minBalance={p.min_balance ?? 100}
         lastSignInAt={null}
       />
     );
@@ -29,11 +33,10 @@ export default async function SettingsPage() {
   // deleted) — bail to login instead of crashing on user.id.
   if (!user) redirect("/login");
 
+  // select * so the page keeps working before migration 0025 adds the alert columns
   const { data: profile } = await supabase
     .from("profiles")
-    .select(
-      "display_name, default_dormancy_months, holders, notify_email, activity_reminder_months, notify_new_comments, notify_product_updates",
-    )
+    .select("*")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -47,6 +50,10 @@ export default async function SettingsPage() {
       activityReminderMonths={profile?.activity_reminder_months ?? [9, 12]}
       notifyNewComments={profile?.notify_new_comments ?? true}
       notifyProductUpdates={profile?.notify_product_updates ?? true}
+      alertNoActivity={profile?.alert_no_activity ?? true}
+      alertLowBalance={profile?.alert_low_balance ?? true}
+      alertCdMaturity={profile?.alert_cd_maturity ?? true}
+      minBalance={profile?.min_balance != null ? Number(profile.min_balance) : 100}
       lastSignInAt={user?.last_sign_in_at ?? null}
     />
   );

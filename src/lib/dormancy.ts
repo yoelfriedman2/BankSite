@@ -67,16 +67,56 @@ export function getActivityLevel(
   return "green";
 }
 
-/** Every account should hold at least this much, so it can't be closed out
- *  or lose standing for having a trivial balance. */
+/** Default minimum every account should hold (user-adjustable in Settings). */
 export const MIN_BALANCE = 100;
 
-/** True when the account's recorded balance is below the $100 minimum.
+/** Per-user preferences for what lands on the "Needs attention" list. */
+export type AttentionPrefs = {
+  alertNoActivity: boolean;
+  alertLowBalance: boolean;
+  alertCdMaturity: boolean;
+  minBalance: number;
+};
+
+export const DEFAULT_ATTENTION_PREFS: AttentionPrefs = {
+  alertNoActivity: true,
+  alertLowBalance: true,
+  alertCdMaturity: true,
+  minBalance: MIN_BALANCE,
+};
+
+/** Builds AttentionPrefs from a profiles row, tolerating missing columns
+ *  (pre-migration) by falling back to the defaults. */
+export function attentionPrefsFromProfile(
+  profile: Record<string, unknown> | null | undefined,
+): AttentionPrefs {
+  return {
+    alertNoActivity: (profile?.alert_no_activity as boolean | undefined) ?? true,
+    alertLowBalance: (profile?.alert_low_balance as boolean | undefined) ?? true,
+    alertCdMaturity: (profile?.alert_cd_maturity as boolean | undefined) ?? true,
+    minBalance:
+      profile?.min_balance != null ? Number(profile.min_balance) : MIN_BALANCE,
+  };
+}
+
+/** True when the account's recorded balance is below the minimum.
  *  Accounts with no balance recorded are skipped (unknown ≠ low). */
 export function isBelowMinBalance(
   account: Pick<Account, "balance">,
+  minBalance: number = MIN_BALANCE,
 ): boolean {
-  return account.balance != null && account.balance < MIN_BALANCE;
+  return account.balance != null && account.balance < minBalance;
+}
+
+/** True when an account has NO activity recorded at all — no last-activity
+ *  date and no open date to fall back on (typical for imported accounts).
+ *  The dormancy clock can't even start, so it needs attention until a date
+ *  is set or activity is logged. CDs are exempt (they don't go dormant). */
+export function hasNoActivityRecorded(
+  account: Pick<Account, "account_type" | "last_activity_date" | "date_opened">,
+): boolean {
+  if (account.account_type === "cd") return false;
+  return !account.last_activity_date && !account.date_opened;
 }
 
 /** Is this a CD that matures within `withinDays`? */
@@ -94,9 +134,12 @@ export function needsAttention(
   account: Account,
   defaultMonths: number,
   now: Date = new Date(),
+  prefs: AttentionPrefs = DEFAULT_ATTENTION_PREFS,
 ): boolean {
   const level = getActivityLevel(account, defaultMonths, now);
   if (level === "orange" || level === "red") return true;
-  if (isBelowMinBalance(account)) return true;
-  return isCdMaturingSoon(account, 30, now);
+  if (prefs.alertNoActivity && hasNoActivityRecorded(account)) return true;
+  if (prefs.alertLowBalance && isBelowMinBalance(account, prefs.minBalance)) return true;
+  if (prefs.alertCdMaturity && isCdMaturingSoon(account, 30, now)) return true;
+  return false;
 }

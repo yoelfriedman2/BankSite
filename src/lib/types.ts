@@ -162,6 +162,11 @@ export interface Profile {
   activity_reminder_months: number[];
   notify_new_comments: boolean;
   notify_product_updates: boolean;
+  // In-app "Needs attention" alert preferences
+  alert_no_activity: boolean;
+  alert_low_balance: boolean;
+  alert_cd_maturity: boolean;
+  min_balance: number;
   banks_seeded: boolean;
   onboarded: boolean;
   created_at: string;
