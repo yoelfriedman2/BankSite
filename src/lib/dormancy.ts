@@ -67,6 +67,18 @@ export function getActivityLevel(
   return "green";
 }
 
+/** Every account should hold at least this much, so it can't be closed out
+ *  or lose standing for having a trivial balance. */
+export const MIN_BALANCE = 100;
+
+/** True when the account's recorded balance is below the $100 minimum.
+ *  Accounts with no balance recorded are skipped (unknown ≠ low). */
+export function isBelowMinBalance(
+  account: Pick<Account, "balance">,
+): boolean {
+  return account.balance != null && account.balance < MIN_BALANCE;
+}
+
 /** Is this a CD that matures within `withinDays`? */
 export function isCdMaturingSoon(
   account: Account,
@@ -85,5 +97,6 @@ export function needsAttention(
 ): boolean {
   const level = getActivityLevel(account, defaultMonths, now);
   if (level === "orange" || level === "red") return true;
+  if (isBelowMinBalance(account)) return true;
   return isCdMaturingSoon(account, 30, now);
 }

@@ -12,6 +12,13 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-07-03",
+    title: "Minimum balance warnings",
+    items: [
+      "Every account should hold at least $100. Any account below that now shows under Needs attention with how much it has, so you know to add money.",
+    ],
+  },
+  {
+    date: "2026-07-03",
     title: "Check log",
     items: [
       "Every check you print is now remembered — number, payee, amount, and date. See them on the Print Checks page and inside the print window, and delete any that were voided or never cashed.",

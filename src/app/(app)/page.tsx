@@ -17,6 +17,8 @@ import {
 import {
   getActivityLevel,
   isCdMaturingSoon,
+  isBelowMinBalance,
+  MIN_BALANCE,
   monthsSince,
   daysUntil,
   type ActivityLevel,
@@ -151,6 +153,14 @@ export default async function DashboardPage() {
         bankName,
         level: "orange",
         reason: days >= 0 ? `CD matures in ${days} days` : "CD has matured",
+      });
+    }
+    if (isBelowMinBalance(a)) {
+      attention.push({
+        account: a,
+        bankName,
+        level: "orange",
+        reason: `Only ${formatCurrency(a.balance)} in the account — add money to reach the ${formatCurrency(MIN_BALANCE)} minimum`,
       });
     }
   }

@@ -285,6 +285,46 @@ export async function sendReminderDueEmail(
   );
 }
 
+/* ── Weekly backup email with the full-database zip attached ── */
+export async function sendBackupEmail(
+  zip: Buffer,
+  tableCounts: Record<string, number>,
+  warnings: string[],
+): Promise<{ error?: string }> {
+  const adminEmail = process.env.ADMIN_EMAIL;
+  if (!adminEmail) return { error: "ADMIN_EMAIL not set" };
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return { error: "RESEND_API_KEY not set" };
+
+  const date = new Date().toISOString().slice(0, 10);
+  const rows = Object.entries(tableCounts)
+    .map(([t, n]) => `<tr><td style="padding:2px 14px 2px 0;color:#64748b;">${t}</td><td style="text-align:right;font-weight:600;color:#0f172a;">${n}</td></tr>`)
+    .join("");
+  const warnHtml = warnings.length
+    ? `<p style="color:#b45309;font-size:13px;">Skipped: ${warnings.map((w) => escapeHtml(w)).join("; ")}</p>`
+    : "";
+  const html = `
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:#0f172a;">
+  <p><strong>Bank Tracker weekly backup — ${date}</strong></p>
+  <p style="color:#475569;">The attached zip contains every table (data.json) plus a readable Excel snapshot. Keep it somewhere safe — it includes account numbers and saved logins.</p>
+  <table style="font-size:13px;border-collapse:collapse;">${rows}</table>
+  ${warnHtml}
+</div>`;
+
+  const resend = new Resend(apiKey);
+  const { error } = await resend.emails.send({
+    from: FROM,
+    to: adminEmail,
+    subject: `Bank Tracker backup — ${date}`,
+    html,
+    attachments: [
+      { filename: `bank-tracker-backup-${date}.zip`, content: zip },
+    ],
+  });
+  if (error) return { error: error.message };
+  return {};
+}
+
 /* ── User feedback / "report a problem" sent to the owner ── */
 export async function sendFeedbackEmail(
   fromName: string,

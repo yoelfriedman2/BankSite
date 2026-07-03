@@ -3,8 +3,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   sendActivityReminderEmail,
   sendReminderDueEmail,
+  sendBackupEmail,
   escapeHtml,
 } from "@/lib/email";
+import { buildBackupZip, saveBackupToStorage } from "@/lib/backup";
 
 /* Called once daily by Vercel Cron (see vercel.json).
    Checks every user who has notify_email=true and sends activity reminders. */
@@ -147,5 +149,33 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, reminded: sent, remindersEmailed });
+  // ── Weekly full backup (Mondays, or on demand with ?backup=1) ──
+  // Rides this daily cron because Vercel's free plan caps the project at two
+  // cron jobs, both already used. Every Monday the whole database is zipped
+  // into the private "backups" storage bucket (last 8 kept), so a bad deletion
+  // is recoverable without paid DB backups. On the first Monday of the month
+  // (and on manual ?backup=1 runs) the zip is ALSO emailed to the owner as an
+  // off-site copy in case the Supabase project itself is ever lost.
+  let backup: string | undefined;
+  const forceBackup = req.nextUrl.searchParams.get("backup") === "1";
+  if (today.getDay() === 1 || forceBackup) {
+    try {
+      const { zip, tableCounts, warnings } = await buildBackupZip();
+      const stored = await saveBackupToStorage(zip);
+      backup = stored.error ? `storage failed: ${stored.error}` : `stored ${stored.path}`;
+      if (stored.error) console.error("[cron/reminders] backup storage failed:", stored.error);
+
+      const monthlyEmail = today.getDate() <= 7 || forceBackup;
+      if (monthlyEmail) {
+        const { error } = await sendBackupEmail(zip, tableCounts, warnings);
+        backup += error ? `; email failed: ${error}` : "; emailed";
+        if (error) console.error("[cron/reminders] backup email failed:", error);
+      }
+    } catch (err) {
+      backup = `failed: ${String(err)}`;
+      console.error("[cron/reminders] backup failed:", err);
+    }
+  }
+
+  return NextResponse.json({ ok: true, reminded: sent, remindersEmailed, backup });
 }
