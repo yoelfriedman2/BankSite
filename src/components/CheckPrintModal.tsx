@@ -1,9 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, Printer } from "lucide-react";
+import { X, Printer, Trash2 } from "lucide-react";
 import type { Account } from "@/lib/types";
 import { saveLastCheckNumber } from "@/app/(app)/accounts/actions";
+import {
+  recordPrintedCheck,
+  getPrintedChecks,
+  deletePrintedCheck,
+  type PrintedCheck,
+} from "@/app/(app)/checks/actions";
+import { formatCurrency } from "@/lib/format";
 
 // ── number → words ────────────────────────────────────────────────────────────
 const ONES = [
@@ -238,11 +245,17 @@ export function CheckPrintModal({
   bankName,
   bankCity,
   onClose,
+  onRecorded,
+  onDeleted,
 }: {
   account: Account;
   bankName: string;
   bankCity: string;
   onClose: () => void;
+  /** Called when a printed check is added to the log (lets the page's log update live). */
+  onRecorded?: (check: PrintedCheck) => void;
+  /** Called when a check is deleted from the log inside the modal. */
+  onDeleted?: (id: string) => void;
 }) {
   const today = new Date().toLocaleDateString("en-US", {
     month: "2-digit", day: "2-digit", year: "numeric",
@@ -263,6 +276,24 @@ export function CheckPrintModal({
   const [mode, setMode] = useState<PrintMode>("blank");
   const [dx, setDx] = useState("0");
   const [dy, setDy] = useState("0");
+
+  // Log of checks already printed from this account.
+  const [history, setHistory] = useState<PrintedCheck[]>([]);
+  useEffect(() => {
+    if (account.id) getPrintedChecks(account.id).then(setHistory).catch(() => {});
+  }, [account.id]);
+
+  function handleDeleteFromLog(id: string) {
+    if (!confirm("Remove this check from the log? (Use this for voided or never-cashed checks.)")) return;
+    const before = history;
+    setHistory((prev) => prev.filter((c) => c.id !== id));
+    deletePrintedCheck(id)
+      .then((res) => {
+        if (res?.error) setHistory(before);
+        else onDeleted?.(id);
+      })
+      .catch(() => setHistory(before));
+  }
 
   useEffect(() => {
     try {
@@ -300,6 +331,26 @@ export function CheckPrintModal({
     if (account.id && !isNaN(num) && num > 0) {
       saveLastCheckNumber(account.id, num).catch(() => {});
       setCheckNum(String(num + 1));
+    }
+
+    // Log the printed check. Best-effort: printing must work even if this fails.
+    if (account.id) {
+      const amt = parseFloat(amount);
+      recordPrintedCheck({
+        accountId: account.id,
+        checkNumber: !isNaN(num) && num > 0 ? num : null,
+        payee,
+        amount: !isNaN(amt) && amt > 0 ? Math.round(amt * 100) / 100 : null,
+        memo,
+        date,
+      })
+        .then((res) => {
+          if (res?.check) {
+            setHistory((prev) => [res.check!, ...prev]);
+            onRecorded?.(res.check);
+          }
+        })
+        .catch(() => {});
     }
   }
 
@@ -441,6 +492,44 @@ export function CheckPrintModal({
                 : "Draws the whole check on blank paper, including the bottom MICR line. Use the nudge if your printer shifts it. Saved for next time."}
             </p>
           </div>
+
+          {/* Check log for this account */}
+          {history.length > 0 && (
+            <div className="rounded-lg border border-slate-200">
+              <p className="border-b border-slate-100 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Checks printed from this account
+              </p>
+              <ul className="max-h-44 overflow-y-auto">
+                {history.map((c) => (
+                  <li
+                    key={c.id}
+                    className="flex items-center gap-3 border-b border-slate-100 px-3 py-1.5 text-sm last:border-0"
+                  >
+                    <span className="w-12 shrink-0 font-semibold tabular-nums text-slate-700">
+                      {c.check_number ?? "—"}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-slate-600">
+                      {c.payee || <span className="text-slate-400">no payee</span>}
+                    </span>
+                    <span className="shrink-0 tabular-nums text-slate-700">
+                      {c.amount != null ? formatCurrency(c.amount) : "—"}
+                    </span>
+                    <span className="w-20 shrink-0 text-right text-xs text-slate-400">
+                      {c.check_date ?? ""}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteFromLog(c.id)}
+                      title="Remove from log (voided / never cashed)"
+                      className="shrink-0 rounded p-1 text-slate-300 hover:bg-rose-50 hover:text-rose-500"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         {/* Footer */}

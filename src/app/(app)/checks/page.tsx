@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { ChecksClient, type AccountWithBank } from "@/components/ChecksClient";
 import { DEMO_MODE, getDemoBanks, getDemoAccounts } from "@/lib/demo";
+import { getAllPrintedChecks } from "@/app/(app)/checks/actions";
 import type { Account, Bank } from "@/lib/types";
 
 export default async function ChecksPage() {
@@ -24,6 +25,8 @@ export default async function ChecksPage() {
     ) as AccountWithBank[];
   }
 
+  const history = await getAllPrintedChecks();
+
   return (
     <div>
       <div className="mb-6">
@@ -32,7 +35,7 @@ export default async function ChecksPage() {
           Select an account to fill in and print a check. Routing and account numbers are pulled from your saved account data.
         </p>
       </div>
-      <ChecksClient accounts={accounts} />
+      <ChecksClient accounts={accounts} history={history} />
     </div>
   );
 }

@@ -12,6 +12,13 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-07-03",
+    title: "Check log",
+    items: [
+      "Every check you print is now remembered — number, payee, amount, and date. See them on the Print Checks page and inside the print window, and delete any that were voided or never cashed.",
+    ],
+  },
+  {
+    date: "2026-07-03",
     title: "Polish & fixes",
     items: [
       "Dates on this page no longer show a day early, and checking off a dashboard reminder now warns you if it didn't save instead of quietly hiding it.",
