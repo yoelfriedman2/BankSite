@@ -11,6 +11,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-07-03",
+    title: "Polish & fixes",
+    items: [
+      "Dates on this page no longer show a day early, and checking off a dashboard reminder now warns you if it didn't save instead of quietly hiding it.",
+    ],
+  },
+  {
     date: "2026-06-30",
     title: "Reminders",
     items: [
