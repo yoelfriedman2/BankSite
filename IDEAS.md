@@ -21,10 +21,12 @@ Tick `- [x]` the ones you want and we'll build them. Sizes are rough: **S** = qu
 - [ ] **Maintenance run mode** — one screen of every account due for activity in the next N days, with bulk "log activity today" and a checkable worklist. *Why: keeping accounts alive is the core chore; do it in one pass, not account‑by‑account.* `M`
 - [ ] **Per‑account transaction ledger** — a proper dated ledger (deposit / withdrawal / interest / sweep / fee) with running balance, generalizing balance history. *Why: accurate balance‑as‑of and a real record of each account.* `M–L`
 - [ ] **Minimum‑balance & fee tracking** — record each account's minimum to avoid fees / stay open, plus any monthly fee; alert if below; tally the yearly cost of keeping accounts alive. *Why: some accounts charge fees or close below a minimum — which loses eligibility.* `M`
-- [ ] **Interest tracking** — log interest posted per account; show total yield across the strategy. *Why: the maintenance balances earn something — see it.* `S–M`
-- [ ] **"Last verified" stamp** — when you last confirmed an account is still open / the balance is right, with a nudge to re‑check stale ones. *Why: banks can quietly close accounts; catch it before a conversion.* `S`
+- ~~**Interest tracking**~~ — removed (not a priority)
+- ~~**"Last verified" stamp**~~ — removed (updating the balance already serves this purpose)
 
 ## B. Money movement & capital
+- [x] **Check register** — log every printed check (payee, amount, date, number, account); shown on the Print Checks page + in the print window, deletable for voided/never-cashed checks. *(Built 2026-07-03. Outstanding → cleared status could still be added later.)*
+- [ ] **Batch activity checks** — from the needs-attention list, tick accounts due for activity and print a small check for each in one pass, logging the activity and the register entries. *Why: turns the monthly dormancy chore into one print job.* `M`
 - [ ] **Sweep templates** — save a set of accounts you usually pull together (e.g. "all NJ accounts") to fund a move in two clicks. *Why: you sweep the same large set every IPO.* `S–M`
 - [ ] **Partial returns & adjustments** — return more/less than was pulled, or split a return, with the ledger staying correct. *Why: the exact amount back isn't always identical.* `S`
 - [ ] **Capital‑needed planner** — enter how much a subscription needs, see which accounts to pull from to raise it and what's left behind. *Why: plan the raise before moving money.* `M`
@@ -41,10 +43,11 @@ Tick `- [x]` the ones you want and we'll build them. Sizes are rough: **S** = qu
 - [ ] **Structured "how to open" fields** — turn the free‑text notes into filters: out‑of‑state allowed / local‑only / denied, uses ChexSystems, minimum, methods, "already public." *Why: build an opening worklist by filter instead of reading notes.* `M`
 - [ ] **Opening tracker** — for a bank you're opening, track the steps (applied → received → funded → eligible). *Why: opening can take weeks; don't lose track.* `S–M`
 
-## E. Eligibility & conversions (light — you're already on top of conversions)
-- [ ] **Depositor‑since date** — record when each account became a depositor of record; surface it (longer held = better subscription tier). *Why: priority tiers depend on how long you've held.* `S`
-- [ ] **Record‑date snapshot** — when a bank sets a qualifying record date, save that date's balances as a named, frozen snapshot. *Why: pin the exact figures that set your share allocation.* `S–M`
-- [ ] **Conversion outcome log** — after an IPO, record allocation, shares, cost, and result; tally strategy returns. *Why: closes the loop — which banks/holders actually paid off.* `M`
+## E. Eligibility & conversions
+- ~~**Depositor‑since date**~~ — removed
+- ~~**Record‑date snapshot**~~ — removed
+- ~~**Conversion outcome log**~~ — removed
+*(When a bank goes public you're on top of it directly — the app doesn't need to help with the conversion moment itself.)*
 
 ## F. Data hygiene & trust
 - [ ] **Flag/clean non‑mutuals** — mark or remove the 4 credit unions (and commercial‑bank subsidiaries) that don't convert. *Why: keep the list to real targets.* `S`
@@ -60,7 +63,7 @@ Tick `- [x]` the ones you want and we'll build them. Sizes are rough: **S** = qu
 
 ## H. Reliability
 - [ ] **Audit log** — who changed what, especially shared community notes/links (anyone can edit those). *Why: accountability on shared data.* `S–M`
-- [ ] **Full export / backup** — one‑click export of everything (accounts, balances, moves, history) to keep offline. *Why: it's financial data — own a copy.* `S`
+- ~~**Full export / backup**~~ — removed (existing Excel export already covers banks + accounts with all key fields)
 
 ---
 
