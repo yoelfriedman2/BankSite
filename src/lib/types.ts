@@ -46,6 +46,7 @@ export interface Bank {
   eligibility_date: string | null; // deposit eligibility / record date for IPO priority
   branch_location: string | null;
   phone: string | null; // preferred contact name and/or phone number
+  website: string | null; // bank website (seeded from FDIC filings, verified to load)
   min_to_open: number | null;
 
   // Conversion pipeline (shared)

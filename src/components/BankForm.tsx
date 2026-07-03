@@ -105,6 +105,7 @@ function toFormValues(b: Bank | null): BankFormValues {
     eligibility_date: b?.eligibility_date ?? "",
     branch_location: b?.branch_location ?? "",
     phone: b?.phone ?? "",
+    website: b?.website ?? "",
     notes: b?.notes ?? "",
     conversion_stage: b?.conversion_stage ?? "none",
     min_to_open: b?.min_to_open != null ? String(b.min_to_open) : "",
@@ -838,6 +839,28 @@ export function BankForm({
                     placeholder="branch to visit or call"
                     value={values.branch_location}
                     onChange={(e) => set("branch_location", e.target.value)}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <div className="flex items-center justify-between">
+                    <label className={labelClass} htmlFor="website">Website</label>
+                    {values.website.trim() && (
+                      <a
+                        href={values.website.startsWith("http") ? values.website : `https://${values.website}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mb-1 text-xs font-medium text-amber-600 hover:underline"
+                      >
+                        Open site ↗
+                      </a>
+                    )}
+                  </div>
+                  <input
+                    id="website"
+                    className={inputClass}
+                    placeholder="bankwebsite.com"
+                    value={values.website}
+                    onChange={(e) => set("website", e.target.value)}
                   />
                 </div>
               </div>

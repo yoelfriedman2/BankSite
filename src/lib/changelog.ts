@@ -12,6 +12,13 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-07-03",
+    title: "Bank websites & current names",
+    items: [
+      "Every bank now has a website field with an Open site link, pre-filled from official FDIC records for ~384 banks (each address was checked to actually load). Banks that rebranded now show as “New Name (formerly Old Name)” — search finds them under either name.",
+    ],
+  },
+  {
+    date: "2026-07-03",
     title: "Minimum balance warnings",
     items: [
       "Every account should hold at least $100. Any account below that now shows under Needs attention with how much it has, so you know to add money.",

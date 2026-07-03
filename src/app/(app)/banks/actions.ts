@@ -52,6 +52,7 @@ const SHARED_FIELDS: {
   { key: "eligibility_date", label: "Eligibility date", fmt: (v) => (v as string) || "—" },
   { key: "branch_location", label: "Branch / address", fmt: (v) => (v as string) || "—" },
   { key: "phone", label: "Contact", fmt: (v) => (v as string) || "—" },
+  { key: "website", label: "Website", fmt: (v) => (v as string) || "—" },
   { key: "min_to_open", label: "Minimum to open", fmt: (v) => v != null ? `$${v}` : "—" },
   { key: "conversion_stage", label: "Conversion stage", fmt: (v) => CONVERSION_STAGE_LABELS[(v as ConversionStage) ?? "none"] },
 ];
@@ -87,6 +88,7 @@ export type BankFormValues = {
   eligibility_date: string;
   branch_location: string;
   phone: string;
+  website: string;
   notes: string;
   conversion_stage: ConversionStage;
   min_to_open: string;
@@ -126,6 +128,7 @@ function buildPatch(values: BankFormValues): Partial<BankFields> {
     eligibility_date: text(values.eligibility_date),
     branch_location: text(values.branch_location),
     phone: text(values.phone),
+    website: text(values.website),
     notes: text(values.notes),
     conversion_stage: values.conversion_stage,
     min_to_open: decimal(values.min_to_open),
@@ -181,7 +184,7 @@ export async function upsertBank(
   if (values.id) {
     const { data: prev } = await supabase
       .from("banks")
-      .select("open_methods, eligibility, eligibility_date, branch_location, phone, min_to_open, conversion_stage")
+      .select("open_methods, eligibility, eligibility_date, branch_location, phone, website, min_to_open, conversion_stage")
       .eq("id", values.id)
       .maybeSingle();
     oldShared = prev ?? null;
@@ -221,6 +224,7 @@ export async function upsertBank(
           eligibility_date: patch.eligibility_date,
           branch_location: patch.branch_location,
           phone: patch.phone,
+          website: patch.website,
           min_to_open: patch.min_to_open,
           conversion_stage: patch.conversion_stage,
         }));
@@ -261,6 +265,7 @@ export async function upsertBank(
       eligibility_date: patch.eligibility_date,
       branch_location: patch.branch_location,
       phone: patch.phone,
+      website: patch.website,
       min_to_open: patch.min_to_open,
       conversion_stage: patch.conversion_stage,
       shared_fields_updated_at: new Date().toISOString(),
@@ -706,7 +711,7 @@ export async function seedBanks(): Promise<{ seeded?: number; error?: string }> 
   const { data: allBanks } = await admin
     .from("banks")
     .select(
-      "cert, name, city, state, regulator, assets, holding_company, open_methods, eligibility, eligibility_date, branch_location, phone, min_to_open, conversion_stage",
+      "cert, name, city, state, regulator, assets, holding_company, open_methods, eligibility, eligibility_date, branch_location, phone, website, min_to_open, conversion_stage",
     )
     .not("cert", "is", null)
     .is("deleted_at", null);
@@ -749,6 +754,7 @@ export async function seedBanks(): Promise<{ seeded?: number; error?: string }> 
       eligibility_date: s.eligibility_date ?? null,
       branch_location: s.branch_location ?? null,
       phone: s.phone ?? null,
+      website: s.website ?? null,
       min_to_open: s.min_to_open ?? null,
       conversion_stage: s.conversion_stage ?? "none",
     }));
