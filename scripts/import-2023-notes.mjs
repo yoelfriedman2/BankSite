@@ -3,7 +3,12 @@
 //   --apply  actually write to DB (default is dry-run)
 
 import XLSX from 'xlsx';
+import * as fs from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
+
+// The ESM build of SheetJS doesn't bundle fs — readFile fails with
+// "Cannot access file" unless we hand it the fs module explicitly.
+XLSX.set_fs(fs);
 
 const EXCEL_PATH = process.env.EXCEL_PATH ?? 'C:/Users/ben/Downloads/1738216686522_1730408939842_2023.xlsx';
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://zcgfvggxijzoavxfbluj.supabase.co';
@@ -205,12 +210,21 @@ async function main() {
   const uniqueBanks = [...bankMap.values()];
   console.log(`DB: ${allBanks.length} bank rows, ${uniqueBanks.length} unique banks\n`);
 
-  // 2. Get first user ID for community note attribution
-  const { data: profiles } = await db.from('profiles').select('id, display_name').limit(5);
-  const primaryProfile = profiles?.[0];
-  const authorId   = primaryProfile?.id   ?? null;
-  const authorName = primaryProfile?.display_name ?? 'Import';
+  // 2. Note attribution: AUTHOR_ID/AUTHOR_NAME env override (e.g. a dedicated
+  //    system user), otherwise fall back to the first profile found.
+  let authorId   = process.env.AUTHOR_ID   ?? null;
+  let authorName = process.env.AUTHOR_NAME ?? null;
+  if (!authorId) {
+    const { data: profiles } = await db.from('profiles').select('id, display_name').limit(5);
+    const primaryProfile = profiles?.[0];
+    authorId   = primaryProfile?.id ?? null;
+    authorName = authorName ?? primaryProfile?.display_name ?? 'Import';
+  }
+  authorName = authorName ?? 'Import';
   if (!authorId) { console.warn('⚠️  No profiles found — community notes will be skipped'); }
+  console.log(`Notes will be attributed to: ${authorName} (${authorId})\n`);
+
+  const SKIP_BANK_UPDATES = !!process.env.SKIP_BANK_UPDATES;
 
   // 3. Load existing community notes (to deduplicate)
   const { data: existingNotes } = await db.from('bank_comments').select('cert, body');
@@ -379,13 +393,17 @@ async function main() {
   }
 
   // 7. Apply bank updates (idempotent — already-set fields resolve to no-ops)
-  console.log('Applying bank updates...');
-  let updErr = 0;
-  for (const u of bankUpdates) {
-    const { error } = await db.from('banks').update(u.patch).in('id', u.ids);
-    if (error) { console.error(`  ERR ${u.bankName}: ${error.message}`); updErr++; }
+  if (SKIP_BANK_UPDATES) {
+    console.log(`Skipping ${bankUpdates.length} bank updates (SKIP_BANK_UPDATES set).`);
+  } else {
+    console.log('Applying bank updates...');
+    let updErr = 0;
+    for (const u of bankUpdates) {
+      const { error } = await db.from('banks').update(u.patch).in('id', u.ids);
+      if (error) { console.error(`  ERR ${u.bankName}: ${error.message}`); updErr++; }
+    }
+    console.log(`  Done. ${bankUpdates.length - updErr} patched, ${updErr} errors.`);
   }
-  console.log(`  Done. ${bankUpdates.length - updErr} patched, ${updErr} errors.`);
 
   // 8. Create new banks
   if (newBankRows.length) {
