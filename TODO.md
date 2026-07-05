@@ -13,17 +13,12 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
   role toggle on Admin → Users. Until then: the owner still has full apply access (that check
   doesn't depend on the column), the Users page still works normally, and toggling the role for
   someone else shows a friendly "run the migration" message instead of a crash.
-- Run migration **0030_bank_branches.sql** (renumbered from 0028 — that slot and 0029 were taken
-  by the address-change/monthly-fee migrations below while this was in flight on its own branch).
-  Adds `bank_branches` (shared, by cert — office address + lat/lng). After running it, go to
-  `/road-trip` and click **"Refresh branch locations"** once to populate it (moved there from
-  `/fdic-sync` per feedback — one less page to visit) — the planner has nothing to show until
-  that's been run at least once.
-- Run migration **0032_road_trips.sql** in the Supabase SQL editor. Adds the `road_trips` table
-  (saved/draft trips — see below). Until it's run, saving a trip shows a friendly "run this
-  migration" message instead of crashing; everything else on the page still works.
 
 ## Live (owner-only for now): Road trip planner
+
+Migrations **0030_bank_branches.sql** and **0032_road_trips.sql** confirmed applied (verified live
+via read-only checks, 2026-07-05 — `bank_branches` has 405 of 426 banks synced, `road_trips` is
+reachable).
 
 New page `/road-trip`: pick must-visit banks, set a day (start/end time, minutes per bank,
 detour radius, round-trip or not), and it shows every other tracked bank within range ranked by
