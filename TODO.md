@@ -8,7 +8,7 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
   role toggle on Admin → Users. Until then: the owner still has full apply access (that check
   doesn't depend on the column), the Users page still works normally, and toggling the role for
   someone else shows a friendly "run the migration" message instead of a crash.
-- Run migration **0028_bank_branches.sql** (built on the `feature/road-trip-planner` branch, in
+- Run migration **0030_bank_branches.sql** (built on the `feature/road-trip-planner` branch, in
   a separate worktree at `../Bank-Website-roadtrip` so it wouldn't collide with other in-progress
   sessions on `main`). Adds `bank_branches` (shared, by cert — office address + lat/lng). After
   running it, go to `/fdic-sync` and click **"Refresh branch locations"** once to populate it —

@@ -113,7 +113,7 @@ export async function getRoadTripData(): Promise<RoadTripData> {
       .in("cert", chunk);
     if (branchErr) {
       if (isMissingSchema(branchErr.message)) {
-        return { ...EMPTY, error: "One-time setup needed: run migration 0028 in the Supabase SQL editor." };
+        return { ...EMPTY, error: "One-time setup needed: run migration 0030 in the Supabase SQL editor." };
       }
       return { ...EMPTY, error: branchErr.message };
     }

@@ -141,7 +141,7 @@ circle markers only — deliberately no `L.Icon` image assets, which is the
 usual thing that breaks under a bundler). Drive times are a great-circle
 estimate, not routed — a documented tradeoff, not a bug.
 
-New shared table **`bank_branches`** (migration 0028, cert-keyed, RLS
+New shared table **`bank_branches`** (migration 0030, cert-keyed, RLS
 select-only for `authenticated` — only the service-role client writes to it)
 holds office address + lat/lng, refreshed from a second FDIC endpoint
 (`banks.data.fdic.gov` → now redirects to `api.fdic.gov`, updated both call
