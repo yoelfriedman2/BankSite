@@ -28,7 +28,7 @@ import {
   type ActivityLevel,
   type AttentionPrefs,
 } from "@/lib/dormancy";
-import { type Account, type Bank } from "@/lib/types";
+import { ACCOUNT_TYPE_LABELS, type Account, type Bank } from "@/lib/types";
 import { formatCurrency } from "@/lib/format";
 import { getOpenReminders } from "@/app/(app)/reminders";
 import { DashboardReminders } from "@/components/DashboardReminders";
@@ -182,8 +182,7 @@ export default async function DashboardPage() {
   attention.sort(
     (a, b) => (a.level === "red" ? 0 : 1) - (b.level === "red" ? 0 : 1),
   );
-  const urgentCount = attention.filter((a) => a.level === "red").length;
-  const soonCount = attention.length - urgentCount;
+  const attentionPreview = attention.slice(0, 3);
 
   const openReminders = await getOpenReminders();
   const outstandingSweeps = await getOutstandingSweeps();
@@ -226,43 +225,78 @@ export default async function DashboardPage() {
         />
       </div>
 
-      <Link
-        href="/accounts?attention=1"
-        className="mt-8 flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 transition-colors hover:border-amber-300 hover:bg-amber-50/30"
-      >
-        {attention.length === 0 ? (
-          <>
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+      <div className="mt-8 rounded-2xl border border-slate-200 bg-white">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <h2 className="font-semibold text-slate-900">Needs attention</h2>
+          <Link
+            href="/accounts?attention=1"
+            className="flex items-center gap-1 text-sm font-medium text-amber-600 hover:underline"
+          >
+            View all
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+
+        {attentionPreview.length === 0 ? (
+          <div className="flex flex-col items-center px-5 py-10 text-center">
+            <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
               <CircleCheck className="h-6 w-6" />
             </span>
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-slate-900">Needs attention — all caught up</p>
-              <p className="text-sm text-slate-500">
-                No accounts are close to going dormant and no CDs are maturing soon.
-              </p>
-            </div>
-          </>
+            <p className="font-medium text-slate-900">All caught up</p>
+            <p className="mt-1 text-sm text-slate-500">
+              No accounts are close to going dormant and no CDs are maturing
+              soon.
+            </p>
+          </div>
         ) : (
-          <>
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-              <AlertTriangle className="h-6 w-6" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-slate-900">
-                Needs attention — {attention.length} account{attention.length === 1 ? "" : "s"}
-              </p>
-              <p className="text-sm text-slate-500">
-                {urgentCount > 0 && (
-                  <span className="font-medium text-rose-600">{urgentCount} urgent</span>
-                )}
-                {urgentCount > 0 && soonCount > 0 && " · "}
-                {soonCount > 0 && <span>{soonCount} soon</span>}
-              </p>
-            </div>
-          </>
+          <ul>
+            {attentionPreview.map((item, i) => (
+              <li key={`${item.account.id}-${i}`}>
+                <Link
+                  href="/accounts?attention=1"
+                  className="flex items-center gap-3 border-b border-slate-100 px-5 py-3 last:border-0 hover:bg-slate-50"
+                >
+                  <span
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                      item.level === "red"
+                        ? "bg-rose-50 text-rose-600"
+                        : "bg-amber-50 text-amber-600"
+                    }`}
+                  >
+                    <AlertTriangle className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-slate-900">
+                      {item.bankName}
+                      {item.account.holder && (
+                        <span className="font-normal text-slate-400">
+                          {" "}
+                          · {item.account.holder}
+                        </span>
+                      )}
+                    </p>
+                    <p className="truncate text-sm text-slate-500">
+                      {item.account.account_type
+                        ? `${ACCOUNT_TYPE_LABELS[item.account.account_type]} · `
+                        : ""}
+                      {item.reason}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                      item.level === "red"
+                        ? "bg-rose-100 text-rose-700"
+                        : "bg-amber-100 text-amber-800"
+                    }`}
+                  >
+                    {item.level === "red" ? "Urgent" : "Soon"}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
         )}
-        <ArrowRight className="h-5 w-5 shrink-0 text-slate-300" />
-      </Link>
+      </div>
 
       <div className="mt-8 rounded-2xl border border-slate-200 bg-white">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
