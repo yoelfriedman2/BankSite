@@ -2,40 +2,21 @@
 
 Running list of things to review and decide. (Feature ideas live in IDEAS.md — this is for open work items.)
 
-## Review: FDIC sync tool (built 2026-07-03, NOT YET PUSHED)
+## Live: FDIC sync tool
 
-Built and verified against live data, sitting uncommitted in the working tree pending your
-review: `src/app/(app)/admin/fdic/{page.tsx,actions.ts}`, `src/components/FdicSyncClient.tsx`,
-plus a "FDIC sync" link on the Admin/Users page.
+Owner-only page at `/admin/fdic` (linked from Admin → Users). Manual "Check against FDIC"
+button — nothing runs on a schedule, nothing writes until you click Accept on a specific item.
+Five sections: Closed or merged (informational only, banks are NEVER auto-deleted), Name
+changes, Websites (re-verifies the URL loads at the moment you accept it), Assets (per-row or
+"Accept all"), City/state. Accepted changes propagate to every user's copy of that bank by cert,
+same as any other shared field. Private fields (status, priority, notes, target balance) are
+never touched.
 
-**How it works:** an owner-only page (`/admin/fdic`) with a manual "Check against FDIC" button
-— nothing runs on a schedule. It compares every bank (by cert) against FDIC BankFind live and
-shows five sections, each with per-row Accept/Ignore (never bulk-applies except Assets, which
-has an explicit "Accept all"):
-- **Closed or merged** — informational only, no accept action, banks are NEVER deleted or
-  auto-flagged; you review and retag by hand in the app as before.
-- **Name changes** — proposes "New Name (formerly Old Name)"; Accept writes it to every user's
-  copy of that bank (same propagation as shared fields elsewhere in the app).
-- **Websites** — Accept re-verifies the URL actually loads *at that moment* before writing;
-  refuses with an error if it doesn't respond, so a stale/renamed domain can't sneak in.
-- **Assets** — per-row or "Accept all" (low-risk, just a quarterly refresh).
-- **City / state** — per-row correction.
+## Decide: which FDIC fields should sync on a schedule (still open)
 
-Private fields (status, priority, notes, target balance) are never touched. Verified read-only
-against production today: current diff counts are closed=21, renames=3 (the previously-skipped
-cosmetic ones — legitimate to show, dismissible), websites=11 (exactly the ones that failed
-today's live check — correctly still proposed, and would fail Accept's re-check too unless
-they're back up by then), assets=405 (expected — app data is 2023, FDIC is Q1 2026), city/state=6.
-
-**To review:** run `npm run dev`, sign in as the owner, open Admin → FDIC sync, click "Check
-against FDIC", and look through each section before deciding whether/how to ship it. Once you're
-happy, it just needs `git add` + commit + push (no migration required — it reuses existing
-columns plus the `website` column from migration 0023).
-
-## One-time setup pending
-
-- Run migration **0024_address_change.sql** in the Supabase SQL editor to enable the new
-  Address change page (the page shows a setup notice until then).
+The sync tool above is manual-only today. Revisit whether any category should run automatically
+(e.g. assets quarterly) vs. stay propose-and-review forever — the owner was clear not everything
+should auto-update, since some app data is deliberately different from FDIC's.
 
 ## Review: 21 banks that no longer exist (from FDIC check, 2026-07-03)
 
