@@ -8,6 +8,15 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
   role toggle on Admin → Users. Until then: the owner still has full apply access (that check
   doesn't depend on the column), the Users page still works normally, and toggling the role for
   someone else shows a friendly "run the migration" message instead of a crash.
+## Live: Up next queue
+
+Migration 0027 confirmed applied (verified live via read-only schema probe, 2026-07-04).
+
+New nav page `/up-next` — answers "which bank should I open next?" Your own ordered queue
+(reorder with arrows, remove anytime) plus a computed "Suggested — easiest first" list across
+every bank you haven't opened, ranked by your priority first, then online > mail > in-person,
+nationwide > in-state > local-only, then lower minimum-to-open. Applied banks show separately.
+Dashboard has a small preview card linking to it.
 
 ## Live: FDIC sync tool (role-based)
 

@@ -11,6 +11,30 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-07-05",
+    title: "Sort accounts, and tag what kind of activity",
+    items: [
+      "Accounts can now be sorted by balance (either direction), holder, or type — on top of the existing filters.",
+      "When you log activity on an account, you can optionally tag what it was — online login, transaction, check sent, letter sent, phone call. Never required.",
+    ],
+  },
+  {
+    date: "2026-07-05",
+    title: "Cleaner navigation & a lighter dashboard",
+    items: [
+      "The sidebar is now grouped by what things are — Banks & accounts, Money, Tools, and so on — instead of one long list.",
+      "Needs attention on the dashboard is now a short overview (how many, how urgent) that links to the full list, instead of listing every account right there.",
+    ],
+  },
+  {
+    date: "2026-07-04",
+    title: "Up next: a queue for banks you haven't opened yet",
+    items: [
+      "New \"Up next\" page: build your own ordered queue of banks to open, reorder it with the arrows, and check off applications as they go in. Below it, a ranked \"Suggested\" list pulls from every bank you haven't opened — easiest first (online, nationwide, low minimum), so you don't have to sort 400 banks by hand to figure out what to do next.",
+      "The dashboard now shows your top few \"Up next\" picks alongside Needs attention.",
+    ],
+  },
+  {
     date: "2026-07-04",
     title: "FDIC sync, open to everyone",
     items: [

@@ -116,6 +116,39 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-05** — Fixed a real bug in FDIC sync: `RowActions` rendered the
+Ignore button unconditionally, so a non-admin could dismiss a diff row from
+the list even though they can't accept it — misleading, since dismissing is a
+data decision only an FDIC admin should make. Now anyone without the role sees
+a pure view-only report (lock icon, no Ignore) for every section including
+Closed/merged. Also shipped: account sort (balance either direction, holder,
+type) in `AccountsClient.tsx`; an optional `type` tag on activity-log entries
+(`ActivityType` in `lib/types.ts` — online_login/transaction/check_sent/
+letter_sent/phone_call/other, no migration needed since `activity_log` is
+jsonb) surfaced in `AccountModal.tsx`'s log editor; the sidebar (`SideNav.tsx`
++ `TopNav.tsx`) reorganized into labeled groups (Banks & accounts / Money /
+Tools / More) instead of one flat list — also fixed TopNav being missing "Up
+next" entirely, an existing inconsistency; and the dashboard's Needs attention
+block collapsed from a full item list into one compact overview
+card (count + urgent/soon split) linking to Accounts, matching how "Up next"
+already does a preview.
+
+**2026-07-04 (up next)** — New **"Up next" queue** (migration 0027,
+`banks.queue_position`, private/never propagated): answers "which bank should
+I open next?" Two pieces on `/up-next`: a manually ordered queue (add from
+Suggested, reorder with up/down arrows, remove) plus a computed "Suggested —
+easiest first" list covering every `untracked`/`want_to_open` bank, ranked by
+the user's own `priority` first, then how easy it is to open (online > mail >
+in-person/phone, nationwide > in-state > local-only, lower min-to-open) — see
+`bySuggestedRank` in `app/(app)/up-next/actions.ts`. Deliberately does **not**
+factor in `conversion_stage` — a conversion-event GUI was already ruled out as
+a direction; this page is scoped to opening logistics only. Applied banks get
+their own read-only "waiting to hear back" section instead of sitting in the
+queue. A bank drops out of both lists automatically once its status becomes
+open/cannot_open — both are recomputed from live status on every render, so
+there's no stale-queue cleanup to write. Dashboard shows a 3-item preview
+(the queue if non-empty, else top suggestions) next to Needs attention.
+
 **2026-07-04 (later)** — FDIC sync reworked from owner-only to a scoped role.
 Moved `/admin/fdic` → `/fdic-sync` (top-level nav item, visible to every signed-in
 user — running the read-only check no longer requires being the owner). Added

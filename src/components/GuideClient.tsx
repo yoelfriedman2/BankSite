@@ -13,6 +13,7 @@ import {
   Printer,
   MapPin,
   RefreshCw,
+  ListTodo,
   FileText,
   MessageSquare,
   Bell,
@@ -54,6 +55,7 @@ const TOPICS: Topic[] = [
     tips: [
       "It updates itself — as you log activity, move money, or change a balance, the lists here adjust automatically.",
       "Which of these show up — and your minimum balance — is up to you in Settings → Alerts & emails.",
+      "Needs attention is a quick overview here — tap it to see the full list on Accounts.",
     ],
   },
   {
@@ -96,6 +98,22 @@ const TOPICS: Topic[] = [
     ],
   },
   {
+    id: "up-next",
+    icon: ListTodo,
+    title: "Up next",
+    blurb: "Decide which bank to open next, out of every one you haven't opened yet.",
+    points: [
+      "Build your own ordered queue, reorder with the arrows",
+      "Suggested list ranks every untracked/want-to-open bank for you",
+      "Easiest first — online, nationwide, low minimum to open",
+      "Applied banks show separately while you wait to hear back",
+    ],
+    tips: [
+      "The ranking is only a starting point — add whichever banks you actually want to the queue, in whatever order you want.",
+      "A bank drops off automatically once it's open (or marked can't open) — nothing to clean up by hand.",
+    ],
+  },
+  {
     id: "accounts",
     icon: CreditCard,
     title: "Accounts",
@@ -106,6 +124,7 @@ const TOPICS: Topic[] = [
       "An activity log to keep it alive",
       "Attach statements and documents",
       "Bulk-import from a spreadsheet",
+      "Sort or filter by balance, holder, or type",
     ],
     tips: [
       "Adding the first account flips the bank's status to Open for you automatically.",
@@ -130,6 +149,7 @@ const TOPICS: Topic[] = [
       "Sweeping money out and returning it both count as activity, so they reset the clock too.",
       "Reminder emails won't repeat more than once every 30 days for the same account.",
       "Turn any of these alerts off, or change your minimum balance, in Settings → Alerts & emails.",
+      "When you log an activity entry, you can optionally tag what it was — online login, transaction, a check sent, a letter sent, a phone call. Never required.",
     ],
   },
   {
