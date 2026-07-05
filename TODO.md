@@ -16,8 +16,9 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 - Run migration **0030_bank_branches.sql** (renumbered from 0028 — that slot and 0029 were taken
   by the address-change/monthly-fee migrations below while this was in flight on its own branch).
   Adds `bank_branches` (shared, by cert — office address + lat/lng). After running it, go to
-  `/fdic-sync` and click **"Refresh branch locations"** once to populate it — the road trip
-  planner has nothing to show until that's been run at least once.
+  `/road-trip` and click **"Refresh branch locations"** once to populate it (moved there from
+  `/fdic-sync` per feedback — one less page to visit) — the planner has nothing to show until
+  that's been run at least once.
 
 ## Live (owner-only for now): Road trip planner
 
@@ -39,14 +40,38 @@ standing changelog/Guide rule (admin-only tooling doesn't get advertised there),
 Guide entry was added yet** — add both once this is opened up to everyone, since at that point it
 stops being admin-only tooling and becomes a real user-facing feature.
 
-Verification note: built and math-checked (haversine/cheapest-insertion/itinerary logic verified
-against hand-computed expectations via a standalone script — see session notes), and the SSR HTML
-was confirmed to render correctly via curl against a manually-run dev server. Full interactive
-browser click-testing was **not** possible this session — the sandboxed browser tool couldn't
-reach localhost on this machine (`ERR_CONNECTION_REFUSED`), and the tab-based preview tool is
-locked to the main working directory, which had other sessions' uncommitted changes it shouldn't
-touch. Worth clicking through by hand (must-visit picker, map pins, add/remove candidates,
-mobile width) before flipping it open to everyone.
+Verification note: math-checked (haversine/cheapest-insertion/itinerary logic verified against
+hand-computed expectations), and since fully click-tested via DEMO_MODE (must-visit picker, search-
+to-add, end-of-day choice, budget bar, itinerary, mobile width at 375px) — no console errors, no
+overflow.
+
+**Real bug found and fixed (2026-07-05, from live use)**: banks like Needham Bank and Fidelity Bank
+weren't showing up in the picker. Root cause: `getRoadTripData()` queried `bank_branches` with
+`.in("cert", chunk)` in chunks of 500 — too large, so Supabase silently truncated the match (no
+error). Fixed by dropping the chunk size to 100. True FDIC sync coverage was actually fine all
+along (405 of 426 banks; the 21-bank gap is the already-documented closed/merged list above) — the
+sync was never the problem, only this one query.
+
+**Also shipped from the same feedback round**: Road trip moved from "Banks & accounts" into
+"Tools" in the nav; "detour radius" now has inline explanatory copy; "return to start" is now an
+explicit two-button choice instead of an unlabeled checkbox; "Add more banks nearby" got a search
+box to add any specific bank regardless of distance; the map got a color-key legend.
+
+**Discussed, not yet built** — needs a decision on scope/sequencing before starting:
+1. **Saved/draft trips**: create a trip, save it, come back and edit it later (new `road_trips`
+   table, private per-user by default).
+2. **Public/private sharing** of saved trips — a shared/published trip other users can browse
+   (like community bank notes), vs. one that stays private.
+3. **Import a past Google Maps trip link**: paste in a link from a road trip you already took.
+   Auto-detecting which banks it covered is possible but not fully reliable — works by reverse-
+   matching each waypoint's lat/lng against `bank_branches` within a small tolerance, which only
+   works for links that carry raw coordinates (the common `dir/?api=1&origin=lat,lng&...` format);
+   links built from place names instead of coordinates wouldn't match automatically and would need
+   manual bank/branch tagging. Any auto-match should be presented as a suggestion to confirm, not
+   applied silently.
+4. **Surface a matching past trip**: when adding a must-visit bank to a new trip, if a saved trip
+   (yours or a shared one) already covered that bank, suggest reusing it instead of replanning.
+   Depends on (1)–(2) existing first.
 
 ## Live: address change per holder + monthly fee
 

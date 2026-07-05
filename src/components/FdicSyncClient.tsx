@@ -24,7 +24,6 @@ import {
   applyFdicAssets,
   applyFdicCityState,
   deleteClosedBank,
-  refreshBranchLocations,
   type FdicReport,
 } from "@/app/(app)/fdic-sync/actions";
 import { formatAssets } from "@/lib/format";
@@ -45,24 +44,7 @@ export function FdicSyncClient({ canApply }: { canApply: boolean }) {
   const [report, setReport] = useState<FdicReport | null>(null);
   const [checking, setChecking] = useState(false);
   const [checkError, setCheckError] = useState<string | null>(null);
-  const [branchStatus, setBranchStatus] = useState<"idle" | "running" | "done" | "error">("idle");
-  const [branchMessage, setBranchMessage] = useState<string | null>(null);
   const [, startTransition] = useTransition();
-
-  function runBranchRefresh() {
-    setBranchStatus("running");
-    setBranchMessage(null);
-    startTransition(async () => {
-      const res = await refreshBranchLocations();
-      if (res.error) {
-        setBranchStatus("error");
-        setBranchMessage(res.error);
-        return;
-      }
-      setBranchStatus("done");
-      setBranchMessage(`${res.count ?? 0} office locations saved — used by the Road trip planner.`);
-    });
-  }
 
   // Per-row status keyed by "<section>:<cert>"
   const [status, setStatus] = useState<Record<string, Status>>({});
@@ -188,35 +170,6 @@ export function FdicSyncClient({ canApply }: { canApply: boolean }) {
 
       {checkError && (
         <div className="mb-6 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{checkError}</div>
-      )}
-
-      {canApply && (
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
-          <div className="min-w-0">
-            <p className="flex items-center gap-1.5 text-sm font-medium text-slate-800">
-              <MapPin className="h-4 w-4 text-amber-500" />
-              Branch locations
-            </p>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Pulls every office address + coordinates from the FDIC (separate from the checks
-              above) — powers the Road trip planner&apos;s map and distances.
-            </p>
-            {branchMessage && (
-              <p className={`mt-1 text-xs ${branchStatus === "error" ? "text-rose-600" : "text-emerald-600"}`}>
-                {branchMessage}
-              </p>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={runBranchRefresh}
-            disabled={branchStatus === "running"}
-            className="flex shrink-0 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-60"
-          >
-            {branchStatus === "running" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-            {branchStatus === "running" ? "Refreshing…" : "Refresh branch locations"}
-          </button>
-        </div>
       )}
 
       {!report && !checking && (

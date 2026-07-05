@@ -105,8 +105,12 @@ export async function getRoadTripData(): Promise<RoadTripData> {
   if (certs.length === 0) return { ...EMPTY, banks: [] };
 
   const branchesByCert = new Map<number, BranchRow[]>();
-  for (let i = 0; i < certs.length; i += 500) {
-    const chunk = certs.slice(i, i + 500);
+  // Chunk size kept small on purpose: an `.in("cert", chunk)` filter this long
+  // gets serialized into the request URL, and a chunk of hundreds of certs
+  // silently truncates (Supabase returns a partial match with no error) —
+  // that's what caused banks like Needham Bank to vanish from the picker.
+  for (let i = 0; i < certs.length; i += 100) {
+    const chunk = certs.slice(i, i + 100);
     const { data: branchRows, error: branchErr } = await supabase
       .from("bank_branches")
       .select("cert, main_office, address, city, state, latitude, longitude")

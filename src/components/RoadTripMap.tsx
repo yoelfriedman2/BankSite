@@ -14,10 +14,10 @@ export type MapPoint = {
 };
 
 const ROLE_STYLE: Record<MapPoint["role"], { color: string; radius: number; fillOpacity: number }> = {
-  anchor: { color: "#d97706", radius: 9, fillOpacity: 0.95 },
-  "must-visit": { color: "#2563eb", radius: 7, fillOpacity: 0.9 },
-  accepted: { color: "#059669", radius: 7, fillOpacity: 0.9 },
-  candidate: { color: "#94a3b8", radius: 5, fillOpacity: 0.7 },
+  anchor: { color: "#d97706", radius: 10, fillOpacity: 0.95 },
+  "must-visit": { color: "#2563eb", radius: 8, fillOpacity: 0.9 },
+  accepted: { color: "#059669", radius: 8, fillOpacity: 0.9 },
+  candidate: { color: "#64748b", radius: 6, fillOpacity: 0.85 },
 };
 
 /** No image assets (avoids the classic Leaflet-in-a-bundler broken-marker-icon

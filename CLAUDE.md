@@ -129,6 +129,38 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-05 (road trip planner — real bug fix + feedback round)** — Fixed a
+genuine bug reported from live use: banks like Needham Bank and Fidelity Bank
+weren't showing up in the road trip planner's picker at all. Root cause was in
+`road-trip/actions.ts`'s `getRoadTripData()` — it queried `bank_branches` with
+`.in("cert", chunk)` in chunks of 500, and a `.in()` filter that large gets
+serialized into the request URL and silently truncated by Supabase (no error
+— it just returns a partial match). Dropped the chunk size to 100. Confirmed
+via a temporary read-only script against production: true FDIC sync coverage
+is actually 405 of 426 banks (the 21 gap is exactly the already-known
+closed/merged banks in this file's history) — the sync itself was never
+broken, only this one query.
+
+Also from the same feedback round: moved "Refresh branch locations" off
+`/fdic-sync` and onto `/road-trip` itself (one less page to visit — the
+button/logic still lives in `fdic-sync/actions.ts`, just rendered from
+`RoadTripClient.tsx` now); moved the Road trip nav entry from "Banks &
+accounts" into "Tools" (both `SideNav.tsx`/`TopNav.tsx`); added inline
+explanatory copy for "detour radius" (it wasn't obvious what it meant); the
+"return to start" checkbox became an explicit two-button choice ("Back where
+I started" vs "At the last stop"); added a search box to "Add more banks
+nearby" so a specific bank can be added regardless of the radius/distance;
+added a color-key legend under the map (previously nothing explained what the
+dots meant).
+
+**Discussed but not built yet** (see TODO.md): saved/draft trips (create,
+edit, revisit later), a public/private visibility split for them (shared
+trips other users can browse vs. private ones), importing a past Google Maps
+trip link with best-effort auto-detection of which banks it covered
+(reverse-matching waypoint coordinates against `bank_branches`), and
+surfacing "a saved trip already covers this bank" when adding a must-visit.
+All deferred pending the user's input on scope/sequencing.
+
 **2026-07-05 (evening — batch of small feature requests)** — A round of
 feature requests from chat, all shipped together:
 - **Documents page** (`/documents`): every uploaded statement/photo/scan

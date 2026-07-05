@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useTransition } from "react";
 import dynamic from "next/dynamic";
 import {
   Search,
@@ -13,8 +13,12 @@ import {
   MapPin,
   Phone,
   Globe,
+  RefreshCw,
+  Loader2,
+  Info,
 } from "lucide-react";
 import type { RoadTripBank, RoadTripData } from "@/app/(app)/road-trip/actions";
+import { refreshBranchLocations } from "@/app/(app)/fdic-sync/actions";
 import { STATUS_LABELS } from "@/lib/types";
 import {
   orderStops,
@@ -44,7 +48,7 @@ function fmtDuration(min: number): string {
   return `${h}h ${m}m`;
 }
 
-export function RoadTripClient({ data }: { data: RoadTripData }) {
+export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripData; canRefreshBranches: boolean }) {
   const [query, setQuery] = useState("");
   const [mustVisitIds, setMustVisitIds] = useState<string[]>([]); // order = order added
   const [startBankId, setStartBankId] = useState<string | null>(null);
@@ -54,6 +58,25 @@ export function RoadTripClient({ data }: { data: RoadTripData }) {
   const [radiusMiles, setRadiusMiles] = useState(50);
   const [roundTrip, setRoundTrip] = useState(true);
   const [extraIds, setExtraIds] = useState<string[]>([]); // accepted candidates, order added
+  const [addQuery, setAddQuery] = useState(""); // search-to-add in section 3, any distance
+  const [branchStatus, setBranchStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [branchMessage, setBranchMessage] = useState<string | null>(null);
+  const [, startBranchTransition] = useTransition();
+
+  function runBranchRefresh() {
+    setBranchStatus("running");
+    setBranchMessage(null);
+    startBranchTransition(async () => {
+      const res = await refreshBranchLocations();
+      if (res.error) {
+        setBranchStatus("error");
+        setBranchMessage(res.error);
+        return;
+      }
+      setBranchStatus("done");
+      setBranchMessage(`${res.count ?? 0} office locations saved. Reload the page to pick up the new data.`);
+    });
+  }
 
   const banksById = useMemo(() => new Map(data.banks.map((b) => [b.id, b])), [data.banks]);
 
@@ -157,6 +180,22 @@ export function RoadTripClient({ data }: { data: RoadTripData }) {
       .slice(0, 40);
   }, [data.banks, query]);
 
+  // Search-to-add in section 3: any bank, any distance — an explicit override
+  // for "I want this one on the trip regardless of the radius above."
+  const addSearchResults = useMemo(() => {
+    const q = addQuery.trim().toLowerCase();
+    if (!q || !anchor) return [];
+    return data.banks
+      .filter((b) => !selectedIds.has(b.id) && `${b.name} ${b.city ?? ""} ${b.state ?? ""}`.toLowerCase().includes(q))
+      .map((b) => {
+        const { addedMinutes } = cheapestInsertion(anchor, routeAfterAnchor, b);
+        return { bank: b, addedMinutes, totalCost: addedMinutes + minutesPerStop };
+      })
+      .sort((a, b) => a.totalCost - b.totalCost)
+      .slice(0, 20);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addQuery, data.banks, anchor, routeAfterAnchor, minutesPerStop]);
+
   if (data.error) {
     return (
       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-6 py-8 text-sm text-amber-800">
@@ -165,20 +204,50 @@ export function RoadTripClient({ data }: { data: RoadTripData }) {
     );
   }
 
+  const branchRefreshBar = canRefreshBranches && (
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+      <div className="min-w-0">
+        <p className="flex items-center gap-1.5 text-sm font-medium text-slate-800">
+          <MapPin className="h-4 w-4 text-amber-500" />
+          Branch locations
+        </p>
+        <p className="mt-0.5 text-xs text-slate-500">
+          Pulls every office address + coordinates from the FDIC — this is what the map and
+          distances below are built from. Re-run occasionally to pick up new/closed branches.
+        </p>
+        {branchMessage && (
+          <p className={`mt-1 text-xs ${branchStatus === "error" ? "text-rose-600" : "text-emerald-600"}`}>
+            {branchMessage}
+          </p>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={runBranchRefresh}
+        disabled={branchStatus === "running"}
+        className="flex shrink-0 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-60"
+      >
+        {branchStatus === "running" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+        {branchStatus === "running" ? "Refreshing…" : "Refresh branch locations"}
+      </button>
+    </div>
+  );
+
   if (data.banks.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-slate-200 px-6 py-16 text-center text-sm text-slate-500">
-        No banks have a synced branch location yet.{" "}
-        <a href="/fdic-sync" className="font-medium text-blue-600 hover:underline">
-          Run &quot;Refresh branch locations&quot; on FDIC sync
-        </a>{" "}
-        first, then come back here.
+      <div>
+        {branchRefreshBar}
+        <div className="rounded-2xl border border-dashed border-slate-200 px-6 py-16 text-center text-sm text-slate-500">
+          No banks have a synced branch location yet. Click{" "}
+          <strong>&quot;Refresh branch locations&quot;</strong>{canRefreshBranches ? " above" : ""} first, then come back here.
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      {branchRefreshBar}
       {/* ── 1. Must-visit banks ── */}
       <Card title="1. Must-visit banks" subtitle="Which banks does this trip need to cover?">
         <div className="relative mb-3">
@@ -282,16 +351,94 @@ export function RoadTripClient({ data }: { data: RoadTripData }) {
                 />
               </Field>
             </div>
-            <label className="mt-4 flex items-center gap-2 text-sm text-slate-600">
-              <input type="checkbox" checked={roundTrip} onChange={(e) => setRoundTrip(e.target.checked)} />
-              Return to the starting bank at the end of the day
-            </label>
+            <p className="mt-1.5 flex items-start gap-1.5 text-xs text-slate-400">
+              <Info className="mt-0.5 h-3 w-3 shrink-0" />
+              Detour radius: how far out of your way you're willing to drive to pick up an extra
+              bank. Only affects the "Add more banks nearby" suggestions below — you can always
+              search for and add a specific bank regardless of distance.
+            </p>
+
+            <div className="mt-4">
+              <span className="mb-1.5 block text-xs font-medium text-slate-500">End the day</span>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRoundTrip(true)}
+                  className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+                    roundTrip ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-500 hover:bg-slate-50"
+                  }`}
+                >
+                  Back where I started{anchor ? ` (${anchor.name})` : ""}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRoundTrip(false)}
+                  className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+                    !roundTrip ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-500 hover:bg-slate-50"
+                  }`}
+                >
+                  At the last stop
+                </button>
+              </div>
+            </div>
 
             <BudgetBar usedMinutes={usedMinutes} budgetMinutes={budgetMinutes} />
           </Card>
 
           {/* ── 3. Nearby candidates + map ── */}
           <Card title="3. Add more banks nearby" subtitle={`Every tracked bank within ${radiusMiles} miles of your route, cheapest detour first.`}>
+            <div className="relative mb-3">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={addQuery}
+                onChange={(e) => setAddQuery(e.target.value)}
+                placeholder="Search any bank to add it, regardless of distance…"
+                className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-blue-400 focus:outline-none"
+              />
+              {addQuery.trim() && (
+                <ul className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                  {addSearchResults.map(({ bank, totalCost }) => (
+                    <li key={bank.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setExtraIds((cur) => [...cur, bank.id]);
+                          setAddQuery("");
+                        }}
+                        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                      >
+                        <span className="min-w-0 truncate">
+                          <span className="font-medium text-slate-700">{bank.name}</span>
+                          <span className="ml-2 text-xs text-slate-400">
+                            {bank.city}, {bank.state}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-xs font-medium text-slate-500">+{fmtDuration(totalCost)}</span>
+                      </button>
+                    </li>
+                  ))}
+                  {addSearchResults.length === 0 && (
+                    <li className="px-3 py-4 text-center text-sm text-slate-400">No matches.</li>
+                  )}
+                </ul>
+              )}
+            </div>
+
+            <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-amber-600" /> Start
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-blue-600" /> Must-visit
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" /> Added
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-slate-500" /> Nearby (click to add)
+              </span>
+            </div>
+
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="h-80 overflow-hidden rounded-xl border border-slate-200 lg:h-[420px]">
                 <RoadTripMap points={mapPoints} routeLine={routeLine} fitKey={fitKey} onPointClick={handleMapClick} />

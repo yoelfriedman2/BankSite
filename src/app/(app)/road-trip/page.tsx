@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { DEMO_MODE } from "@/lib/demo";
+import { DEMO_MODE, getDemoProfile } from "@/lib/demo";
 import { getRoadTripData } from "./actions";
+import { getFdicPermissions } from "@/app/(app)/fdic-sync/actions";
 import { RoadTripClient } from "@/components/RoadTripClient";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +11,7 @@ export default async function RoadTripPage() {
   // Owner-only for now (see CLAUDE.md rollout note) — same gate as /admin,
   // except demo mode is allowed through so the feature can still be
   // click-tested via the standard DEMO_MODE preview flow.
+  let canRefreshBranches = true;
   if (!DEMO_MODE) {
     const supabase = await createClient();
     const {
@@ -19,6 +21,9 @@ export default async function RoadTripPage() {
     const adminEmail = process.env.ADMIN_EMAIL;
     const isOwner = !!adminEmail && user.email?.toLowerCase() === adminEmail.toLowerCase();
     if (!isOwner) redirect("/");
+    canRefreshBranches = (await getFdicPermissions()).canApply;
+  } else {
+    canRefreshBranches = !!getDemoProfile().is_fdic_admin;
   }
 
   const data = await getRoadTripData();
@@ -32,7 +37,7 @@ export default async function RoadTripPage() {
           with an ordered itinerary and Google Maps links at the end.
         </p>
       </div>
-      <RoadTripClient data={data} />
+      <RoadTripClient data={data} canRefreshBranches={canRefreshBranches} />
     </div>
   );
 }
