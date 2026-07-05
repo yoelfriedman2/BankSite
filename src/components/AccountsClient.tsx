@@ -79,7 +79,7 @@ function AttentionBubble({ reasons }: { reasons: AttentionReason[] }) {
   return (
     <span
       title={text}
-      className={`mt-1 inline-block max-w-full truncate rounded-full px-2 py-0.5 text-xs font-medium ${
+      className={`mt-1 block max-w-[13rem] truncate rounded-full px-2 py-0.5 text-xs font-medium ${
         worst === "red" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700"
       }`}
     >
