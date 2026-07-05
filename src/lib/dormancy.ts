@@ -101,11 +101,13 @@ export function attentionPrefsFromProfile(
 }
 
 /** True when the account's recorded balance is below the minimum.
- *  Accounts with no balance recorded are skipped (unknown ≠ low). */
+ *  Accounts with no balance recorded are skipped (unknown ≠ low), and an
+ *  account can opt out entirely via `exclude_min_balance`. */
 export function isBelowMinBalance(
-  account: Pick<Account, "balance">,
+  account: Pick<Account, "balance" | "exclude_min_balance">,
   minBalance: number = MIN_BALANCE,
 ): boolean {
+  if (account.exclude_min_balance) return false;
   return account.balance != null && account.balance < minBalance;
 }
 

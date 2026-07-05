@@ -111,6 +111,8 @@ export interface Account {
   monthly_fee: number | null;
   monthly_fee_day: number | null;
   monthly_fee_last_charged_on: string | null;
+  interest_rate: number | null; // annual APY, percent (e.g. 4.5)
+  exclude_min_balance: boolean;
 
   deleted_at: string | null;
   created_at: string;

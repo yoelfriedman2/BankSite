@@ -15,6 +15,7 @@ import {
   RefreshCw,
   ListTodo,
   FileText,
+  Percent,
   MessageSquare,
   Bell,
   Sparkles,
@@ -186,6 +187,19 @@ const TOPICS: Topic[] = [
     ],
   },
   {
+    id: "fees-interest",
+    icon: Percent,
+    title: "Fees & interest",
+    blurb: "Every recurring fee and CD interest total, in one place.",
+    points: [
+      "Every account with a monthly fee, totaled per month and per year",
+      "Every CD's projected annual interest, based on the rate you set",
+    ],
+    tips: [
+      "Add an interest rate (APY) on a CD's editor to include it in the total — CDs without a rate show \"add a rate to include\" instead of being silently skipped.",
+    ],
+  },
+  {
     id: "calendar",
     icon: CalendarDays,
     title: "Calendar",
@@ -223,6 +237,7 @@ const TOPICS: Topic[] = [
       "One item per account holder at a bank — not merged",
       "Each bank's phone & website right there",
       "Check off as each one has your new address",
+      "Type-ahead suggestions fill in your new address for you",
     ],
     tips: [
       "Only one address change can be in progress at a time — finish or cancel it before starting another.",
@@ -250,10 +265,15 @@ const TOPICS: Topic[] = [
     icon: FileText,
     title: "Documents",
     blurb: "Keep statements and forms with the account they belong to.",
-    points: ["Snap a photo or upload a file", "Stored privately, just for you"],
+    points: [
+      "Snap a photo or upload a file from any account's editor",
+      "Stored privately, just for you",
+      "See everything you've uploaded, across every account, on the Documents page",
+    ],
     tips: [
       "Photos and PDFs are compressed automatically to save space.",
       "Files open through a temporary private link — they're never public.",
+      "The Documents page groups every upload by bank, so you don't have to open each account to find one.",
     ],
   },
   {

@@ -12,6 +12,30 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-07-05",
+    title: "All your documents in one place",
+    items: [
+      "New Documents page lists every statement, photo, and scan you've uploaded across every account, grouped by bank — instead of having to open each account's editor to see what's there.",
+    ],
+  },
+  {
+    date: "2026-07-05",
+    title: "See your fees and CD interest at a glance",
+    items: [
+      "New Fees & interest page: every account with a monthly fee in one list with the total cost per month and per year, plus every CD's projected annual interest based on a rate you can now set on the account editor.",
+    ],
+  },
+  {
+    date: "2026-07-05",
+    title: "Address autocomplete, tighter exports, and a few fixes",
+    items: [
+      "The new-address field on Address change now suggests full addresses as you type.",
+      "Signing in with Microsoft now always asks which account to use instead of assuming.",
+      "Exporting your data (Banks page or Settings) now only includes your own accounts unless you're the account owner — the full bank list export is owner-only.",
+      "An account can now be excluded from the minimum-balance alert individually, from its editor.",
+    ],
+  },
+  {
+    date: "2026-07-05",
     title: "Monthly fees, tracked and deducted automatically",
     items: [
       "An account can now have a monthly fee — set the amount and the day of the month it's charged, and it's deducted from the balance automatically from then on, with each charge logged in that account's balance history.",

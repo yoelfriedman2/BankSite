@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { DEMO_MODE } from "@/lib/demo";
 
 const BUCKET = "account-documents";
 
@@ -25,6 +26,48 @@ export async function getAccountDocuments(accountId: string): Promise<AccountDoc
     .order("uploaded_at", { ascending: false });
   if (error) throw new Error(error.message);
   return data ?? [];
+}
+
+export interface AccountDocumentWithContext extends AccountDocument {
+  bank_name: string | null;
+  holder: string | null;
+}
+
+/** Every document the current user has uploaded, across every account —
+ *  powers the "All documents" page. RLS already scopes account_documents to
+ *  the signed-in user; bank/holder are joined in here purely for display. */
+export async function getAllMyDocuments(): Promise<AccountDocumentWithContext[]> {
+  if (DEMO_MODE) return [];
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const [{ data: docs }, { data: accounts }, { data: banks }] = await Promise.all([
+    supabase
+      .from("account_documents")
+      .select("id, account_id, storage_path, filename, file_size, mime_type, label, uploaded_at")
+      .order("uploaded_at", { ascending: false }),
+    supabase.from("accounts").select("id, bank_id, holder"),
+    supabase.from("banks").select("id, name"),
+  ]);
+
+  const bankNameById = new Map(
+    (banks ?? []).map((b) => [b.id as string, b.name as string]),
+  );
+  const acctById = new Map(
+    (accounts ?? []).map((a) => [a.id as string, a as { bank_id: string; holder: string | null }]),
+  );
+
+  return (docs ?? []).map((d) => {
+    const acct = acctById.get(d.account_id as string);
+    return {
+      ...d,
+      bank_name: acct ? (bankNameById.get(acct.bank_id) ?? null) : null,
+      holder: acct?.holder ?? null,
+    };
+  });
 }
 
 export async function uploadDocument(formData: FormData): Promise<AccountDocument> {

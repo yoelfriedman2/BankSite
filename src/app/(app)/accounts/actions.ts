@@ -37,6 +37,8 @@ export type AccountFormValues = {
   activity_log: { date: string; note: string; type?: ActivityType | null }[];
   monthly_fee: string;
   monthly_fee_day: string;
+  interest_rate: string;
+  exclude_min_balance: boolean;
 };
 
 function text(v: string): string | null {
@@ -101,6 +103,8 @@ function buildPatch(
     password: text(values.password),
     access_notes: text(values.access_notes),
     activity_log: log,
+    interest_rate: decimal(values.interest_rate),
+    exclude_min_balance: !!values.exclude_min_balance,
     ...monthlyFeeFields(values),
   };
 }
@@ -124,6 +128,8 @@ function fieldsFromAccount(
     password: a.password,
     access_notes: a.access_notes,
     activity_log: a.activity_log,
+    interest_rate: a.interest_rate,
+    exclude_min_balance: a.exclude_min_balance,
   };
 }
 

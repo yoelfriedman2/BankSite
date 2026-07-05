@@ -120,6 +120,7 @@ export function SettingsForm({
   alertCdMaturity,
   minBalance,
   lastSignInAt,
+  isOwner = false,
 }: {
   email: string;
   displayName: string;
@@ -134,6 +135,7 @@ export function SettingsForm({
   alertCdMaturity: boolean;
   minBalance: number;
   lastSignInAt: string | null;
+  isOwner?: boolean;
 }) {
   const [tab, setTab] = useState<TabId>("profile");
 
@@ -207,7 +209,7 @@ export function SettingsForm({
     setDeleteError(null);
     try {
       const { banks, accounts } = await getMyExportData();
-      await exportToExcel(banks, accounts);
+      await exportToExcel(banks, accounts, { isOwner });
       setExported(true);
     } catch {
       setDeleteError("Could not export your data. Try again.");
@@ -589,7 +591,11 @@ export function SettingsForm({
           <Card
             title="Spreadsheet export"
             icon={<FileSpreadsheet className="h-4 w-4 text-emerald-600" />}
-            description="Just the Excel file — your banks and accounts, no documents."
+            description={
+              isOwner
+                ? "Just the Excel file — the full bank list and your accounts, no documents."
+                : "Just the Excel file — your own accounts, no documents."
+            }
           >
             <button
               type="button"

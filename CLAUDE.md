@@ -129,6 +129,51 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-05 (evening — batch of small feature requests)** — A round of
+feature requests from chat, all shipped together:
+- **Documents page** (`/documents`): every uploaded statement/photo/scan
+  across every account, in one place, grouped by bank — `getAllMyDocuments()`
+  in `app/(app)/accounts/documents.ts` joins `account_documents` with
+  banks/accounts for display; reuses the existing `getDocumentUrl`/
+  `deleteDocument` actions unchanged (they were already generic, not tied to
+  being called from the per-account editor).
+- **Fees & interest page** (`/fees-interest`): every account with a monthly
+  fee (totaled per month/year) and every CD's projected annual interest
+  (balance × rate). New `accounts.interest_rate` column (migration **0031**,
+  bundled with `exclude_min_balance` below) — set from the CD's own editor,
+  next to CD maturity date. CDs without a rate show "add a rate to include"
+  rather than being silently counted as $0.
+- **Per-account minimum-balance exclusion**: a new checkbox on the account
+  editor ("Don't flag this account for the minimum-balance alert") using the
+  same migration 0031 `exclude_min_balance` column — `isBelowMinBalance()` in
+  `lib/dormancy.ts` now checks it first.
+- **Exports are owner-gated**: the Banks sheet in every export path (Banks
+  page, Settings, and the full ZIP backup at `/api/export/full`) is now
+  owner-only — `banks` rows are a full per-user copy of the *entire* shared
+  reference list (seeded for everyone, not just tracked banks), so any
+  regular user could previously export the whole master list. New
+  `lib/isOwner.ts` (`isOwnerEmail()`) used by all three call sites; regular
+  users get an Accounts-only export (already carries bank name/state inline
+  per row, so nothing useful is lost).
+- **Shorter filenames in the full backup ZIP**: documents were named
+  `{bank} - {holder} - {original filename}`, which got long fast (verbose
+  camera/scanner names). Now `{bank, truncated} - {holder} - {upload date}
+  {ext}` — same sanitize/dedupe logic, just a shorter base.
+- **Address autocomplete**: new `AddressAutocomplete.tsx` — debounced
+  suggestions from OpenStreetMap's Nominatim search API (free, no key,
+  same service already trusted for the road-trip planner) — wired into the
+  Address Change page's "new address" field only (not `BankForm`'s branch-
+  location field, which isn't really a clean mailing address).
+- **Microsoft SSO always shows the account picker**: added
+  `queryParams: { prompt: "select_account" }` to the Azure OAuth call in
+  `LoginForm.tsx` so it stops silently reusing whatever Microsoft account is
+  already signed in on the device.
+
+**One-time setup owed**: migration **0031_interest_rate_and_min_balance_
+exclusion.sql** needs to be run — see `TODO.md`. Everything above degrades
+gracefully until then (CDs show no rate, the new checkbox has nothing to
+persist).
+
 **2026-07-05 (road trip planner, on a branch)** — Built the road trip planner
 discussed in chat: `/road-trip` lets you pick must-visit banks, set a day
 (start/end time, minutes per bank, detour radius, round-trip toggle), and see

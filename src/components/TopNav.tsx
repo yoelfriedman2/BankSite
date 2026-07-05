@@ -23,6 +23,8 @@ import {
   LogOut,
   Menu,
   X,
+  FileText,
+  Percent,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { GlobalSearch } from "@/components/GlobalSearch";
@@ -49,6 +51,7 @@ const GROUPS: NavGroup[] = [
       { href: "/banks", label: "Banks", icon: Landmark, tour: "banks" },
       { href: "/accounts", label: "Accounts", icon: CreditCard, tour: "accounts" },
       { href: "/up-next", label: "Up next", icon: ListTodo, tour: "up-next" },
+      { href: "/documents", label: "Documents", icon: FileText, tour: "documents" },
       { href: "/road-trip", label: "Road trip", icon: Route, tour: "road-trip", ownerOnly: true },
     ],
   },
@@ -57,6 +60,7 @@ const GROUPS: NavGroup[] = [
     links: [
       { href: "/money", label: "Money moved", icon: ArrowLeftRight, tour: "money" },
       { href: "/balances", label: "Balance by date", icon: CalendarSearch, tour: "balances" },
+      { href: "/fees-interest", label: "Fees & interest", icon: Percent, tour: "fees-interest" },
       { href: "/calendar", label: "Calendar", icon: CalendarDays, tour: "calendar" },
       { href: "/checks", label: "Print Checks", icon: Printer, tour: "checks" },
       { href: "/address-change", label: "Address change", icon: MapPin, tour: "address-change" },

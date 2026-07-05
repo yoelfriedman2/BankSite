@@ -11,6 +11,7 @@ import {
   type AddressChangeData,
 } from "@/app/(app)/address-change/actions";
 import { formatDate } from "@/lib/format";
+import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -54,12 +55,11 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
           <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500" htmlFor="new_address">
             New address
           </label>
-          <input
+          <AddressAutocomplete
             id="new_address"
-            className={inputClass}
             placeholder="123 New Street, Town, ST 00000"
             value={newAddress}
-            onChange={(e) => setNewAddress(e.target.value)}
+            onChange={setNewAddress}
           />
         </div>
         {error && <p className="mt-2 text-sm text-rose-600">{error}</p>}

@@ -130,6 +130,9 @@ export function LoginForm({ initialError, notice }: { initialError?: string; not
         // Request the user's name/email. Microsoft only returns the `name` claim
         // when `profile` is in scope; Google includes it by default.
         scopes: provider === "azure" ? "openid profile email" : undefined,
+        // Force Microsoft's account chooser instead of silently reusing
+        // whichever Microsoft account is already signed in on the device.
+        queryParams: provider === "azure" ? { prompt: "select_account" } : undefined,
       },
     });
     if (error) {

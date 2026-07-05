@@ -11,6 +11,7 @@ import {
   getKnownHolders,
 } from "@/lib/demo";
 import { seedBanks, getUnreadCommentCerts, getRelatedByCert } from "./actions";
+import { isOwnerEmail } from "@/lib/isOwner";
 import type { Account, Bank, BankStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -60,6 +61,7 @@ export default async function BanksPage({
         initialStatus={initialStatus}
         initialQuery={initialQuery}
         initialOpenCert={initialOpenCert}
+        isOwner={isOwnerEmail(DEMO_USER.email)}
       />
     );
   }
@@ -132,6 +134,7 @@ export default async function BanksPage({
       initialStatus={initialStatus}
       initialQuery={initialQuery}
       initialOpenCert={initialOpenCert}
+      isOwner={isOwnerEmail(user.email)}
     />
   );
 }

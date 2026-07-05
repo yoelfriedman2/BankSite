@@ -49,13 +49,23 @@ export function buildExportRows(banks: Bank[], accounts: Account[]) {
   return { bankRows, acctRows };
 }
 
-/** Build a two-sheet workbook (Banks + Accounts) and trigger a download. */
-export async function exportToExcel(banks: Bank[], accounts: Account[]) {
+/** Build a workbook (Banks + Accounts, or just Accounts for non-owners) and
+ *  trigger a download. The full Banks sheet is the entire shared reference
+ *  list (every bank, not just tracked ones) — only the owner can export it;
+ *  everyone else gets their own Accounts sheet, which already carries the
+ *  bank name and state inline per row. */
+export async function exportToExcel(
+  banks: Bank[],
+  accounts: Account[],
+  opts?: { isOwner?: boolean },
+) {
   const XLSX = await import("xlsx");
   const { bankRows, acctRows } = buildExportRows(banks, accounts);
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(bankRows), "Banks");
+  if (opts?.isOwner) {
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(bankRows), "Banks");
+  }
   XLSX.utils.book_append_sheet(
     wb,
     XLSX.utils.json_to_sheet(acctRows),

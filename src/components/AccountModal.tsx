@@ -51,6 +51,8 @@ function toValues(
     })),
     monthly_fee: a?.monthly_fee != null ? String(a.monthly_fee) : "",
     monthly_fee_day: a?.monthly_fee_day != null ? String(a.monthly_fee_day) : "",
+    interest_rate: a?.interest_rate != null ? String(a.interest_rate) : "",
+    exclude_min_balance: a?.exclude_min_balance ?? false,
   };
 }
 
@@ -238,6 +240,17 @@ export function AccountModal({
               value={values.balance}
               onChange={(e) => set("balance", e.target.value)}
             />
+            <label className="mt-2 flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={values.exclude_min_balance}
+                onChange={(e) => set("exclude_min_balance", e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 accent-amber-600"
+              />
+              <span className="text-xs text-slate-500">
+                Don&apos;t flag this account for the minimum-balance alert
+              </span>
+            </label>
           </div>
 
           <div>
@@ -313,15 +326,33 @@ export function AccountModal({
           )}
 
           {showCd && (
-            <div>
-              <label className={labelClass} htmlFor="cd_maturity_date">CD maturity date</label>
-              <DateInput
-                id="cd_maturity_date"
-                className={inputClass}
-                value={values.cd_maturity_date}
-                onChange={(v) => set("cd_maturity_date", v)}
-              />
-            </div>
+            <>
+              <div>
+                <label className={labelClass} htmlFor="cd_maturity_date">CD maturity date</label>
+                <DateInput
+                  id="cd_maturity_date"
+                  className={inputClass}
+                  value={values.cd_maturity_date}
+                  onChange={(v) => set("cd_maturity_date", v)}
+                />
+              </div>
+              <div>
+                <label className={labelClass} htmlFor="interest_rate">Interest rate (APY %)</label>
+                <input
+                  id="interest_rate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="e.g. 4.5"
+                  className={inputClass}
+                  value={values.interest_rate}
+                  onChange={(e) => set("interest_rate", e.target.value)}
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  Used on the Fees &amp; interest page to project this CD&apos;s annual interest.
+                </p>
+              </div>
+            </>
           )}
 
           <div>

@@ -175,6 +175,7 @@ export function BanksClient({
   initialStatus,
   initialQuery,
   initialOpenCert,
+  isOwner = false,
 }: {
   banks: Bank[];
   accounts: Account[];
@@ -187,6 +188,7 @@ export function BanksClient({
   initialStatus?: BankStatus | "all";
   initialQuery?: string;
   initialOpenCert?: number;
+  isOwner?: boolean;
 }) {
   const [localReadCerts, setLocalReadCerts] = useState<Set<number>>(() => new Set());
   const unreadSet = useMemo(
@@ -440,11 +442,12 @@ export function BanksClient({
             Import
           </button>
           <button
-            onClick={() => exportToExcel(banks, accounts)}
+            onClick={() => exportToExcel(banks, accounts, { isOwner })}
             className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            title={isOwner ? "Export the full bank list + your accounts" : "Export your accounts"}
           >
             <Download className="h-4 w-4" />
-            Export
+            {isOwner ? "Export" : "Export my accounts"}
           </button>
           <button
             onClick={async () => {

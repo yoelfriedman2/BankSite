@@ -4,6 +4,11 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 
 ## One-time setup pending
 
+- Run migration **0031_interest_rate_and_min_balance_exclusion.sql** in the Supabase SQL editor.
+  Adds `accounts.interest_rate` (used by the new Fees & interest page's CD projections) and
+  `accounts.exclude_min_balance` (the new per-account "don't flag for minimum balance" checkbox).
+  Both pages/checks degrade gracefully until then — CDs just show no rate, the checkbox has
+  nothing to save yet — so nothing breaks in the meantime.
 - Run migration **0026_fdic_admin_role.sql** in the Supabase SQL editor to enable the FDIC-admin
   role toggle on Admin → Users. Until then: the owner still has full apply access (that check
   doesn't depend on the column), the Users page still works normally, and toggling the role for

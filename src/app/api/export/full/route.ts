@@ -4,6 +4,7 @@ import JSZip from "jszip";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildExportRows } from "@/lib/export";
+import { isOwnerEmail } from "@/lib/isOwner";
 import type { Account, Bank } from "@/lib/types";
 
 const BUCKET = "account-documents";
@@ -24,11 +25,15 @@ export async function GET() {
 
   const bankList = (banks ?? []) as Bank[];
   const acctList = (accounts ?? []) as Account[];
+  const isOwner = isOwnerEmail(user.email);
 
-  // Excel workbook
+  // Excel workbook — the Banks sheet is the entire shared reference list
+  // (every bank, not just tracked ones), so only the owner gets it.
   const { bankRows, acctRows } = buildExportRows(bankList, acctList);
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(bankRows), "Banks");
+  if (isOwner) {
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(bankRows), "Banks");
+  }
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(acctRows), "Accounts");
   const xlsxBuf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
 
@@ -53,12 +58,14 @@ export async function GET() {
       const buf = Buffer.from(await blob.arrayBuffer());
 
       const acct = acctById.get(d.account_id as string);
-      const parts = [
-        acct ? bankNameById.get(acct.bank_id) : null,
-        acct?.holder,
-        d.filename as string,
-      ].filter(Boolean);
-      let base = (parts.join(" - ") || (d.filename as string)).replace(
+      const bankName = acct ? bankNameById.get(acct.bank_id) : null;
+      // The original filename is dropped — it's often a verbose camera/scanner
+      // name — in favor of the upload date, keeping bank + holder for identification
+      // while staying short. Extension is preserved from the original filename.
+      const ext = (d.filename as string).match(/\.[^.]+$/)?.[0] ?? "";
+      const uploadDate = (d.uploaded_at as string).slice(0, 10);
+      const parts = [bankName?.slice(0, 24).trim(), acct?.holder, uploadDate].filter(Boolean);
+      let base = ((parts.length ? parts.join(" - ") : (d.filename as string).replace(/\.[^.]+$/, "")) + ext).replace(
         /[/\\:*?"<>|]/g,
         "_",
       );
