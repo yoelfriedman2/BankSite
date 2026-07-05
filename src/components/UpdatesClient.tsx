@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Sparkles,
@@ -68,14 +68,45 @@ export function UpdatesClient({
     markChangelogSeen();
   }, []);
 
+  const [mobileTab, setMobileTab] = useState<"activity" | "whatsnew">("whatsnew");
+
   return (
     <div className="max-w-5xl">
       <h1 className="mb-5 text-2xl font-semibold text-slate-900">Updates</h1>
 
+      {/* Mobile tab switcher — below md, only one section shows at a time so
+          you don't have to scroll past Activity to reach What's new. */}
+      <div className="mb-4 grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 md:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileTab("activity")}
+          className={`flex items-center justify-center gap-1.5 rounded-md py-1.5 text-sm font-medium transition-colors ${
+            mobileTab === "activity"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-500"
+          }`}
+        >
+          <History className="h-4 w-4" />
+          Activity
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab("whatsnew")}
+          className={`flex items-center justify-center gap-1.5 rounded-md py-1.5 text-sm font-medium transition-colors ${
+            mobileTab === "whatsnew"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-500"
+          }`}
+        >
+          <Sparkles className="h-4 w-4 text-amber-500" />
+          What&apos;s new
+        </button>
+      </div>
+
       <div className="grid gap-6 md:grid-cols-2">
-        {/* ── Activity (left) ── */}
-        <section className="min-w-0">
-          <div className="mb-2 flex items-center gap-2">
+        {/* ── Activity (left on desktop) ── */}
+        <section className={`min-w-0 ${mobileTab === "activity" ? "" : "hidden md:block"}`}>
+          <div className="mb-2 hidden items-center gap-2 md:flex">
             <History className="h-4 w-4 text-slate-400" />
             <h2 className="text-sm font-semibold text-slate-800">Activity</h2>
           </div>
@@ -124,9 +155,9 @@ export function UpdatesClient({
           )}
         </section>
 
-        {/* ── What's new (right) ── */}
-        <section className="min-w-0">
-          <div className="mb-2 flex items-center gap-2">
+        {/* ── What's new (right on desktop) ── */}
+        <section className={`min-w-0 ${mobileTab === "whatsnew" ? "" : "hidden md:block"}`}>
+          <div className="mb-2 hidden items-center gap-2 md:flex">
             <Sparkles className="h-4 w-4 text-amber-500" />
             <h2 className="text-sm font-semibold text-slate-800">What&apos;s new</h2>
           </div>

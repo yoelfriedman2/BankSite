@@ -8,6 +8,13 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
   role toggle on Admin → Users. Until then: the owner still has full apply access (that check
   doesn't depend on the column), the Users page still works normally, and toggling the role for
   someone else shows a friendly "run the migration" message instead of a crash.
+## Live: address change per holder + monthly fee
+
+Migrations **0028_address_change_per_holder.sql** and **0029_monthly_fee.sql** confirmed run
+(2026-07-05). If an address change was already in progress before 0028 ran, it was created under
+the old per-bank shape and won't retroactively split into per-holder items — cancel and restart it
+(Cancel button on `/address-change`) to get the new per-holder checklist.
+
 ## Live: Up next queue
 
 Migration 0027 confirmed applied (verified live via read-only schema probe, 2026-07-04).

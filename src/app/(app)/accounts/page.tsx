@@ -11,6 +11,8 @@ import {
 } from "@/lib/demo";
 import type { Account } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+
 type BankRef = { id: string; name: string; state: string | null; cert: number | null };
 
 export default async function AccountsPage({

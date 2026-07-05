@@ -7,6 +7,7 @@ import {
   escapeHtml,
 } from "@/lib/email";
 import { buildBackupZip, saveBackupToStorage } from "@/lib/backup";
+import { isMonthlyFeeDue } from "@/lib/monthlyFee";
 
 /* Called once daily by Vercel Cron (see vercel.json).
    Checks every user who has notify_email=true and sends activity reminders. */
@@ -149,6 +150,58 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ── Monthly fee auto-deduction ──
+  // Rides this same daily cron. Reads monthly_fee / monthly_fee_day /
+  // monthly_fee_last_charged_on (migration 0029) — if that migration hasn't
+  // run yet the select below just errors and this section no-ops rather than
+  // failing the whole cron run (reminders/backup still complete normally).
+  let feesCharged = 0;
+  const { data: feeAccounts, error: feeErr } = await admin
+    .from("accounts")
+    .select("id, user_id, balance, monthly_fee, monthly_fee_day, monthly_fee_last_charged_on")
+    .is("deleted_at", null)
+    .not("monthly_fee", "is", null)
+    .not("monthly_fee_day", "is", null);
+
+  if (feeErr) {
+    console.error("[cron/reminders] monthly fee query failed (migration 0029 not run yet?):", feeErr.message);
+  } else {
+    const todayStr = today.toISOString().slice(0, 10);
+    for (const a of feeAccounts ?? []) {
+      const due = isMonthlyFeeDue(
+        {
+          monthly_fee: a.monthly_fee != null ? Number(a.monthly_fee) : null,
+          monthly_fee_day: a.monthly_fee_day as number | null,
+          monthly_fee_last_charged_on: a.monthly_fee_last_charged_on as string | null,
+        },
+        today,
+      );
+      if (!due) continue;
+
+      const fee = Number(a.monthly_fee);
+      const oldBalance = a.balance != null ? Number(a.balance) : 0;
+      const newBalance = Number((oldBalance - fee).toFixed(2));
+
+      const { error: updateErr } = await admin
+        .from("accounts")
+        .update({ balance: newBalance, monthly_fee_last_charged_on: todayStr })
+        .eq("id", a.id);
+      if (updateErr) {
+        console.error(`[cron/reminders] monthly fee charge failed for account ${a.id}:`, updateErr.message);
+        continue;
+      }
+      await admin.from("account_balance_history").insert({
+        user_id: a.user_id,
+        account_id: a.id,
+        as_of_date: todayStr,
+        balance: newBalance,
+        change_amount: Number((-fee).toFixed(2)),
+        reason: "monthly fee",
+      });
+      feesCharged++;
+    }
+  }
+
   // ── Weekly full backup (Mondays, or on demand with ?backup=1) ──
   // Rides this daily cron because Vercel's free plan caps the project at two
   // cron jobs, both already used. Every Monday the whole database is zipped
@@ -177,5 +230,5 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, reminded: sent, remindersEmailed, backup });
+  return NextResponse.json({ ok: true, reminded: sent, remindersEmailed, feesCharged, backup });
 }

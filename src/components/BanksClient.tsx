@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronsUpDown,
   Link2,
+  ListPlus,
 } from "lucide-react";
 import {
   STATUS_LABELS,
@@ -430,7 +431,7 @@ export function BanksClient({
             {counts.all} banks · {counts.open + counts.open_add_account + counts.open_add_funds} open · {counts.want_to_open} to open · {counts.cannot_open} can&apos;t
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setImportOpen(true)}
             className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
@@ -604,9 +605,24 @@ export function BanksClient({
                   </div>
                   <RelatedChips cert={b.cert} />
                 </div>
-                <span className="mt-0.5 shrink-0">
+                <div className="flex shrink-0 flex-col items-end gap-1">
                   <StatusBadge status={b.status} />
-                </span>
+                  {b.status === "untracked" && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStatusChange(b, "want_to_open");
+                      }}
+                      disabled={statusPendingId === b.id}
+                      className="flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[11px] font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50"
+                      title="Add to queue (marks Want to open)"
+                    >
+                      <ListPlus className="h-3 w-3" />
+                      Queue
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })
@@ -758,7 +774,18 @@ export function BanksClient({
                       </div>
                     </td>
                     <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end">
+                      <div className="flex items-center justify-end gap-1">
+                        {b.status === "untracked" && (
+                          <button
+                            onClick={() => handleStatusChange(b, "want_to_open")}
+                            disabled={statusPendingId === b.id}
+                            className="rounded-md p-1.5 text-slate-400 hover:bg-violet-50 hover:text-violet-600 disabled:opacity-50"
+                            title="Add to queue (marks Want to open)"
+                            aria-label={`Add ${b.name} to queue`}
+                          >
+                            <ListPlus className="h-4 w-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDelete(b)}
                           disabled={deletePendingId === b.id}

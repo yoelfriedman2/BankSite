@@ -108,6 +108,9 @@ export interface Account {
   access_notes: string | null;
   activity_log: { date: string; note: string | null; type?: ActivityType | null }[];
   last_check_number: number | null;
+  monthly_fee: number | null;
+  monthly_fee_day: number | null;
+  monthly_fee_last_charged_on: string | null;
 
   deleted_at: string | null;
   created_at: string;

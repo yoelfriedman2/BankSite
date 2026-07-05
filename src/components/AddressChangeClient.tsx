@@ -37,7 +37,7 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
 
   // ── No active campaign: start screen ──
   if (!data.campaign) {
-    const count = data.eligibleBankCount;
+    const count = data.eligibleItemCount;
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         <h2 className="flex items-center gap-2 font-semibold text-slate-900">
@@ -45,8 +45,9 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
           Start an address change
         </h2>
         <p className="mt-2 text-sm text-slate-500">
-          This builds a checklist of every bank where you hold an account
-          {count > 0 ? ` (${count} bank${count === 1 ? "" : "s"} right now)` : ""}, with
+          This builds a checklist of every bank login you hold — one item per
+          account holder, since holders usually sign in separately
+          {count > 0 ? ` (${count} login${count === 1 ? "" : "s"} right now)` : ""}, with
           each bank&apos;s phone and website next to it. Check them off as you notify them.
         </p>
         <div className="mt-4">
@@ -188,9 +189,7 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
                   {item.bankName}
                   {item.state && <span className="font-normal text-slate-400"> · {item.state}</span>}
                 </p>
-                {item.holders.length > 0 && (
-                  <p className="truncate text-xs text-slate-400">{item.holders.join(", ")}</p>
-                )}
+                <p className="truncate text-xs text-slate-400">{item.holder ?? "Unassigned"}</p>
               </div>
               {item.phone && (
                 <span className="hidden shrink-0 items-center gap-1 text-xs text-slate-500 sm:flex">

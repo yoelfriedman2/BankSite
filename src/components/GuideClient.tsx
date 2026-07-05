@@ -111,6 +111,7 @@ const TOPICS: Topic[] = [
     tips: [
       "The ranking is only a starting point — add whichever banks you actually want to the queue, in whatever order you want.",
       "A bank drops off automatically once it's open (or marked can't open) — nothing to clean up by hand.",
+      "Marking a bank \"Want to open\" — from its status dropdown, or the quick \"Add to queue\" button on the Banks list — adds it to your queue automatically.",
     ],
   },
   {
@@ -122,6 +123,7 @@ const TOPICS: Topic[] = [
       "Holder, balance, account & routing numbers",
       "Optional online-login details",
       "An activity log to keep it alive",
+      "An optional monthly fee, deducted automatically",
       "Attach statements and documents",
       "Bulk-import from a spreadsheet",
       "Sort or filter by balance, holder, or type",
@@ -130,6 +132,7 @@ const TOPICS: Topic[] = [
       "Adding the first account flips the bank's status to Open for you automatically.",
       "Account numbers are masked in lists — open the account to see the full number.",
       "Whenever you set or change the balance, it's saved to the account's history with the date.",
+      "Set a monthly fee's amount and the day of the month it's charged, and it's deducted from the balance on its own from then on — no need to log it by hand. Leave either blank to turn it off.",
     ],
   },
   {
@@ -149,7 +152,8 @@ const TOPICS: Topic[] = [
       "Sweeping money out and returning it both count as activity, so they reset the clock too.",
       "Reminder emails won't repeat more than once every 30 days for the same account.",
       "Turn any of these alerts off, or change your minimum balance, in Settings → Alerts & emails.",
-      "When you log an activity entry, you can optionally tag what it was — online login, transaction, a check sent, a letter sent, a phone call. Never required.",
+      "When you log an activity entry — from the account editor, or the quick log button on the Accounts list — you can optionally tag what it was: online login, transaction, a check sent, a letter sent, a phone call. Never required.",
+      "Every account on the Accounts list that needs attention shows why, right next to it — low balance, no activity in months, a CD maturing soon.",
     ],
   },
   {
@@ -216,11 +220,13 @@ const TOPICS: Topic[] = [
     blurb: "Moved? Track notifying every bank where you hold an account.",
     points: [
       "Auto-builds a checklist from your accounts",
+      "One item per account holder at a bank — not merged",
       "Each bank's phone & website right there",
       "Check off as each one has your new address",
     ],
     tips: [
       "Only one address change can be in progress at a time — finish or cancel it before starting another.",
+      "A bank with two account holders gets two checklist items, since holders usually have separate logins that each need updating.",
       "This is private to you; it doesn't affect your bank statuses or shared data.",
     ],
   },

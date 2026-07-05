@@ -13,6 +13,8 @@ import {
 import { seedBanks, getUnreadCommentCerts, getRelatedByCert } from "./actions";
 import type { Account, Bank, BankStatus } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+
 const VALID_STATUSES: Array<BankStatus | "all"> = [
   "all",
   "untracked",

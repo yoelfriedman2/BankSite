@@ -17,15 +17,9 @@ import {
   getDemoProfile,
 } from "@/lib/demo";
 import {
-  getActivityLevel,
-  isCdMaturingSoon,
-  isBelowMinBalance,
-  hasNoActivityRecorded,
+  getAttentionReasons,
   attentionPrefsFromProfile,
   DEFAULT_ATTENTION_PREFS,
-  monthsSince,
-  daysUntil,
-  type ActivityLevel,
   type AttentionPrefs,
 } from "@/lib/dormancy";
 import { ACCOUNT_TYPE_LABELS, type Account, type Bank } from "@/lib/types";
@@ -36,10 +30,12 @@ import { getOutstandingSweeps } from "@/app/(app)/money/actions";
 import { DashboardMoneyOut } from "@/components/DashboardMoneyOut";
 import { getUpNextData } from "@/app/(app)/up-next/actions";
 
+export const dynamic = "force-dynamic";
+
 type AttentionItem = {
   account: Account;
   bankName: string;
-  level: Exclude<ActivityLevel, "green" | "none">;
+  level: "red" | "orange";
   reason: string;
 };
 
@@ -130,54 +126,24 @@ export default async function DashboardPage() {
 
   const bankMap = new Map(banks.map((b) => [b.id, b.name]));
   let totalBalance = 0;
+  // One entry per account (never per matched reason) — this must always
+  // match the Accounts page's "Needs attention" count exactly, since both
+  // are built from the same getAttentionReasons() list.
   const attention: AttentionItem[] = [];
 
   for (const a of accounts) {
     if (a.balance != null) totalBalance += a.balance;
     const bankName = bankMap.get(a.bank_id) ?? "—";
 
-    const level = getActivityLevel(a, defaultMonths, now);
-    if (level === "red" || level === "orange") {
-      // getActivityLevel falls back to date_opened when there's no recorded
-      // last_activity_date, so use the same date here — otherwise the dashboard
-      // would skip an account that the Accounts page (and its level dot) flags.
-      const activityDate = (a.last_activity_date ?? a.date_opened)!;
-      const months = monthsSince(activityDate, now);
-      const sinceOpen = !a.last_activity_date;
-      attention.push({
-        account: a,
-        bankName,
-        level,
-        reason: `No activity in ${months} month${months === 1 ? "" : "s"}${
-          sinceOpen ? " (since opening)" : ""
-        }`,
-      });
-    }
-    if (prefs.alertNoActivity && hasNoActivityRecorded(a)) {
-      attention.push({
-        account: a,
-        bankName,
-        level: "red",
-        reason: "No activity ever recorded — log activity or set a date",
-      });
-    }
-    if (prefs.alertCdMaturity && isCdMaturingSoon(a, 30, now) && a.cd_maturity_date) {
-      const days = daysUntil(a.cd_maturity_date, now);
-      attention.push({
-        account: a,
-        bankName,
-        level: "orange",
-        reason: days >= 0 ? `CD matures in ${days} days` : "CD has matured",
-      });
-    }
-    if (prefs.alertLowBalance && isBelowMinBalance(a, prefs.minBalance)) {
-      attention.push({
-        account: a,
-        bankName,
-        level: "orange",
-        reason: `Only ${formatCurrency(a.balance)} in the account — add money to reach the ${formatCurrency(prefs.minBalance)} minimum`,
-      });
-    }
+    const reasons = getAttentionReasons(a, defaultMonths, now, prefs);
+    if (reasons.length === 0) continue;
+    const level = reasons.some((r) => r.level === "red") ? "red" : "orange";
+    attention.push({
+      account: a,
+      bankName,
+      level,
+      reason: reasons.map((r) => r.text).join(" · "),
+    });
   }
   attention.sort(
     (a, b) => (a.level === "red" ? 0 : 1) - (b.level === "red" ? 0 : 1),
