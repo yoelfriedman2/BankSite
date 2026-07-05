@@ -13,6 +13,7 @@ import {
   CalendarDays,
   Printer,
   MapPin,
+  Route,
   RefreshCw,
   Sparkles,
   ShieldCheck,
@@ -48,6 +49,7 @@ const GROUPS: NavGroup[] = [
       { href: "/banks", label: "Banks", icon: Landmark, tour: "banks" },
       { href: "/accounts", label: "Accounts", icon: CreditCard, tour: "accounts" },
       { href: "/up-next", label: "Up next", icon: ListTodo, tour: "up-next" },
+      { href: "/road-trip", label: "Road trip", icon: Route, tour: "road-trip", ownerOnly: true },
     ],
   },
   {

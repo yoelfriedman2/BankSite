@@ -129,6 +129,49 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-05 (road trip planner, on a branch)** — Built the road trip planner
+discussed in chat: `/road-trip` lets you pick must-visit banks, set a day
+(start/end time, minutes per bank, detour radius, round-trip toggle), and see
+every other tracked bank within range ranked by actual added drive time
+(cheapest-insertion into the route — see `src/lib/roadtrip.ts`), with a live
+"day so far" time budget. Ends in a timed itinerary plus a plain Google Maps
+deep link (no API key/billing — just a URL) for turn-by-turn driving, chunked
+into legs past ~10 stops. Map is Leaflet + OpenStreetMap (`RoadTripMap.tsx`,
+circle markers only — deliberately no `L.Icon` image assets, which is the
+usual thing that breaks under a bundler). Drive times are a great-circle
+estimate, not routed — a documented tradeoff, not a bug.
+
+New shared table **`bank_branches`** (migration 0028, cert-keyed, RLS
+select-only for `authenticated` — only the service-role client writes to it)
+holds office address + lat/lng, refreshed from a second FDIC endpoint
+(`banks.data.fdic.gov` → now redirects to `api.fdic.gov`, updated both call
+sites) that the existing FDIC sync never queried before: `locations`, not
+just `institutions`. New "Refresh branch locations" button added to
+`/fdic-sync`, gated the same as every other FDIC write there.
+
+**Built two working directories, deliberately**: the user has other sessions
+active in the main checkout, so this was built in a separate `git worktree`
+(`../Bank-Website-roadtrip`, branch `feature/road-trip-planner`) to avoid
+touching any files those sessions had modified. Left as an uncommitted-to-main
+branch — not merged/pushed to `main` yet, pending the user's go-ahead.
+
+**Owner-only on purpose, per explicit request**: gated exactly like `/admin`
+— `ownerOnly: true` on both nav entries (`SideNav.tsx`/`TopNav.tsx`) plus a
+`requireOwner()` check in `road-trip/actions.ts` and `road-trip/page.tsx` —
+so the owner can test it live before deciding to open it to the family. To
+roll out: remove the `ownerOnly` flag + the `requireOwner()` gates. See
+`TODO.md` for the full checklist (migration to run, sync button to click
+once, changelog/Guide entries still owed once it's opened up).
+
+**Verification note**: build passes; the trip math (haversine, cheapest-
+insertion, itinerary timing, Maps-link chunking) was checked against
+hand-computed expectations in a standalone script; SSR HTML was confirmed
+correct via `curl` against a manually-run dev server on the worktree. Full
+interactive/mobile browser testing was **not** done — the sandboxed browser
+tool couldn't reach localhost on this machine, and the tab-based preview tool
+only runs the main directory's server, which had other sessions' uncommitted
+work. Click through by hand before opening this up.
+
 **2026-07-05 (later — corrections from feedback)** — Two things from earlier
 today got user feedback and were corrected:
 - Needs attention on the dashboard first became a single link+overview card,

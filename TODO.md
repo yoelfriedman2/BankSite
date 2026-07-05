@@ -8,6 +8,41 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
   role toggle on Admin → Users. Until then: the owner still has full apply access (that check
   doesn't depend on the column), the Users page still works normally, and toggling the role for
   someone else shows a friendly "run the migration" message instead of a crash.
+- Run migration **0028_bank_branches.sql** (built on the `feature/road-trip-planner` branch, in
+  a separate worktree at `../Bank-Website-roadtrip` so it wouldn't collide with other in-progress
+  sessions on `main`). Adds `bank_branches` (shared, by cert — office address + lat/lng). After
+  running it, go to `/fdic-sync` and click **"Refresh branch locations"** once to populate it —
+  the road trip planner has nothing to show until that's been run at least once.
+
+## Built, pending review: Road trip planner (owner-only for now)
+
+New page `/road-trip`: pick must-visit banks, set a day (start/end time, minutes per bank,
+detour radius, round-trip or not), and it shows every other tracked bank within range ranked by
+the actual drive-time cost of adding it (cheapest-insertion into the route, not just straight-line
+distance), with a running "day so far: Xh of Yh" budget bar. Ends in a timed itinerary (arrive/
+depart per stop) plus one or more plain Google Maps deep links (`google.com/maps/dir/?...` — no
+API key, no billing, just a URL) for actual turn-by-turn driving, split into legs if a day has
+more than ~10 stops. Map is Leaflet + OpenStreetMap (also free, no key) — added `leaflet` +
+`@types/leaflet` as new deps. Drive times are estimated from great-circle distance (no routing
+API), so treat them as planning estimates, not exact ETAs.
+
+Gated exactly like `/admin` (owner-only via `ADMIN_EMAIL`, both the nav entry and the page/action
+itself) **on purpose, per the owner's request** — the plan is to test it live first, then open it
+to everyone by removing the `ownerOnly` flag on the two nav entries (`SideNav.tsx`, `TopNav.tsx`)
+and the `requireOwner()` gates in `road-trip/actions.ts` and `road-trip/page.tsx`. Per the
+standing changelog/Guide rule (admin-only tooling doesn't get advertised there), **no changelog or
+Guide entry was added yet** — add both once this is opened up to everyone, since at that point it
+stops being admin-only tooling and becomes a real user-facing feature.
+
+Verification note: built and math-checked (haversine/cheapest-insertion/itinerary logic verified
+against hand-computed expectations via a standalone script — see session notes), and the SSR HTML
+was confirmed to render correctly via curl against a manually-run dev server. Full interactive
+browser click-testing was **not** possible this session — the sandboxed browser tool couldn't
+reach localhost on this machine (`ERR_CONNECTION_REFUSED`), and the tab-based preview tool is
+locked to the main working directory, which had other sessions' uncommitted changes it shouldn't
+touch. Worth clicking through by hand (must-visit picker, map pins, add/remove candidates,
+mobile width) before flipping it open to everyone.
+
 ## Live: Up next queue
 
 Migration 0027 confirmed applied (verified live via read-only schema probe, 2026-07-04).

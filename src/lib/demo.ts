@@ -404,6 +404,45 @@ export function getKnownHolders(): string[] {
   return Array.from(seen).sort();
 }
 
+// ---- Branch locations (road trip planner) ----
+// Approximate only — real coordinates come from the FDIC "locations" sync in
+// production (see refreshBranchLocations in fdic-sync/actions.ts). Here we
+// scatter each demo bank deterministically around its state's rough center so
+// the planner's distance/candidate math has something realistic to chew on.
+const STATE_CENTERS: Record<string, { lat: number; lng: number }> = {
+  NY: { lat: 42.9, lng: -75.5 }, NJ: { lat: 40.1, lng: -74.7 }, ME: { lat: 45.2, lng: -69.2 },
+  VT: { lat: 44.0, lng: -72.7 }, CT: { lat: 41.6, lng: -72.7 }, DE: { lat: 39.0, lng: -75.5 },
+  MA: { lat: 42.3, lng: -71.8 }, PA: { lat: 40.9, lng: -77.6 }, MD: { lat: 39.0, lng: -76.7 },
+  NH: { lat: 43.7, lng: -71.6 }, RI: { lat: 41.7, lng: -71.5 }, OH: { lat: 40.4, lng: -82.9 },
+  CA: { lat: 36.8, lng: -119.4 }, IL: { lat: 40.0, lng: -89.2 }, WA: { lat: 47.4, lng: -120.5 },
+};
+const DEFAULT_CENTER = { lat: 39.8, lng: -98.6 }; // continental-US center fallback
+
+function demoBranchCoords(cert: number, state: string | null): { lat: number; lng: number } {
+  const center = (state && STATE_CENTERS[state]) || DEFAULT_CENTER;
+  // Deterministic pseudo-random jitter (~±0.6°, ~40mi) so the same demo bank
+  // always lands in the same spot across reloads.
+  const jitter = (seed: number) => (((seed * 9301 + 49297) % 233280) / 233280 - 0.5) * 1.2;
+  return { lat: center.lat + jitter(cert), lng: center.lng + jitter(cert * 7 + 1) };
+}
+
+export function getDemoBranches(): { cert: number; main_office: boolean; address: string | null; city: string | null; state: string | null; latitude: number | null; longitude: number | null }[] {
+  return getDemoBanks()
+    .filter((b) => b.cert != null)
+    .map((b) => {
+      const { lat, lng } = demoBranchCoords(b.cert!, b.state);
+      return {
+        cert: b.cert!,
+        main_office: true,
+        address: b.branch_location ?? `1 Main St, ${b.city ?? "?"}`,
+        city: b.city,
+        state: b.state,
+        latitude: lat,
+        longitude: lng,
+      };
+    });
+}
+
 // ---- Comments (shared community notes) ----
 export function getDemoComments(cert: number): BankComment[] {
   return store()

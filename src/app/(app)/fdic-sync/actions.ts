@@ -87,7 +87,7 @@ async function fetchFdic(certs: number[]): Promise<Map<number, FdicRow>> {
   for (let i = 0; i < certs.length; i += 40) {
     const chunk = certs.slice(i, i + 40);
     const filters = encodeURIComponent(`CERT:(${chunk.join(" OR ")})`);
-    const url = `https://banks.data.fdic.gov/api/institutions?filters=${filters}&fields=CERT,NAME,CITY,STALP,ASSET,WEBADDR,ACTIVE,REPDTE,ENDEFYMD&limit=100&format=json`;
+    const url = `https://api.fdic.gov/banks/institutions?filters=${filters}&fields=CERT,NAME,CITY,STALP,ASSET,WEBADDR,ACTIVE,REPDTE,ENDEFYMD&limit=100&format=json`;
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) throw new Error(`FDIC API error ${res.status}`);
     const body = (await res.json()) as { data?: { data: FdicRow }[] };
@@ -318,4 +318,96 @@ export async function deleteClosedBank(
   }
 
   return { deleted, skipped };
+}
+
+type FdicLocationRow = {
+  CERT: number; UNINUM: number; MAINOFF: number | string; OFFNAME: string | null;
+  ADDRESS: string | null; CITY: string | null; STALP: string | null; ZIP: string | number | null;
+  LATITUDE: number | string | null; LONGITUDE: number | string | null;
+};
+
+/** Fetches every office (main + branches) for the given certs from the FDIC
+ *  BankFind "locations" API — the source of street addresses + coordinates
+ *  for the road trip planner. Read-only; chunked like fetchFdic. */
+async function fetchFdicLocations(certs: number[]): Promise<FdicLocationRow[]> {
+  const out: FdicLocationRow[] = [];
+  for (let i = 0; i < certs.length; i += 40) {
+    const chunk = certs.slice(i, i + 40);
+    const filters = encodeURIComponent(`CERT:(${chunk.join(" OR ")})`);
+    const fields = "CERT,UNINUM,MAINOFF,OFFNAME,ADDRESS,CITY,STALP,ZIP,LATITUDE,LONGITUDE";
+    let offset = 0;
+    for (;;) {
+      const url = `https://api.fdic.gov/banks/locations?filters=${filters}&fields=${fields}&limit=1000&offset=${offset}&format=json`;
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(`FDIC locations API error ${res.status}`);
+      const body = (await res.json()) as { data?: { data: FdicLocationRow }[] };
+      const rows = body.data ?? [];
+      out.push(...rows.map((r) => r.data));
+      if (rows.length < 1000) break;
+      offset += 1000;
+    }
+  }
+  return out;
+}
+
+/**
+ * Refreshes public.bank_branches (street addresses + coordinates for every
+ * office of every bank in the database) from live FDIC data — the data the
+ * road trip planner's map and distance math run on. Gated the same as every
+ * other FDIC write: owner or an is_fdic_admin user. Wipes and re-inserts
+ * (this is pure reference data, nothing user-entered lives in this table),
+ * so a partial failure just leaves the previous refresh's rows in place for
+ * certs it didn't reach.
+ */
+export async function refreshBranchLocations(): Promise<{ count?: number; error?: string }> {
+  const user = await currentUser();
+  if (!(await canApplyFdicChanges(user))) return { error: "Not authorized." };
+
+  const admin = createAdminClient();
+  const certs = new Set<number>();
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await admin
+      .from("banks")
+      .select("cert")
+      .not("cert", "is", null)
+      .is("deleted_at", null)
+      .range(from, from + 999);
+    if (error) return { error: error.message };
+    for (const row of data ?? []) certs.add(row.cert as number);
+    if (!data || data.length < 1000) break;
+  }
+
+  let rows: FdicLocationRow[];
+  try {
+    rows = await fetchFdicLocations([...certs]);
+  } catch (err) {
+    return { error: String(err) };
+  }
+
+  const toInsert = rows
+    .filter((r) => r.LATITUDE != null && r.LONGITUDE != null)
+    .map((r) => ({
+      cert: r.CERT,
+      uninum: r.UNINUM,
+      main_office: String(r.MAINOFF) === "1",
+      name: r.OFFNAME,
+      address: r.ADDRESS,
+      city: r.CITY,
+      state: r.STALP,
+      zip: r.ZIP != null ? String(r.ZIP) : null,
+      latitude: Number(r.LATITUDE),
+      longitude: Number(r.LONGITUDE),
+      updated_at: new Date().toISOString(),
+    }));
+
+  const { error: delErr } = await admin.from("bank_branches").delete().in("cert", [...certs]);
+  if (delErr) return { error: delErr.message };
+
+  let count = 0;
+  for (let i = 0; i < toInsert.length; i += 500) {
+    const { error } = await admin.from("bank_branches").insert(toInsert.slice(i, i + 500));
+    if (error) return { error: error.message, count };
+    count += toInsert.slice(i, i + 500).length;
+  }
+  return { count };
 }
