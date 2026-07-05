@@ -11,7 +11,7 @@ import {
 } from "@/lib/demo";
 import type { Account } from "@/lib/types";
 
-type BankRef = { id: string; name: string; state: string | null };
+type BankRef = { id: string; name: string; state: string | null; cert: number | null };
 
 export default async function AccountsPage({
   searchParams,
@@ -29,7 +29,7 @@ export default async function AccountsPage({
   let prefs = DEFAULT_ATTENTION_PREFS;
 
   if (DEMO_MODE) {
-    banks = getDemoBanks().map((b) => ({ id: b.id, name: b.name, state: b.state }));
+    banks = getDemoBanks().map((b) => ({ id: b.id, name: b.name, state: b.state, cert: b.cert }));
     accounts = getDemoAccounts();
     defaultMonths = getDemoProfile().default_dormancy_months;
     knownHolders = getKnownHolders();
@@ -42,7 +42,7 @@ export default async function AccountsPage({
 
     const { data: banksData } = await supabase
       .from("banks")
-      .select("id, name, state")
+      .select("id, name, state, cert")
       .is("deleted_at", null);
     const { data: acctData } = await supabase
       .from("accounts")
@@ -78,6 +78,7 @@ export default async function AccountsPage({
   return (
     <AccountsClient
       rows={rows}
+      banks={banks}
       defaultDormancyMonths={defaultMonths}
       knownHolders={knownHolders}
       attentionPrefs={prefs}

@@ -455,6 +455,8 @@ export function ImportDialog({
   onClose: () => void;
   onImported: () => void;
 }) {
+  // Opened from either Banks or Accounts — same wizard either way, since a
+  // spreadsheet row can carry bank fields, account fields, or both.
   const [stage, setStage] = useState<"upload" | "review" | "done">("upload");
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -529,7 +531,7 @@ export function ImportDialog({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <h2 className="text-lg font-semibold text-slate-900">
-            {stage === "upload" && "Import banks"}
+            {stage === "upload" && "Import banks & accounts"}
             {stage === "review" && `Review ${review.length} bank${review.length === 1 ? "" : "s"}`}
             {stage === "done" && "Import complete"}
           </h2>
@@ -549,8 +551,10 @@ export function ImportDialog({
           {stage === "upload" && (
             <>
               <p className="mb-3 text-sm text-slate-500">
-                Upload an Excel or CSV with a header row. We&apos;ll match your bank names against
-                the existing list and show you what will be added or updated before anything changes.
+                Upload an Excel or CSV with a header row. A row can carry bank info (status,
+                notes), account info (holder, balance, login), or both — we&apos;ll match bank
+                names against your existing list and show you what will be added or updated
+                before anything changes.
               </p>
               <button
                 type="button"

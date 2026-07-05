@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   CalendarCheck,
   Loader2,
+  UploadCloud,
 } from "lucide-react";
 import {
   ACCOUNT_TYPE_LABELS,
@@ -26,7 +27,10 @@ import {
 import { formatCurrency, formatDateShort, maskAccountNumber } from "@/lib/format";
 import { ActivityDot } from "@/components/badges";
 import { AccountModal } from "@/components/AccountModal";
+import { ImportDialog } from "@/components/ImportDialog";
 import { logActivityToday } from "@/app/(app)/accounts/actions";
+
+type BankRef = { id: string; name: string; cert: number | null };
 
 const ACTIVITY_TYPES = ["checking", "savings", "money_market"];
 
@@ -90,6 +94,7 @@ export type AccountRow = Account & {
 
 export function AccountsClient({
   rows,
+  banks = [],
   defaultDormancyMonths,
   knownHolders,
   attentionPrefs = DEFAULT_ATTENTION_PREFS,
@@ -97,6 +102,7 @@ export function AccountsClient({
   initialQuery,
 }: {
   rows: AccountRow[];
+  banks?: BankRef[];
   defaultDormancyMonths: number;
   knownHolders: string[];
   attentionPrefs?: AttentionPrefs;
@@ -107,6 +113,7 @@ export function AccountsClient({
   const [query, setQuery] = useState(initialQuery ?? "");
   const [holderFilter, setHolderFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [importOpen, setImportOpen] = useState(false);
   const [attentionOnly, setAttentionOnly] = useState(initialAttention);
   const [editing, setEditing] = useState<AccountRow | null>(null);
   const [logPendingId, setLogPendingId] = useState<string | null>(null);
@@ -166,6 +173,13 @@ export function AccountsClient({
             {rows.length} accounts · {attentionCount} need attention
           </p>
         </div>
+        <button
+          onClick={() => setImportOpen(true)}
+          className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          <UploadCloud className="h-4 w-4" />
+          Import
+        </button>
       </div>
 
       {/* Totals by holder */}
@@ -445,6 +459,13 @@ export function AccountsClient({
             setEditing(null);
             router.refresh();
           }}
+        />
+      )}
+      {importOpen && (
+        <ImportDialog
+          existingBanks={banks}
+          onClose={() => setImportOpen(false)}
+          onImported={() => router.refresh()}
         />
       )}
     </div>

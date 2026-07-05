@@ -11,6 +11,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-07-04",
+    title: "Import from Accounts too, and a crash fixed",
+    items: [
+      "Import now works from the Accounts page as well as Banks — same wizard either way, since a row can carry bank info, account info, or both.",
+      "Fixed a bug where importing could fail with a database error when a spreadsheet row created a brand-new bank.",
+    ],
+  },
+  {
     date: "2026-07-03",
     title: "Alert settings & a cleaner Settings page",
     items: [

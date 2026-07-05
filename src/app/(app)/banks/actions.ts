@@ -601,7 +601,10 @@ export async function importBanks(
           branch_location: row.branch_location,
           phone: row.phone,
           notes: row.bank_notes,
-          conversion_stage: row.conversion_stage,
+          // conversion_stage is NOT NULL — an explicit null here (the parser's
+          // default when no conversion note was detected) would override the
+          // column's 'none' default and fail the insert.
+          conversion_stage: row.conversion_stage ?? "none",
           min_to_open: row.min_to_open,
         })
         .select("id")
