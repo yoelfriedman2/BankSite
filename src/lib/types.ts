@@ -13,6 +13,22 @@ export type AccountType =
   | "money_market"
   | "other";
 export type Priority = "low" | "med" | "high";
+/** Optional tag on an activity-log entry — never required. */
+export type ActivityType =
+  | "online_login"
+  | "transaction"
+  | "check_sent"
+  | "letter_sent"
+  | "phone_call"
+  | "other";
+export const ACTIVITY_TYPE_LABELS: Record<ActivityType, string> = {
+  online_login: "Online login",
+  transaction: "Transaction",
+  check_sent: "Check sent",
+  letter_sent: "Letter sent",
+  phone_call: "Phone call",
+  other: "Other",
+};
 export type OpenMethod = "online" | "mail" | "in_person" | "phone";
 export type Eligibility = "nationwide" | "in_state" | "local_only";
 export type ConversionStage =
@@ -57,6 +73,7 @@ export interface Bank {
   priority: Priority | null;
   target_balance: number | null;
   notes: string | null;
+  queue_position: number | null; // order in the "Up next" queue; null = not queued
 
   // Shared-field update tracking
   shared_fields_updated_at: string | null;
@@ -89,7 +106,7 @@ export interface Account {
   username: string | null;
   password: string | null;
   access_notes: string | null;
-  activity_log: { date: string; note: string | null }[];
+  activity_log: { date: string; note: string | null; type?: ActivityType | null }[];
   last_check_number: number | null;
 
   deleted_at: string | null;

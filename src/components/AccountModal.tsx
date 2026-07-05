@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition, type FormEvent } from "react";
 import { X, Loader2, Eye, EyeOff } from "lucide-react";
-import { ACCOUNT_TYPE_LABELS, type Account } from "@/lib/types";
+import { ACCOUNT_TYPE_LABELS, ACTIVITY_TYPE_LABELS, type Account, type ActivityType } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { DateInput } from "@/components/DateInput";
 import {
@@ -47,6 +47,7 @@ function toValues(
     activity_log: (a?.activity_log ?? []).map((e) => ({
       date: e.date,
       note: e.note ?? "",
+      type: e.type ?? null,
     })),
   };
 }
@@ -83,6 +84,7 @@ export function AccountModal({
     new Date().toISOString().slice(0, 10),
   );
   const [newNote, setNewNote] = useState("");
+  const [newType, setNewType] = useState<ActivityType | "">("");
   const [balanceHistory, setBalanceHistory] = useState<BalancePoint[]>([]);
   const [dirty, setDirty] = useState(false);
 
@@ -111,9 +113,10 @@ export function AccountModal({
     setDirty(true);
     setValues((v) => ({
       ...v,
-      activity_log: [...v.activity_log, { date: newDate, note: newNote }],
+      activity_log: [...v.activity_log, { date: newDate, note: newNote, type: newType || null }],
     }));
     setNewNote("");
+    setNewType("");
   }
 
   function removeEntry(index: number) {
@@ -379,6 +382,11 @@ export function AccountModal({
                     className="flex items-center gap-2 rounded-md bg-slate-50 px-2 py-1 text-sm"
                   >
                     <span className="w-24 shrink-0 text-slate-500">{formatDate(e.date)}</span>
+                    {e.type && (
+                      <span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                        {ACTIVITY_TYPE_LABELS[e.type]}
+                      </span>
+                    )}
                     <span className="flex-1 truncate text-slate-700">{e.note}</span>
                     <button
                       type="button"
@@ -391,7 +399,7 @@ export function AccountModal({
                 ))}
               </ul>
             )}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <div className="w-40 shrink-0">
                 <DateInput
                   value={newDate}
@@ -399,8 +407,21 @@ export function AccountModal({
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
                 />
               </div>
+              <select
+                value={newType}
+                onChange={(e) => setNewType(e.target.value as ActivityType | "")}
+                className="w-36 shrink-0 rounded-lg border border-slate-300 px-2 py-2 text-sm text-slate-700 outline-none focus:border-amber-500"
+                title="Type (optional)"
+              >
+                <option value="">Type (optional)</option>
+                {(Object.keys(ACTIVITY_TYPE_LABELS) as ActivityType[]).map((t) => (
+                  <option key={t} value={t}>
+                    {ACTIVITY_TYPE_LABELS[t]}
+                  </option>
+                ))}
+              </select>
               <input
-                className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                className="min-w-[8rem] flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
                 placeholder="note (optional)"
                 value={newNote}
                 onChange={(e) => setNewNote(e.target.value)}

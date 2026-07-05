@@ -34,6 +34,37 @@ type BankRef = { id: string; name: string; cert: number | null };
 
 const ACTIVITY_TYPES = ["checking", "savings", "money_market"];
 
+type SortKey = "bank" | "balance_desc" | "balance_asc" | "holder" | "type";
+
+const SORT_LABELS: Record<SortKey, string> = {
+  bank: "Bank (default)",
+  balance_desc: "Balance: high to low",
+  balance_asc: "Balance: low to high",
+  holder: "Holder",
+  type: "Account type",
+};
+
+function sortRows(list: AccountRow[], sortBy: SortKey): AccountRow[] {
+  const sorted = [...list];
+  switch (sortBy) {
+    case "balance_desc":
+      return sorted.sort((a, b) => (b.balance ?? -Infinity) - (a.balance ?? -Infinity));
+    case "balance_asc":
+      return sorted.sort((a, b) => (a.balance ?? Infinity) - (b.balance ?? Infinity));
+    case "holder":
+      return sorted.sort((a, b) => (a.holder ?? "").localeCompare(b.holder ?? ""));
+    case "type":
+      return sorted.sort((a, b) =>
+        (a.account_type ? ACCOUNT_TYPE_LABELS[a.account_type] : "").localeCompare(
+          b.account_type ? ACCOUNT_TYPE_LABELS[b.account_type] : "",
+        ),
+      );
+    case "bank":
+    default:
+      return sorted.sort((a, b) => a.bankName.localeCompare(b.bankName));
+  }
+}
+
 function CdMaturityCell({ account }: { account: AccountRow }) {
   const { cd_maturity_date, date_opened } = account;
   if (!cd_maturity_date) return <span className="text-slate-300">—</span>;
@@ -113,6 +144,7 @@ export function AccountsClient({
   const [query, setQuery] = useState(initialQuery ?? "");
   const [holderFilter, setHolderFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<SortKey>("bank");
   const [importOpen, setImportOpen] = useState(false);
   const [attentionOnly, setAttentionOnly] = useState(initialAttention);
   const [editing, setEditing] = useState<AccountRow | null>(null);
@@ -161,8 +193,8 @@ export function AccountsClient({
         ),
       );
     }
-    return list;
-  }, [rows, attentionOnly, holderFilter, typeFilter, query, defaultDormancyMonths, attentionPrefs]);
+    return sortRows(list, sortBy);
+  }, [rows, attentionOnly, holderFilter, typeFilter, query, sortBy, defaultDormancyMonths, attentionPrefs]);
 
   return (
     <div>
@@ -249,6 +281,17 @@ export function AccountsClient({
             {(Object.keys(ACCOUNT_TYPE_LABELS) as AccountType[]).map((t) => (
               <option key={t} value={t}>
                 {ACCOUNT_TYPE_LABELS[t]}
+              </option>
+            ))}
+          </select>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortKey)}
+            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500"
+          >
+            {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+              <option key={k} value={k}>
+                Sort: {SORT_LABELS[k]}
               </option>
             ))}
           </select>

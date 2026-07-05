@@ -14,7 +14,7 @@ import {
   getDemoAccounts,
   type AccountFields,
 } from "@/lib/demo";
-import type { Account } from "@/lib/types";
+import type { Account, ActivityType } from "@/lib/types";
 
 export type AccountFormValues = {
   id?: string;
@@ -33,7 +33,7 @@ export type AccountFormValues = {
   username: string;
   password: string;
   access_notes: string;
-  activity_log: { date: string; note: string }[];
+  activity_log: { date: string; note: string; type?: ActivityType | null }[];
 };
 
 function text(v: string): string | null {
@@ -56,7 +56,11 @@ function integer(v: string): number | null {
 function buildPatch(values: AccountFormValues): Omit<AccountFields, "deleted_at" | "last_check_number"> {
   const log = (values.activity_log ?? [])
     .filter((e) => e.date)
-    .map((e) => ({ date: e.date, note: e.note?.trim() ? e.note.trim() : null }));
+    .map((e) => ({
+      date: e.date,
+      note: e.note?.trim() ? e.note.trim() : null,
+      type: e.type ?? null,
+    }));
   const logMax = log.length
     ? log.map((e) => e.date).sort().at(-1)!
     : null;
