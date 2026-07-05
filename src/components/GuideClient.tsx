@@ -55,7 +55,7 @@ const TOPICS: Topic[] = [
     tips: [
       "It updates itself — as you log activity, move money, or change a balance, the lists here adjust automatically.",
       "Which of these show up — and your minimum balance — is up to you in Settings → Alerts & emails.",
-      "Needs attention is a quick overview here — tap it to see the full list on Accounts.",
+      "Needs attention shows your top 3 here, same as Up next — tap View all to see everything on Accounts.",
     ],
   },
   {

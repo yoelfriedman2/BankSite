@@ -113,8 +113,41 @@ the code:
    dropped. Check items off / delete them once resolved.
 5. Build (`npm run build`) before calling anything done. If it's UI-observable,
    verify via the `DEMO_MODE` preview flow described above.
+6. **Check mobile.** This is a standing requirement, not a one-off: every UI
+   change gets checked at a 375px-wide viewport (`preview_resize` with the
+   `mobile` preset) before it's considered done, not just desktop. The
+   cheapest reliable check is `document.body.scrollWidth >
+   document.documentElement.clientWidth` via `preview_eval` on every page you
+   touched — a `true` means something overflows and needs a narrower layout
+   (e.g. a `flex` row of several fixed-ish elements like `<select>`s needs
+   `grid grid-cols-2 sm:flex` or similar, not just cramming them in one row).
+   `preview_screenshot` has been flaky at mobile viewport sizes in this
+   environment (reliably works at desktop size) — if it times out, fall back
+   to `preview_snapshot` (accessibility tree, confirms content/structure) plus
+   the scrollWidth check (confirms no overflow) rather than giving up on
+   verification.
 
 ## Current state (update this — most recent first)
+
+**2026-07-05 (later — corrections from feedback)** — Two things from earlier
+today got user feedback and were corrected:
+- Needs attention on the dashboard first became a single link+overview card,
+  but the user wanted it to match the "Up next" pattern exactly: a top-3 item
+  list (same row style as before — icon, bank/holder, reason, urgency badge)
+  under a header with a "View all" link, not a bare summary. Reverted to that.
+- Nav groups: moved Up next to right under Accounts (was between Banks and
+  Accounts); moved FDIC sync out of "Banks & accounts" into "Tools" (it's not
+  a frequent-use item); and merged the separate "Money" group into "Tools" —
+  the user didn't see a meaningful distinction between Money moved/Balance by
+  date vs. Calendar/Print Checks/Address change. Current Tools order: Money
+  moved, Balance by date, Calendar, Print Checks, Address change, FDIC sync.
+- Also found and fixed a real mobile overflow bug while verifying: the
+  Accounts filter row (holder/type/sort selects) used a plain `flex` row of
+  three `flex-1` selects, which doesn't fit a 375px viewport (scrollWidth 488
+  vs 375) — three selects were added over time without re-checking narrow
+  widths. Fixed with `grid grid-cols-2 sm:flex` (sort spans full width on the
+  second mobile row). Added the "check mobile every time" standing
+  instruction above precisely because of this — it wasn't caught until asked.
 
 **2026-07-05** — Fixed a real bug in FDIC sync: `RowActions` rendered the
 Ignore button unconditionally, so a non-admin could dismiss a diff row from
@@ -126,12 +159,10 @@ type) in `AccountsClient.tsx`; an optional `type` tag on activity-log entries
 (`ActivityType` in `lib/types.ts` — online_login/transaction/check_sent/
 letter_sent/phone_call/other, no migration needed since `activity_log` is
 jsonb) surfaced in `AccountModal.tsx`'s log editor; the sidebar (`SideNav.tsx`
-+ `TopNav.tsx`) reorganized into labeled groups (Banks & accounts / Money /
-Tools / More) instead of one flat list — also fixed TopNav being missing "Up
-next" entirely, an existing inconsistency; and the dashboard's Needs attention
-block collapsed from a full item list into one compact overview
-card (count + urgent/soon split) linking to Accounts, matching how "Up next"
-already does a preview.
++ `TopNav.tsx`) reorganized into labeled groups instead of one flat list —
+also fixed TopNav being missing "Up next" entirely, an existing
+inconsistency. (Group contents and the dashboard widget shape were both
+corrected shortly after — see the entry above.)
 
 **2026-07-04 (up next)** — New **"Up next" queue** (migration 0027,
 `banks.queue_position`, private/never propagated): answers "which bank should

@@ -22,8 +22,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-07-05",
     title: "Cleaner navigation & a lighter dashboard",
     items: [
-      "The sidebar is now grouped by what things are — Banks & accounts, Money, Tools, and so on — instead of one long list.",
-      "Needs attention on the dashboard is now a short overview (how many, how urgent) that links to the full list, instead of listing every account right there.",
+      "The sidebar is now grouped by what things are — Banks & accounts, Tools, and so on — instead of one long list.",
+      "Needs attention on the dashboard now shows your top 3, same as Up next, with a View all link — instead of listing every account right there.",
     ],
   },
   {
