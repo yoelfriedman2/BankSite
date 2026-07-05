@@ -143,6 +143,7 @@ function seedToBankFields(s: (typeof BANKS_SEED)[number]): BankFields {
     conversion_stage: "none",
     min_to_open: null,
     target_balance: null,
+    queue_position: null,
     shared_fields_updated_at: null,
     shared_updated_by: null,
     shared_updated_by_name: null,
@@ -177,6 +178,7 @@ const BANK_OVERRIDES: Record<number, Partial<BankFields>> = {
     eligibility: "local_only",
     branch_location: "123 Main St, Springfield, MA 01103",
     phone: "(413) 555-0100",
+    queue_position: 2,
   },
   5: {
     status: "applied",
@@ -191,7 +193,13 @@ const BANK_OVERRIDES: Record<number, Partial<BankFields>> = {
     eligibility: "local_only",
     notes: "Out-of-state residents not accepted.",
   },
-  7: { status: "want_to_open", open_methods: ["online"], eligibility: "nationwide" },
+  7: {
+    status: "want_to_open",
+    open_methods: ["online"],
+    eligibility: "nationwide",
+    min_to_open: 25,
+    queue_position: 1,
+  },
 };
 
 type DemoStore = {
@@ -511,6 +519,7 @@ export function importDemoRows(rows: ImportRow[]): {
         conversion_stage: row.conversion_stage ?? "none",
         min_to_open: row.min_to_open ?? null,
         target_balance: null,
+        queue_position: null,
         shared_fields_updated_at: null,
         shared_updated_by: null,
         shared_updated_by_name: null,
