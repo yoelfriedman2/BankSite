@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import {
   LayoutDashboard,
   Landmark,
+  ListTodo,
   CreditCard,
   ArrowLeftRight,
   CalendarSearch,
@@ -33,22 +34,48 @@ type NavLink = {
   tour: string;
   ownerOnly?: boolean;
 };
+type NavGroup = { label: string | null; links: NavLink[] };
 
-const LINKS: NavLink[] = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard, tour: "dashboard" },
-  { href: "/banks", label: "Banks", icon: Landmark, tour: "banks" },
-  { href: "/accounts", label: "Accounts", icon: CreditCard, tour: "accounts" },
-  { href: "/money", label: "Money moved", icon: ArrowLeftRight, tour: "money" },
-  { href: "/balances", label: "Balance by date", icon: CalendarSearch, tour: "balances" },
-  { href: "/calendar", label: "Calendar", icon: CalendarDays, tour: "calendar" },
-  { href: "/checks", label: "Print Checks", icon: Printer, tour: "checks" },
-  { href: "/address-change", label: "Address change", icon: MapPin, tour: "address-change" },
-  { href: "/fdic-sync", label: "FDIC sync", icon: RefreshCw, tour: "fdic-sync" },
-  { href: "/updates", label: "Updates", icon: Sparkles, tour: "updates" },
-  { href: "/admin", label: "Admin", icon: ShieldCheck, tour: "admin", ownerOnly: true },
-  { href: "/guide", label: "Guide", icon: BookOpen, tour: "guide" },
-  { href: "/settings", label: "Settings", icon: Settings, tour: "settings" },
-  { href: "/trash", label: "Trash", icon: Trash2, tour: "trash" },
+// Grouped by where each thing belongs, not by ship date. Keep in sync with SideNav.tsx.
+const GROUPS: NavGroup[] = [
+  {
+    label: null,
+    links: [{ href: "/", label: "Dashboard", icon: LayoutDashboard, tour: "dashboard" }],
+  },
+  {
+    label: "Banks & accounts",
+    links: [
+      { href: "/banks", label: "Banks", icon: Landmark, tour: "banks" },
+      { href: "/up-next", label: "Up next", icon: ListTodo, tour: "up-next" },
+      { href: "/accounts", label: "Accounts", icon: CreditCard, tour: "accounts" },
+      { href: "/fdic-sync", label: "FDIC sync", icon: RefreshCw, tour: "fdic-sync" },
+    ],
+  },
+  {
+    label: "Money",
+    links: [
+      { href: "/money", label: "Money moved", icon: ArrowLeftRight, tour: "money" },
+      { href: "/balances", label: "Balance by date", icon: CalendarSearch, tour: "balances" },
+    ],
+  },
+  {
+    label: "Tools",
+    links: [
+      { href: "/calendar", label: "Calendar", icon: CalendarDays, tour: "calendar" },
+      { href: "/checks", label: "Print Checks", icon: Printer, tour: "checks" },
+      { href: "/address-change", label: "Address change", icon: MapPin, tour: "address-change" },
+    ],
+  },
+  {
+    label: "More",
+    links: [
+      { href: "/updates", label: "Updates", icon: Sparkles, tour: "updates" },
+      { href: "/guide", label: "Guide", icon: BookOpen, tour: "guide" },
+      { href: "/settings", label: "Settings", icon: Settings, tour: "settings" },
+      { href: "/admin", label: "Admin", icon: ShieldCheck, tour: "admin", ownerOnly: true },
+      { href: "/trash", label: "Trash", icon: Trash2, tour: "trash" },
+    ],
+  },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -65,7 +92,10 @@ export function TopNav({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const links = LINKS.filter((l) => !l.ownerOnly || isOwner);
+  const groups = GROUPS.map((g) => ({
+    ...g,
+    links: g.links.filter((l) => !l.ownerOnly || isOwner),
+  })).filter((g) => g.links.length > 0);
   const updatesUnread = useChangelogUnread();
 
   // Close the drawer whenever the route changes (e.g. after tapping a link).
@@ -138,29 +168,38 @@ export function TopNav({
             </button>
           </div>
 
-          <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
-            {links.map(({ href, label, icon: Icon, tour }) => {
-              const active = isActive(pathname, href);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  data-tour={tour}
-                  onClick={() => setOpen(false)}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                    active
-                      ? "bg-slate-800 text-white"
-                      : "text-slate-400 hover:bg-slate-800/60 hover:text-white"
-                  }`}
-                >
-                  <Icon className="h-[18px] w-[18px]" />
-                  {label}
-                  {href === "/updates" && updatesUnread && (
-                    <span className="ml-auto h-2 w-2 rounded-full bg-amber-400" />
-                  )}
-                </Link>
-              );
-            })}
+          <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-2">
+            {groups.map((group) => (
+              <div key={group.label ?? "top"} className="space-y-1">
+                {group.label && (
+                  <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                    {group.label}
+                  </div>
+                )}
+                {group.links.map(({ href, label, icon: Icon, tour }) => {
+                  const active = isActive(pathname, href);
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      data-tour={tour}
+                      onClick={() => setOpen(false)}
+                      className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                        active
+                          ? "bg-slate-800 text-white"
+                          : "text-slate-400 hover:bg-slate-800/60 hover:text-white"
+                      }`}
+                    >
+                      <Icon className="h-[18px] w-[18px]" />
+                      {label}
+                      {href === "/updates" && updatesUnread && (
+                        <span className="ml-auto h-2 w-2 rounded-full bg-amber-400" />
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
           </nav>
 
           <div className="border-t border-slate-800 p-3">
