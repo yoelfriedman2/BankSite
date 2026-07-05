@@ -142,6 +142,40 @@ function revalidate() {
   revalidatePath("/");
 }
 
+/** Banks marked "want to open" belong in the Up Next queue — auto-assign a
+ *  queue position if one isn't set yet, so changing status is enough on its
+ *  own and there's no separate step to remember. Only ever adds a position;
+ *  it never removes one, so switching away from want_to_open (or back to it
+ *  later) doesn't reshuffle a queue the user may have already reordered. */
+async function autoQueueIfWantToOpen(bankId: string, status: BankStatus): Promise<void> {
+  if (status !== "want_to_open") return;
+
+  if (DEMO_MODE) {
+    const banks = getDemoBanks();
+    const bank = banks.find((b) => b.id === bankId);
+    if (bank && bank.queue_position == null) {
+      const maxPos = Math.max(0, ...banks.map((b) => b.queue_position ?? 0));
+      updateDemoBank(bankId, { queue_position: maxPos + 1 });
+    }
+    return;
+  }
+
+  const supabase = await createClient();
+  const { data: bank } = await supabase
+    .from("banks")
+    .select("queue_position")
+    .eq("id", bankId)
+    .maybeSingle();
+  if (!bank || bank.queue_position != null) return;
+
+  const { data: mine } = await supabase
+    .from("banks")
+    .select("queue_position")
+    .not("queue_position", "is", null);
+  const maxPos = Math.max(0, ...(mine ?? []).map((b) => (b.queue_position as number) ?? 0));
+  await supabase.from("banks").update({ queue_position: maxPos + 1 }).eq("id", bankId);
+}
+
 /** Resolves a human display name for the actor for the audit log. */
 async function actorName(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -167,8 +201,12 @@ export async function upsertBank(
   const patch = buildPatch(values);
 
   if (DEMO_MODE) {
-    if (values.id) updateDemoBank(values.id, patch);
-    else addDemoBank({ regulator: null, deleted_at: null, ...patch } as BankFields);
+    if (values.id) {
+      updateDemoBank(values.id, patch);
+      await autoQueueIfWantToOpen(values.id, patch.status!);
+    } else {
+      addDemoBank({ regulator: null, deleted_at: null, ...patch } as BankFields);
+    }
     revalidate();
     return {};
   }
@@ -193,11 +231,15 @@ export async function upsertBank(
   if (values.id) {
     const { error } = await supabase.from("banks").update(patch).eq("id", values.id);
     if (error) return { error: error.message };
+    await autoQueueIfWantToOpen(values.id, patch.status!);
   } else {
-    const { error } = await supabase
+    const { data: inserted, error } = await supabase
       .from("banks")
-      .insert({ regulator: null, ...patch, user_id: user.id });
+      .insert({ regulator: null, ...patch, user_id: user.id })
+      .select("id")
+      .single();
     if (error) return { error: error.message };
+    if (inserted) await autoQueueIfWantToOpen(inserted.id as string, patch.status!);
 
     // For a new bank with a cert, add it (as untracked) to every other user who doesn't have it yet.
     if (patch.cert != null) {
@@ -302,6 +344,7 @@ export async function setBankStatus(
 ): Promise<{ error?: string }> {
   if (DEMO_MODE) {
     updateDemoBank(id, { status });
+    await autoQueueIfWantToOpen(id, status);
     revalidate();
     return {};
   }
@@ -313,6 +356,7 @@ export async function setBankStatus(
   if (!user) return { error: "You are not signed in." };
 
   const { error } = await supabase.from("banks").update({ status }).eq("id", id);
+  if (!error) await autoQueueIfWantToOpen(id, status);
   if (error) return { error: error.message };
 
   revalidate();

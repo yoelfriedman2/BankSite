@@ -152,8 +152,10 @@ just `institutions`. New "Refresh branch locations" button added to
 **Built two working directories, deliberately**: the user has other sessions
 active in the main checkout, so this was built in a separate `git worktree`
 (`../Bank-Website-roadtrip`, branch `feature/road-trip-planner`) to avoid
-touching any files those sessions had modified. Left as an uncommitted-to-main
-branch — not merged/pushed to `main` yet, pending the user's go-ahead.
+touching any files those sessions had modified, then merged into `main` and
+pushed once the build was clean — the migration got renumbered 0028 → 0030
+in the process since 0028/0029 were claimed by the monthly-fee work below
+while this was in flight.
 
 **Owner-only on purpose, per explicit request**: gated exactly like `/admin`
 — `ownerOnly: true` on both nav entries (`SideNav.tsx`/`TopNav.tsx`) plus a
@@ -171,6 +173,60 @@ interactive/mobile browser testing was **not** done — the sandboxed browser
 tool couldn't reach localhost on this machine, and the tab-based preview tool
 only runs the main directory's server, which had other sessions' uncommitted
 work. Click through by hand before opening this up.
+
+**2026-07-05 (evening — bug batch + monthly fee)** — A round of user-reported
+bugs and small features, all shipped together:
+- **Monthly fee auto-deduction** (migration 0029, `accounts.monthly_fee` /
+  `monthly_fee_day` / `monthly_fee_last_charged_on`): set an amount + day of
+  month in the account editor and it's deducted automatically from then on,
+  logged as an `account_balance_history` row (reason "monthly fee"). Logic
+  lives in `lib/monthlyFee.ts` (`isMonthlyFeeDue`, `skipCurrentMonthIfPast`) —
+  pure/unit-testable on purpose, since this touches money. Rides the existing
+  daily reminders cron (`api/cron/reminders/route.ts`), self-heals if the cron
+  misses the exact day (checks "day has passed AND not charged this calendar
+  month yet"), and skips a backdated charge for the current month if the fee
+  is first configured after its day has already passed — `upsertAccount` in
+  `app/(app)/accounts/actions.ts` only recomputes that skip when the fee
+  amount/day actually changed, never on an unrelated field edit (so a real
+  pending charge can't get silently suppressed). `monthly_fee_last_charged_on`
+  is never exposed in the form — cron-only field.
+- **Needs attention shows why, and a real count-mismatch bug fixed**: added
+  `getAttentionReasons()` to `lib/dormancy.ts` as the single source of truth
+  (replacing separate ad-hoc logic in the dashboard and `needsAttention()`).
+  The dashboard previously pushed one array entry *per matched condition*
+  (could double-count an account with two problems) while the Accounts page
+  counted unique accounts — the two could disagree. Now both use the same
+  per-account reason list. `AccountsClient.tsx` shows a colored "why" bubble
+  (same color as the urgency level) on every flagged row, mobile and desktop.
+- **Up next auto-queue**: marking a bank "Want to open" (via the status
+  dropdown, the bank drawer, or import) now auto-assigns a `queue_position` if
+  it doesn't have one — `autoQueueIfWantToOpen()` in `app/(app)/banks/
+  actions.ts`, called from `setBankStatus` and `upsertBank`. Only ever adds a
+  position, never removes one. Also added a one-click "Add to queue" button
+  (untracked banks only) on `BanksClient.tsx`, both list views.
+- **Address change is now per (bank, holder)** (migration 0028, added
+  `address_campaign_items.holder`): previously one checklist item merged every
+  holder at a bank into one checkbox, even though holders usually have
+  separate logins. Now one item per distinct (bank, holder) pair. A campaign
+  started *before* this migration keeps its old per-bank shape — cancel and
+  restart it after the migration runs to get per-holder items. (The Cancel
+  button already existed; no change needed there.)
+- **Activity logging consolidated**: the one-click "log activity today" button
+  on the Accounts list had no type selector (only the account editor's
+  activity-history section did). Replaced it with a small popover
+  (`QuickLogButton` in `AccountsClient.tsx`) so picking a type takes one extra
+  click instead of requiring the full editor. `logActivityToday()` now accepts
+  an optional `ActivityType`.
+- **FDIC sync assets bug**: it flagged an asset update whenever the raw number
+  differed at all, even if `formatAssets()` would render current and proposed
+  identically (rounding noise on a $100M+ institution). Now compares the
+  *formatted* values in `fdicCheck()` (`app/(app)/fdic-sync/actions.ts`).
+- **Updates page mobile layout**: Activity and What's new no longer stack
+  (forcing a long scroll past Activity to reach What's new) — under `md`,
+  `UpdatesClient.tsx` shows a tab switcher between the two instead.
+- Defensive: added `export const dynamic = "force-dynamic"` to the dashboard,
+  Accounts, and Banks pages, matching the pattern already used on
+  Updates/Admin/FDIC-sync.
 
 **2026-07-05 (later — corrections from feedback)** — Two things from earlier
 today got user feedback and were corrected:

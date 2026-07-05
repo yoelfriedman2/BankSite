@@ -8,13 +8,13 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
   role toggle on Admin → Users. Until then: the owner still has full apply access (that check
   doesn't depend on the column), the Users page still works normally, and toggling the role for
   someone else shows a friendly "run the migration" message instead of a crash.
-- Run migration **0030_bank_branches.sql** (built on the `feature/road-trip-planner` branch, in
-  a separate worktree at `../Bank-Website-roadtrip` so it wouldn't collide with other in-progress
-  sessions on `main`). Adds `bank_branches` (shared, by cert — office address + lat/lng). After
-  running it, go to `/fdic-sync` and click **"Refresh branch locations"** once to populate it —
-  the road trip planner has nothing to show until that's been run at least once.
+- Run migration **0030_bank_branches.sql** (renumbered from 0028 — that slot and 0029 were taken
+  by the address-change/monthly-fee migrations below while this was in flight on its own branch).
+  Adds `bank_branches` (shared, by cert — office address + lat/lng). After running it, go to
+  `/fdic-sync` and click **"Refresh branch locations"** once to populate it — the road trip
+  planner has nothing to show until that's been run at least once.
 
-## Built, pending review: Road trip planner (owner-only for now)
+## Live (owner-only for now): Road trip planner
 
 New page `/road-trip`: pick must-visit banks, set a day (start/end time, minutes per bank,
 detour radius, round-trip or not), and it shows every other tracked bank within range ranked by
@@ -42,6 +42,13 @@ reach localhost on this machine (`ERR_CONNECTION_REFUSED`), and the tab-based pr
 locked to the main working directory, which had other sessions' uncommitted changes it shouldn't
 touch. Worth clicking through by hand (must-visit picker, map pins, add/remove candidates,
 mobile width) before flipping it open to everyone.
+
+## Live: address change per holder + monthly fee
+
+Migrations **0028_address_change_per_holder.sql** and **0029_monthly_fee.sql** confirmed run
+(2026-07-05). If an address change was already in progress before 0028 ran, it was created under
+the old per-bank shape and won't retroactively split into per-holder items — cancel and restart it
+(Cancel button on `/address-change`) to get the new per-holder checklist.
 
 ## Live: Up next queue
 

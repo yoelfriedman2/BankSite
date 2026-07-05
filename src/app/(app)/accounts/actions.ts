@@ -15,6 +15,7 @@ import {
   type AccountFields,
 } from "@/lib/demo";
 import type { Account, ActivityType } from "@/lib/types";
+import { skipCurrentMonthIfPast } from "@/lib/monthlyFee";
 
 export type AccountFormValues = {
   id?: string;
@@ -34,6 +35,8 @@ export type AccountFormValues = {
   password: string;
   access_notes: string;
   activity_log: { date: string; note: string; type?: ActivityType | null }[];
+  monthly_fee: string;
+  monthly_fee_day: string;
 };
 
 function text(v: string): string | null {
@@ -53,7 +56,21 @@ function integer(v: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function buildPatch(values: AccountFormValues): Omit<AccountFields, "deleted_at" | "last_check_number"> {
+/** Requires both fee amount and day together — a lone value either way is
+ *  treated as "not configured" rather than left in a half-set state that the
+ *  cron would misread. Day is clamped to 1-28 (matches the DB check
+ *  constraint) so every month has that day, including February. */
+function monthlyFeeFields(values: AccountFormValues): { monthly_fee: number | null; monthly_fee_day: number | null } {
+  const fee = decimal(values.monthly_fee);
+  const rawDay = integer(values.monthly_fee_day);
+  const day = rawDay != null ? Math.min(28, Math.max(1, rawDay)) : null;
+  if (fee == null || fee <= 0 || day == null) return { monthly_fee: null, monthly_fee_day: null };
+  return { monthly_fee: fee, monthly_fee_day: day };
+}
+
+function buildPatch(
+  values: AccountFormValues,
+): Omit<AccountFields, "deleted_at" | "last_check_number" | "monthly_fee_last_charged_on"> {
   const log = (values.activity_log ?? [])
     .filter((e) => e.date)
     .map((e) => ({
@@ -84,10 +101,13 @@ function buildPatch(values: AccountFormValues): Omit<AccountFields, "deleted_at"
     password: text(values.password),
     access_notes: text(values.access_notes),
     activity_log: log,
+    ...monthlyFeeFields(values),
   };
 }
 
-function fieldsFromAccount(a: Account): Omit<AccountFields, "deleted_at" | "last_check_number"> {
+function fieldsFromAccount(
+  a: Account,
+): Omit<AccountFields, "deleted_at" | "last_check_number" | "monthly_fee" | "monthly_fee_day" | "monthly_fee_last_charged_on"> {
   return {
     holder: a.holder,
     account_type: a.account_type,
@@ -123,10 +143,27 @@ export async function upsertAccount(
 
   if (DEMO_MODE) {
     const demoBank = getDemoBanks().find((b) => b.id === values.bank_id);
+    const now = new Date();
+    const monthlyFeeLastChargedOn =
+      patch.monthly_fee != null && patch.monthly_fee_day != null
+        ? skipCurrentMonthIfPast(patch.monthly_fee_day, now)
+        : null;
     if (values.id) {
-      updateDemoAccount(values.id, patch);
+      const prev = getDemoAccounts().find((a) => a.id === values.id);
+      const feeConfigChanged =
+        (prev?.monthly_fee ?? null) !== patch.monthly_fee ||
+        (prev?.monthly_fee_day ?? null) !== patch.monthly_fee_day;
+      updateDemoAccount(values.id, {
+        ...patch,
+        ...(feeConfigChanged ? { monthly_fee_last_charged_on: monthlyFeeLastChargedOn } : {}),
+      });
     } else {
-      addDemoAccount(values.bank_id, { ...patch, last_check_number: null, deleted_at: null });
+      addDemoAccount(values.bank_id, {
+        ...patch,
+        last_check_number: null,
+        monthly_fee_last_charged_on: monthlyFeeLastChargedOn,
+        deleted_at: null,
+      });
     }
     if (demoBank && PROMOTE_FROM.has(demoBank.status)) {
       updateDemoBank(values.bank_id, { status: "open" });
@@ -142,19 +179,38 @@ export async function upsertAccount(
   if (!user) return { error: "You are not signed in." };
 
   const today = new Date().toISOString().slice(0, 10);
+  const now = new Date();
   if (values.id) {
     // Record a dated balance point when the balance changes, so the
     // "balance as of date" history stays accurate.
     const { data: prev } = await supabase
       .from("accounts")
-      .select("balance")
+      .select("balance, monthly_fee, monthly_fee_day")
       .eq("id", values.id)
       .maybeSingle();
     const oldBalance = prev?.balance != null ? Number(prev.balance) : null;
 
+    // Only touch monthly_fee_last_charged_on when the fee amount/day actually
+    // changed (new config, or edited) — never on an unrelated field edit, or
+    // a real pending charge could get silently suppressed for the month.
+    const feeConfigChanged =
+      (prev?.monthly_fee ?? null) !== patch.monthly_fee ||
+      (prev?.monthly_fee_day ?? null) !== patch.monthly_fee_day;
+    const dbPatch = {
+      ...patch,
+      ...(feeConfigChanged
+        ? {
+            monthly_fee_last_charged_on:
+              patch.monthly_fee != null && patch.monthly_fee_day != null
+                ? skipCurrentMonthIfPast(patch.monthly_fee_day, now)
+                : null,
+          }
+        : {}),
+    };
+
     const { error } = await supabase
       .from("accounts")
-      .update(patch)
+      .update(dbPatch)
       .eq("id", values.id);
     if (error) return { error: error.message };
 
@@ -169,9 +225,18 @@ export async function upsertAccount(
       });
     }
   } else {
+    const monthlyFeeLastChargedOn =
+      patch.monthly_fee != null && patch.monthly_fee_day != null
+        ? skipCurrentMonthIfPast(patch.monthly_fee_day, now)
+        : null;
     const { data: created, error } = await supabase
       .from("accounts")
-      .insert({ ...patch, user_id: user.id, bank_id: values.bank_id })
+      .insert({
+        ...patch,
+        monthly_fee_last_charged_on: monthlyFeeLastChargedOn,
+        user_id: user.id,
+        bank_id: values.bank_id,
+      })
       .select("id")
       .single();
     if (error || !created) return { error: error?.message ?? "Could not add the account." };
@@ -286,6 +351,11 @@ export async function duplicateAccount(
       account_number: null,
       activity_log: [],
       last_check_number: null,
+      // A duplicate is a fresh account — it doesn't inherit the source's
+      // recurring fee terms (or its charge history) automatically.
+      monthly_fee: null,
+      monthly_fee_day: null,
+      monthly_fee_last_charged_on: null,
       deleted_at: null,
     });
     if (demoBank && PROMOTE_FROM.has(demoBank.status)) {
@@ -345,15 +415,17 @@ export async function saveLastCheckNumber(accountId: string, num: number): Promi
   revalidatePath("/banks");
 }
 
-/** One-click: stamp an account's last activity as today (resets dormancy clock). */
+/** Quick log: stamp an account's last activity as today (resets dormancy clock),
+ *  with an optional type — same shape as an entry added from the account editor. */
 export async function logActivityToday(
   id: string,
+  type: ActivityType | null = null,
 ): Promise<{ error?: string }> {
   const today = new Date().toISOString().slice(0, 10);
 
   if (DEMO_MODE) {
     const acc = getDemoAccounts().find((a) => a.id === id);
-    const log = [...(acc?.activity_log ?? []), { date: today, note: null }];
+    const log = [...(acc?.activity_log ?? []), { date: today, note: null, type }];
     updateDemoAccount(id, { last_activity_date: today, activity_log: log });
     revalidate();
     return {};
@@ -371,8 +443,8 @@ export async function logActivityToday(
     .eq("id", id)
     .single();
   const existing =
-    (acc?.activity_log as { date: string; note: string | null }[]) ?? [];
-  const log = [...existing, { date: today, note: null }];
+    (acc?.activity_log as { date: string; note: string | null; type?: ActivityType | null }[]) ?? [];
+  const log = [...existing, { date: today, note: null, type }];
 
   const { error } = await supabase
     .from("accounts")

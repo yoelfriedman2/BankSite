@@ -3,6 +3,7 @@
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { formatAssets } from "@/lib/format";
 
 /* FDIC sync: poll-and-propose only. The check is read-only and available to
    every signed-in user. Applying a change (rename/website/assets/city-state/
@@ -158,7 +159,10 @@ export async function fdicCheck(): Promise<FdicReport> {
     }
 
     const fdicAssets = f.ASSET != null && f.ASSET !== "" ? Number(f.ASSET) : null;
-    if (fdicAssets != null && fdicAssets !== (app.assets != null ? Number(app.assets) : null)) {
+    // Compare the *displayed* value, not the raw number — assets are shown
+    // rounded (formatAssets), so a few thousand dollars of quarterly noise
+    // shouldn't surface a diff that looks identical on screen either way.
+    if (fdicAssets != null && formatAssets(fdicAssets) !== formatAssets(app.assets)) {
       report.assets.push({ cert, name: app.name, current: app.assets, proposed: fdicAssets });
     }
 

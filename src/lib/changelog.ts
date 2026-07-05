@@ -12,6 +12,37 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-07-05",
+    title: "Monthly fees, tracked and deducted automatically",
+    items: [
+      "An account can now have a monthly fee — set the amount and the day of the month it's charged, and it's deducted from the balance automatically from then on, with each charge logged in that account's balance history.",
+    ],
+  },
+  {
+    date: "2026-07-05",
+    title: "Needs attention now tells you why",
+    items: [
+      "Every account flagged as needing attention shows the reason right next to it now — low balance, no activity in months, a CD maturing soon — instead of just a colored dot.",
+      "Fixed a bug where the dashboard's \"Need attention\" count could disagree with the Accounts page's.",
+    ],
+  },
+  {
+    date: "2026-07-05",
+    title: "Banks you want to open queue themselves",
+    items: [
+      "Marking a bank \"Want to open\" now adds it to your Up Next queue automatically — no separate step. There's also a quick \"Add to queue\" button right on the Banks list for untracked banks.",
+    ],
+  },
+  {
+    date: "2026-07-05",
+    title: "Address changes, activity logging, and an FDIC sync fix",
+    items: [
+      "Address-change checklists now have one item per account holder at a bank, not one merged item — since holders usually have separate logins to update separately.",
+      "Logging today's activity from the Accounts list now lets you pick a type, same as the account editor.",
+      "FDIC sync no longer flags an asset update when the new figure would look identical to what's already shown.",
+    ],
+  },
+  {
+    date: "2026-07-05",
     title: "Sort accounts, and tag what kind of activity",
     items: [
       "Accounts can now be sorted by balance (either direction), holder, or type — on top of the existing filters.",

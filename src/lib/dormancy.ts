@@ -1,4 +1,5 @@
 import type { Account } from "./types";
+import { formatCurrency } from "./format";
 
 /**
  * Activity health for an account based on how long since the last activity,
@@ -129,6 +130,55 @@ export function isCdMaturingSoon(
   return daysUntil(account.cd_maturity_date, now) <= withinDays;
 }
 
+/** One reason an account needs attention, with the severity it should display at. */
+export type AttentionReason = { level: "red" | "orange"; text: string };
+
+/** Every reason an account currently needs attention — the single source of
+ *  truth for both the Accounts page and the Dashboard, so the two can never
+ *  disagree on which accounts (or how many) need attention. An account can
+ *  have more than one reason at once (e.g. dormant AND below minimum). */
+export function getAttentionReasons(
+  account: Account,
+  defaultMonths: number,
+  now: Date = new Date(),
+  prefs: AttentionPrefs = DEFAULT_ATTENTION_PREFS,
+): AttentionReason[] {
+  const reasons: AttentionReason[] = [];
+
+  const level = getActivityLevel(account, defaultMonths, now);
+  if (level === "orange" || level === "red") {
+    // getActivityLevel falls back to date_opened when there's no recorded
+    // last_activity_date, so use the same date here for the message.
+    const activityDate = (account.last_activity_date ?? account.date_opened)!;
+    const months = monthsSince(activityDate, now);
+    const sinceOpen = !account.last_activity_date;
+    reasons.push({
+      level,
+      text: `No activity in ${months} month${months === 1 ? "" : "s"}${
+        sinceOpen ? " (since opening)" : ""
+      }`,
+    });
+  }
+  if (prefs.alertNoActivity && hasNoActivityRecorded(account)) {
+    reasons.push({ level: "red", text: "No activity ever recorded — log activity or set a date" });
+  }
+  if (prefs.alertCdMaturity && isCdMaturingSoon(account, 30, now) && account.cd_maturity_date) {
+    const days = daysUntil(account.cd_maturity_date, now);
+    reasons.push({
+      level: "orange",
+      text: days >= 0 ? `CD matures in ${days} days` : "CD has matured",
+    });
+  }
+  if (prefs.alertLowBalance && isBelowMinBalance(account, prefs.minBalance)) {
+    reasons.push({
+      level: "orange",
+      text: `Only ${formatCurrency(account.balance)} in the account — add money to reach the ${formatCurrency(prefs.minBalance)} minimum`,
+    });
+  }
+
+  return reasons;
+}
+
 /** Anything that should surface on the "Needs attention" list. */
 export function needsAttention(
   account: Account,
@@ -136,10 +186,5 @@ export function needsAttention(
   now: Date = new Date(),
   prefs: AttentionPrefs = DEFAULT_ATTENTION_PREFS,
 ): boolean {
-  const level = getActivityLevel(account, defaultMonths, now);
-  if (level === "orange" || level === "red") return true;
-  if (prefs.alertNoActivity && hasNoActivityRecorded(account)) return true;
-  if (prefs.alertLowBalance && isBelowMinBalance(account, prefs.minBalance)) return true;
-  if (prefs.alertCdMaturity && isCdMaturingSoon(account, 30, now)) return true;
-  return false;
+  return getAttentionReasons(account, defaultMonths, now, prefs).length > 0;
 }

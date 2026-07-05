@@ -119,6 +119,9 @@ function blankAccount(): AccountFields {
     access_notes: null,
     activity_log: [],
     last_check_number: null,
+    monthly_fee: null,
+    monthly_fee_day: null,
+    monthly_fee_last_charged_on: null,
     deleted_at: null,
   };
 }
@@ -588,6 +591,9 @@ export function importDemoRows(rows: ImportRow[]): {
         access_notes: null,
         activity_log: [],
         last_check_number: null,
+        monthly_fee: null,
+        monthly_fee_day: null,
+        monthly_fee_last_charged_on: null,
         deleted_at: null,
       });
       accountsAdded++;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search,
@@ -9,20 +9,25 @@ import {
   CalendarCheck,
   Loader2,
   UploadCloud,
+  ChevronDown,
 } from "lucide-react";
 import {
   ACCOUNT_TYPE_LABELS,
+  ACTIVITY_TYPE_LABELS,
   type Account,
   type AccountType,
+  type ActivityType,
 } from "@/lib/types";
 import {
   getActivityLevel,
   isCdMaturingSoon,
   needsAttention,
+  getAttentionReasons,
   monthsSince,
   daysUntil,
   DEFAULT_ATTENTION_PREFS,
   type AttentionPrefs,
+  type AttentionReason,
 } from "@/lib/dormancy";
 import { formatCurrency, formatDateShort, maskAccountNumber } from "@/lib/format";
 import { ActivityDot } from "@/components/badges";
@@ -63,6 +68,98 @@ function sortRows(list: AccountRow[], sortBy: SortKey): AccountRow[] {
     default:
       return sorted.sort((a, b) => a.bankName.localeCompare(b.bankName));
   }
+}
+
+/** Small colored "why" bubble — same color as the Needs attention level it
+ *  belongs to, so it reads as an extension of that signal, not a new one. */
+function AttentionBubble({ reasons }: { reasons: AttentionReason[] }) {
+  if (reasons.length === 0) return null;
+  const worst = reasons.some((r) => r.level === "red") ? "red" : "orange";
+  const text = reasons.map((r) => r.text).join(" · ");
+  return (
+    <span
+      title={text}
+      className={`mt-1 block max-w-[13rem] truncate rounded-full px-2 py-0.5 text-xs font-medium ${
+        worst === "red" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700"
+      }`}
+    >
+      {text}
+    </span>
+  );
+}
+
+/** The one flow for logging activity "as of today" — click, pick a type, done.
+ *  (Logging a *past* date, or editing/removing history, stays in the account
+ *  editor's Activity history section — a different job from this quick log.) */
+function QuickLogButton({
+  pending,
+  onLog,
+}: {
+  pending: boolean;
+  onLog: (type: ActivityType | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative" onClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={pending}
+        className="flex items-center rounded-md p-1.5 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 disabled:opacity-50"
+        title="Log activity today"
+      >
+        {pending ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <>
+            <CalendarCheck className="h-4 w-4" />
+            <ChevronDown className="h-3 w-3" />
+          </>
+        )}
+      </button>
+      {open && (
+        <div className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+          <p className="px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-slate-400">
+            Log today as…
+          </p>
+          {(Object.keys(ACTIVITY_TYPE_LABELS) as ActivityType[]).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onLog(t);
+              }}
+              className="block w-full px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+            >
+              {ACTIVITY_TYPE_LABELS[t]}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onLog(null);
+            }}
+            className="block w-full border-t border-slate-100 px-3 py-1.5 text-left text-sm text-slate-400 hover:bg-slate-50"
+          >
+            No type
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function CdMaturityCell({ account }: { account: AccountRow }) {
@@ -151,10 +248,10 @@ export function AccountsClient({
   const [logPendingId, setLogPendingId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
-  function handleLogToday(r: AccountRow) {
+  function handleLogToday(r: AccountRow, type: ActivityType | null) {
     setLogPendingId(r.id);
     startTransition(async () => {
-      await logActivityToday(r.id);
+      await logActivityToday(r.id, type);
       setLogPendingId(null);
       router.refresh();
     });
@@ -312,6 +409,7 @@ export function AccountsClient({
         ) : (
           filtered.map((r) => {
             const level = getActivityLevel(r, defaultDormancyMonths);
+            const reasons = getAttentionReasons(r, defaultDormancyMonths, new Date(), attentionPrefs);
             return (
               <div
                 key={r.id}
@@ -327,18 +425,10 @@ export function AccountsClient({
                     {r.bankName}
                   </span>
                   {r.account_type && ACTIVITY_TYPES.includes(r.account_type) && (
-                    <button
-                      onClick={() => handleLogToday(r)}
-                      disabled={logPendingId === r.id}
-                      className="rounded-md p-1.5 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 disabled:opacity-50"
-                      title="Log activity today"
-                    >
-                      {logPendingId === r.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <CalendarCheck className="h-4 w-4" />
-                      )}
-                    </button>
+                    <QuickLogButton
+                      pending={logPendingId === r.id}
+                      onLog={(type) => handleLogToday(r, type)}
+                    />
                   )}
                   <button
                     onClick={() => setEditing(r)}
@@ -364,6 +454,7 @@ export function AccountsClient({
                     {maskAccountNumber(r.account_number)}
                   </div>
                 )}
+                <AttentionBubble reasons={reasons} />
               </div>
             );
           })
@@ -397,6 +488,7 @@ export function AccountsClient({
             ) : (
               filtered.map((r) => {
                 const level = getActivityLevel(r, defaultDormancyMonths);
+                const reasons = getAttentionReasons(r, defaultDormancyMonths, new Date(), attentionPrefs);
                 return (
                   <tr
                     key={r.id}
@@ -407,6 +499,7 @@ export function AccountsClient({
                       {r.bankState && (
                         <div className="text-xs text-slate-400">{r.bankState}</div>
                       )}
+                      <AttentionBubble reasons={reasons} />
                     </td>
                     <td className="px-4 py-3 text-slate-700">
                       {r.holder || <span className="text-slate-300">—</span>}
@@ -462,18 +555,10 @@ export function AccountsClient({
                       <div className="flex items-center justify-end gap-1">
                         {r.account_type &&
                           ACTIVITY_TYPES.includes(r.account_type) && (
-                            <button
-                              onClick={() => handleLogToday(r)}
-                              disabled={logPendingId === r.id}
-                              className="rounded-md p-1.5 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 disabled:opacity-50"
-                              title="Log activity today"
-                            >
-                              {logPendingId === r.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <CalendarCheck className="h-4 w-4" />
-                              )}
-                            </button>
+                            <QuickLogButton
+                              pending={logPendingId === r.id}
+                              onLog={(type) => handleLogToday(r, type)}
+                            />
                           )}
                         <button
                           onClick={() => setEditing(r)}

@@ -49,6 +49,8 @@ function toValues(
       note: e.note ?? "",
       type: e.type ?? null,
     })),
+    monthly_fee: a?.monthly_fee != null ? String(a.monthly_fee) : "",
+    monthly_fee_day: a?.monthly_fee_day != null ? String(a.monthly_fee_day) : "",
   };
 }
 
@@ -236,6 +238,40 @@ export function AccountModal({
               value={values.balance}
               onChange={(e) => set("balance", e.target.value)}
             />
+          </div>
+
+          <div>
+            <label className={labelClass}>Monthly fee (optional)</label>
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <input
+                  aria-label="Monthly fee amount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="Amount"
+                  className={inputClass}
+                  value={values.monthly_fee}
+                  onChange={(e) => set("monthly_fee", e.target.value)}
+                />
+              </div>
+              <div className="w-32">
+                <input
+                  aria-label="Day of month charged"
+                  type="number"
+                  min="1"
+                  max="28"
+                  placeholder="Day (1-28)"
+                  className={inputClass}
+                  value={values.monthly_fee_day}
+                  onChange={(e) => set("monthly_fee_day", e.target.value)}
+                />
+              </div>
+            </div>
+            <p className="mt-1 text-xs text-slate-400">
+              Set both to auto-deduct this amount from the balance every month on that
+              day. Leave either blank to turn it off.
+            </p>
           </div>
 
           <div>
