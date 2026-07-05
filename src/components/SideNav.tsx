@@ -43,24 +43,19 @@ const GROUPS: NavGroup[] = [
     label: "Banks & accounts",
     links: [
       { href: "/banks", label: "Banks", icon: Landmark, tour: "banks" },
-      { href: "/up-next", label: "Up next", icon: ListTodo, tour: "up-next" },
       { href: "/accounts", label: "Accounts", icon: CreditCard, tour: "accounts" },
-      { href: "/fdic-sync", label: "FDIC sync", icon: RefreshCw, tour: "fdic-sync" },
-    ],
-  },
-  {
-    label: "Money",
-    links: [
-      { href: "/money", label: "Money moved", icon: ArrowLeftRight, tour: "money" },
-      { href: "/balances", label: "Balance by date", icon: CalendarSearch, tour: "balances" },
+      { href: "/up-next", label: "Up next", icon: ListTodo, tour: "up-next" },
     ],
   },
   {
     label: "Tools",
     links: [
+      { href: "/money", label: "Money moved", icon: ArrowLeftRight, tour: "money" },
+      { href: "/balances", label: "Balance by date", icon: CalendarSearch, tour: "balances" },
       { href: "/calendar", label: "Calendar", icon: CalendarDays, tour: "calendar" },
       { href: "/checks", label: "Print Checks", icon: Printer, tour: "checks" },
       { href: "/address-change", label: "Address change", icon: MapPin, tour: "address-change" },
+      { href: "/fdic-sync", label: "FDIC sync", icon: RefreshCw, tour: "fdic-sync" },
     ],
   },
   {
