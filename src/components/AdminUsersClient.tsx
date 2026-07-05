@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ShieldCheck, Trash2, Loader2, AlertTriangle } from "lucide-react";
+import Link from "next/link";
+import { ShieldCheck, Trash2, Loader2, AlertTriangle, RefreshCw } from "lucide-react";
 import { deleteUserById, type AdminUser } from "@/app/(app)/admin/actions";
 
 function fmtDate(iso: string | null) {
@@ -50,15 +51,24 @@ export function AdminUsersClient({
 
   return (
     <div className="max-w-4xl">
-      <div className="mb-6">
-        <h1 className="flex items-center gap-2 text-2xl font-semibold text-slate-900">
-          <ShieldCheck className="h-6 w-6 text-amber-500" />
-          Users
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Everyone with access, and what they&apos;ve saved. Deleting a user permanently
-          removes their account and all their data.
-        </p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-semibold text-slate-900">
+            <ShieldCheck className="h-6 w-6 text-amber-500" />
+            Users
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Everyone with access, and what they&apos;ve saved. Deleting a user permanently
+            removes their account and all their data.
+          </p>
+        </div>
+        <Link
+          href="/admin/fdic"
+          className="flex shrink-0 items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+        >
+          <RefreshCw className="h-4 w-4" />
+          FDIC sync
+        </Link>
       </div>
 
       {loadError && (
