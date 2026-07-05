@@ -13,6 +13,7 @@ import {
   Printer,
   MapPin,
   RefreshCw,
+  Route,
   ListTodo,
   FileText,
   Percent,
@@ -258,6 +259,24 @@ const TOPICS: Topic[] = [
     tips: [
       "Only the owner can grant the FDIC admin role, from Admin → Users. Everyone else sees the same results with a lock icon instead of an Accept button.",
       "A closed bank can be removed from the database, but never for someone who still has an active account there — their copy is left untouched.",
+    ],
+  },
+  {
+    id: "road-trip",
+    icon: Route,
+    title: "Road trip planner",
+    blurb: "Plan a driving day (or several) to open banks in person.",
+    points: [
+      "Pick the banks you must visit, then see every other tracked bank nearby, ranked by how much extra driving it adds",
+      "Set a time window, minutes per bank, and how many days — the itinerary splits into days automatically",
+      "Ends in a timed stop-by-stop plan plus a Google Maps link for actual driving",
+      "Save a trip to come back to later, or share it so anyone in the family can reuse it",
+    ],
+    tips: [
+      "If a bank has more than one nearby office, the planner picks the closest one by default — click \"N locations\" on any stop to choose a different branch.",
+      "Search \"Add more banks nearby\" for a specific bank by name to add it regardless of distance, not just from the ranked list.",
+      "You can paste in a Google Maps link from a road trip you already took, and it'll try to match the stops back to your tracked banks automatically.",
+      "A shared trip is read-only for everyone but the person who saved it — loading one just makes your own private copy.",
     ],
   },
   {

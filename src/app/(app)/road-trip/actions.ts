@@ -14,17 +14,14 @@ import {
 } from "@/lib/demo";
 import type { Bank, BankStatus, OpenMethod, Priority } from "@/lib/types";
 
-/* Road trip planner: owner-only for now (see CLAUDE.md rollout note) — gated
-   the same way as /admin. Flip by removing the requireOwner() check below and
-   the `ownerOnly` flag on the nav entries once it's ready for every user. */
-async function requireOwner(): Promise<User | null> {
+/* Road trip planner: open to every signed-in user (was owner-only while
+   testing — see CLAUDE.md history). */
+async function currentUser(): Promise<User | null> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const adminEmail = process.env.ADMIN_EMAIL;
-  if (!user || !adminEmail) return null;
-  return user.email?.toLowerCase() === adminEmail.toLowerCase() ? user : null;
+  return user;
 }
 
 export type BranchOption = {
@@ -114,14 +111,14 @@ function isMissingSchema(message: string | undefined): boolean {
 }
 
 /** Loads every bank that has a synced branch location, for the planner's
- *  must-visit picker, candidate list, and map. Owner-only for now. */
+ *  must-visit picker, candidate list, and map. */
 export async function getRoadTripData(): Promise<RoadTripData> {
   if (DEMO_MODE) {
     const banks = toRoadTripBanks(getDemoBanks(), groupByCert(getDemoBranches()));
     return { banks, states: uniqueStates(banks) };
   }
 
-  const user = await requireOwner();
+  const user = await currentUser();
   if (!user) return { ...EMPTY, error: "Not authorized." };
 
   const supabase = await createClient();
@@ -213,7 +210,7 @@ export async function listTrips(): Promise<{ trips: SavedTripSummary[]; error?: 
   if (DEMO_MODE) {
     return { trips: getDemoTrips().map((t) => ({ ...summarize(t), mine: true })) };
   }
-  const user = await requireOwner();
+  const user = await currentUser();
   if (!user) return { ...EMPTY_TRIPS, error: "Not authorized." };
 
   const supabase = await createClient();
@@ -255,7 +252,7 @@ export async function getTripPlan(id: string): Promise<{ plan?: RoadTripPlan; ti
     if (!trip) return { error: "Trip not found." };
     return { plan: trip.plan, title: trip.title };
   }
-  const user = await requireOwner();
+  const user = await currentUser();
   if (!user) return { error: "Not authorized." };
 
   const supabase = await createClient();
@@ -283,7 +280,7 @@ export async function saveTrip(input: {
     return { id };
   }
 
-  const user = await requireOwner();
+  const user = await currentUser();
   if (!user) return { error: "Not authorized." };
   const supabase = await createClient();
 
@@ -318,7 +315,7 @@ export async function deleteTrip(id: string): Promise<{ error?: string }> {
     revalidatePath("/road-trip");
     return {};
   }
-  const user = await requireOwner();
+  const user = await currentUser();
   if (!user) return { error: "Not authorized." };
   const supabase = await createClient();
   const { error } = await supabase.from("road_trips").delete().eq("id", id);

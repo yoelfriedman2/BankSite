@@ -129,6 +129,19 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-05 (road trip planner — opened to everyone)** — The road trip
+planner is no longer owner-only: removed `ownerOnly` from its two nav entries
+(`SideNav.tsx`/`TopNav.tsx`) and swapped the `requireOwner()` gates in
+`road-trip/actions.ts`/`page.tsx` for a plain signed-in check (`currentUser()`,
+matching the rest of the app). Added the changelog entry and Guide topic that
+were deliberately withheld while it was admin-only tooling — see the standing
+rule in this file's "Standing instructions" section. The "Refresh branch
+locations" button is still gated separately (FDIC admin/owner only, via
+`canApplyFdicChanges` in `fdic-sync/actions.ts`) since that writes shared
+reference data — unrelated to who can use the planner itself. Saved trips'
+public/private split (RLS on `road_trips`) is meaningful for the first time
+now that more than one person can reach the page.
+
 **2026-07-05 (road trip planner — multi-day, branch picker, saved trips)** —
 Big second round on the road trip planner, all from chat feedback:
 

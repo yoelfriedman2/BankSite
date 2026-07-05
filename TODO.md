@@ -14,7 +14,7 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
   doesn't depend on the column), the Users page still works normally, and toggling the role for
   someone else shows a friendly "run the migration" message instead of a crash.
 
-## Live (owner-only for now): Road trip planner
+## Live (open to everyone, 2026-07-05): Road trip planner
 
 Migrations **0030_bank_branches.sql** and **0032_road_trips.sql** confirmed applied (verified live
 via read-only checks, 2026-07-05 — `bank_branches` has 405 of 426 banks synced, `road_trips` is
@@ -30,13 +30,15 @@ more than ~10 stops. Map is Leaflet + OpenStreetMap (also free, no key) — adde
 `@types/leaflet` as new deps. Drive times are estimated from great-circle distance (no routing
 API), so treat them as planning estimates, not exact ETAs.
 
-Gated exactly like `/admin` (owner-only via `ADMIN_EMAIL`, both the nav entry and the page/action
-itself) **on purpose, per the owner's request** — the plan is to test it live first, then open it
-to everyone by removing the `ownerOnly` flag on the two nav entries (`SideNav.tsx`, `TopNav.tsx`)
-and the `requireOwner()` gates in `road-trip/actions.ts` and `road-trip/page.tsx`. Per the
-standing changelog/Guide rule (admin-only tooling doesn't get advertised there), **no changelog or
-Guide entry was added yet** — add both once this is opened up to everyone, since at that point it
-stops being admin-only tooling and becomes a real user-facing feature.
+Was owner-only while testing (gated like `/admin`); opened to every signed-in user on 2026-07-05
+by removing the `ownerOnly` flag on the two nav entries (`SideNav.tsx`, `TopNav.tsx`) and swapping
+the `requireOwner()` gates in `road-trip/actions.ts`/`road-trip/page.tsx` for a plain signed-in
+check (`currentUser()`). Now that it's a real user-facing feature, added a changelog entry
+(`lib/changelog.ts`) and a Guide topic (`GuideClient.tsx`) — both were withheld until now per the
+standing rule that owner-only tooling doesn't get advertised there. The "Refresh branch locations"
+button stays gated separately (FDIC admin / owner only, via `canApplyFdicChanges`) since that's a
+shared-data write, unrelated to who can use the planner itself. Public/private trip sharing (RLS on
+`road_trips`) now means something for the first time, since more than one person can reach the page.
 
 Verification note: math-checked (haversine/cheapest-insertion/itinerary logic verified against
 hand-computed expectations), and since fully click-tested via DEMO_MODE (must-visit picker, search-

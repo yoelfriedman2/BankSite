@@ -8,9 +8,6 @@ import { RoadTripClient } from "@/components/RoadTripClient";
 export const dynamic = "force-dynamic";
 
 export default async function RoadTripPage() {
-  // Owner-only for now (see CLAUDE.md rollout note) — same gate as /admin,
-  // except demo mode is allowed through so the feature can still be
-  // click-tested via the standard DEMO_MODE preview flow.
   let canRefreshBranches = true;
   if (!DEMO_MODE) {
     const supabase = await createClient();
@@ -18,9 +15,6 @@ export default async function RoadTripPage() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) redirect("/login");
-    const adminEmail = process.env.ADMIN_EMAIL;
-    const isOwner = !!adminEmail && user.email?.toLowerCase() === adminEmail.toLowerCase();
-    if (!isOwner) redirect("/");
     canRefreshBranches = (await getFdicPermissions()).canApply;
   } else {
     canRefreshBranches = !!getDemoProfile().is_fdic_admin;

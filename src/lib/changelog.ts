@@ -12,6 +12,16 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-07-05",
+    title: "Plan a road trip to open banks in person",
+    items: [
+      "New Road trip page: pick the banks you must visit, set your day (or several days), and it shows every other tracked bank nearby ranked by how much extra driving it actually adds — with a timed itinerary and a Google Maps link to drive it.",
+      "Pick a specific branch location per bank if a bank has more than one office nearby, or let it default to the closest one automatically.",
+      "Save a trip to come back to later, or share it so the rest of the family can see and reuse it — private by default.",
+      "Import a road trip you already took from a Google Maps link, and it tries to match the stops back to your tracked banks automatically.",
+    ],
+  },
+  {
+    date: "2026-07-05",
     title: "All your documents in one place",
     items: [
       "New Documents page lists every statement, photo, and scan you've uploaded across every account, grouped by bank — instead of having to open each account's editor to see what's there.",

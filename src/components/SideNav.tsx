@@ -61,7 +61,7 @@ const GROUPS: NavGroup[] = [
       { href: "/checks", label: "Print Checks", icon: Printer, tour: "checks" },
       { href: "/address-change", label: "Address change", icon: MapPin, tour: "address-change" },
       { href: "/fdic-sync", label: "FDIC sync", icon: RefreshCw, tour: "fdic-sync" },
-      { href: "/road-trip", label: "Road trip", icon: Route, tour: "road-trip", ownerOnly: true },
+      { href: "/road-trip", label: "Road trip", icon: Route, tour: "road-trip" },
     ],
   },
   {
