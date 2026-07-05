@@ -456,24 +456,28 @@ function RowActions({
       </span>
     );
   }
+  // Without the FDIC-admin role this is a view-only report — no Ignore either,
+  // since dismissing is a decision about the data, and only an admin should
+  // be able to make that call (and it shouldn't look like nothing needs doing).
+  if (!canApply) {
+    return (
+      <span className="flex shrink-0 items-center gap-1 text-xs text-slate-300" title="FDIC admin only">
+        <Lock className="h-3 w-3" />
+      </span>
+    );
+  }
   return (
     <div className="flex shrink-0 flex-col items-end gap-1">
       <div className="flex items-center gap-2">
-        {canApply ? (
-          <button
-            type="button"
-            onClick={onAccept}
-            disabled={status === "applying"}
-            className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-          >
-            {status === "applying" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-            Accept
-          </button>
-        ) : (
-          <span className="flex items-center gap-1 text-xs text-slate-300" title="FDIC admin only">
-            <Lock className="h-3 w-3" />
-          </span>
-        )}
+        <button
+          type="button"
+          onClick={onAccept}
+          disabled={status === "applying"}
+          className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+        >
+          {status === "applying" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+          Accept
+        </button>
         <button
           type="button"
           onClick={onDismiss}
