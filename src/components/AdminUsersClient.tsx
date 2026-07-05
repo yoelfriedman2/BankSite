@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
-import { ShieldCheck, Trash2, Loader2, AlertTriangle, RefreshCw } from "lucide-react";
-import { deleteUserById, type AdminUser } from "@/app/(app)/admin/actions";
+import { ShieldCheck, Trash2, Loader2, AlertTriangle } from "lucide-react";
+import { deleteUserById, setFdicAdminRole, type AdminUser } from "@/app/(app)/admin/actions";
 
 function fmtDate(iso: string | null) {
   if (!iso) return "—";
@@ -28,6 +27,7 @@ export function AdminUsersClient({
   const [confirmText, setConfirmText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [deleting, startTransition] = useTransition();
+  const [roleBusyId, setRoleBusyId] = useState<string | null>(null);
 
   function close() {
     setTarget(null);
@@ -49,26 +49,34 @@ export function AdminUsersClient({
     });
   }
 
+  function toggleFdicAdmin(u: AdminUser) {
+    const next = !u.is_fdic_admin;
+    setRoleBusyId(u.id);
+    setList((l) => l.map((x) => (x.id === u.id ? { ...x, is_fdic_admin: next } : x)));
+    setFdicAdminRole(u.id, next)
+      .then((res) => {
+        if (res?.error) {
+          setList((l) => l.map((x) => (x.id === u.id ? { ...x, is_fdic_admin: !next } : x)));
+        }
+      })
+      .catch(() => {
+        setList((l) => l.map((x) => (x.id === u.id ? { ...x, is_fdic_admin: !next } : x)));
+      })
+      .finally(() => setRoleBusyId(null));
+  }
+
   return (
     <div className="max-w-4xl">
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-semibold text-slate-900">
-            <ShieldCheck className="h-6 w-6 text-amber-500" />
-            Users
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Everyone with access, and what they&apos;ve saved. Deleting a user permanently
-            removes their account and all their data.
-          </p>
-        </div>
-        <Link
-          href="/admin/fdic"
-          className="flex shrink-0 items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-        >
-          <RefreshCw className="h-4 w-4" />
-          FDIC sync
-        </Link>
+      <div className="mb-6">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold text-slate-900">
+          <ShieldCheck className="h-6 w-6 text-amber-500" />
+          Users
+        </h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Everyone with access, and what they&apos;ve saved. Deleting a user permanently
+          removes their account and their private data — their public community notes
+          stay, credited to their name.
+        </p>
       </div>
 
       {loadError && (
@@ -85,6 +93,7 @@ export function AdminUsersClient({
               <th className="px-3 py-3 text-right font-medium">Notes</th>
               <th className="px-3 py-3 text-right font-medium">Statuses</th>
               <th className="px-3 py-3 font-medium">Last seen</th>
+              <th className="px-3 py-3 text-center font-medium" title="Can apply FDIC sync changes">FDIC admin</th>
               <th className="px-3 py-3"></th>
             </tr>
           </thead>
@@ -110,6 +119,17 @@ export function AdminUsersClient({
                   <td className="px-3 py-3 text-right tabular-nums text-slate-700">{u.notes}</td>
                   <td className="px-3 py-3 text-right tabular-nums text-slate-700">{u.banks_with_status}</td>
                   <td className="px-3 py-3 text-slate-500">{fmtDate(u.last_sign_in_at)}</td>
+                  <td className="px-3 py-3 text-center">
+                    <label className="inline-flex cursor-pointer items-center" title="Can accept/apply FDIC sync changes">
+                      <input
+                        type="checkbox"
+                        checked={u.is_fdic_admin}
+                        disabled={roleBusyId === u.id}
+                        onChange={() => toggleFdicAdmin(u)}
+                        className="h-4 w-4 rounded border-slate-300 accent-amber-600 disabled:opacity-50"
+                      />
+                    </label>
+                  </td>
                   <td className="px-3 py-3 text-right">
                     {!isSelf && (
                       <button
@@ -127,7 +147,7 @@ export function AdminUsersClient({
             })}
             {list.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400">
+                <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-400">
                   No users.
                 </td>
               </tr>
@@ -151,8 +171,9 @@ export function AdminUsersClient({
             </div>
             <p className="mt-1 text-sm text-slate-500">
               Permanently deletes <span className="font-medium text-slate-700">{target.email}</span>{" "}
-              and all their data ({target.accounts} accounts, {target.documents} documents,{" "}
-              {target.notes} notes). Their community notes will be removed too. This cannot be undone.
+              and all their private data ({target.accounts} accounts, {target.documents} documents).
+              Their {target.notes} community note{target.notes === 1 ? "" : "s"} stay, still credited
+              to their name. This cannot be undone.
             </p>
 
             <label className="mt-4 block text-xs font-medium text-slate-500">

@@ -275,6 +275,7 @@ function createInitialStore(): DemoStore {
     alert_low_balance: true,
     alert_cd_maturity: true,
     min_balance: 100,
+    is_fdic_admin: true,
     banks_seeded: true,
     onboarded: true,
     created_at: new Date().toISOString(),

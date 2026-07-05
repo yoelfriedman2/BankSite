@@ -167,6 +167,8 @@ export interface Profile {
   alert_low_balance: boolean;
   alert_cd_maturity: boolean;
   min_balance: number;
+  // Scoped role: allowed to apply (not just check) FDIC sync changes.
+  is_fdic_admin: boolean;
   banks_seeded: boolean;
   onboarded: boolean;
   created_at: string;

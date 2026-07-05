@@ -4,19 +4,36 @@ import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-/* FDIC sync: poll-and-propose only. The check NEVER writes anything; each
-   apply* action changes exactly one proposed item (across all users' copies
-   of that cert) after the owner clicks Accept. Banks are never deleted. */
+/* FDIC sync: poll-and-propose only. The check is read-only and available to
+   every signed-in user. Applying a change (rename/website/assets/city-state/
+   delete-closed-bank) requires the "FDIC admin" role — the owner always has
+   it; the owner grants it to specific other users from Admin -> Users. */
 
-/** Owner gate — same rule as the Admin page (ADMIN_EMAIL). */
-async function requireOwner(): Promise<User | null> {
+async function currentUser(): Promise<User | null> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  return user;
+}
+
+/** True if the current user may APPLY FDIC sync changes: the owner (ADMIN_EMAIL)
+ *  always can; anyone else needs profiles.is_fdic_admin = true. */
+async function canApplyFdicChanges(user: User | null): Promise<boolean> {
+  if (!user) return false;
   const adminEmail = process.env.ADMIN_EMAIL;
-  if (!user || !adminEmail) return null;
-  return user.email?.toLowerCase() === adminEmail.toLowerCase() ? user : null;
+  if (adminEmail && user.email?.toLowerCase() === adminEmail.toLowerCase()) return true;
+  const admin = createAdminClient();
+  const { data } = await admin.from("profiles").select("is_fdic_admin").eq("id", user.id).maybeSingle();
+  return !!data?.is_fdic_admin;
+}
+
+/** For the page to show/hide Accept buttons. Real enforcement happens inside
+ *  each apply* action below — never trust this alone. */
+export async function getFdicPermissions(): Promise<{ signedIn: boolean; canApply: boolean }> {
+  const user = await currentUser();
+  if (!user) return { signedIn: false, canApply: false };
+  return { signedIn: true, canApply: await canApplyFdicChanges(user) };
 }
 
 export type FdicClosed = { cert: number; name: string; state: string | null; endDate: string };
@@ -80,10 +97,11 @@ async function fetchFdic(certs: number[]): Promise<Map<number, FdicRow>> {
 }
 
 /** Pulls current FDIC data for every cert and reports the differences.
- *  Read-only — nothing is written until an item is individually accepted. */
+ *  Read-only — available to any signed-in user. Nothing is written until an
+ *  item is individually accepted by someone with the FDIC-admin role. */
 export async function fdicCheck(): Promise<FdicReport> {
-  const owner = await requireOwner();
-  if (!owner) return { ...EMPTY, error: "Not authorized." };
+  const user = await currentUser();
+  if (!user) return { ...EMPTY, error: "Not authorized." };
 
   const admin = createAdminClient();
   const allBanks: { cert: number; name: string; city: string | null; state: string | null; assets: number | null; website: string | null }[] = [];
@@ -166,8 +184,8 @@ export async function applyFdicRename(
   cert: number,
   proposedName: string,
 ): Promise<{ error?: string }> {
-  const owner = await requireOwner();
-  if (!owner) return { error: "Not authorized." };
+  const user = await currentUser();
+  if (!(await canApplyFdicChanges(user))) return { error: "Not authorized." };
   const admin = createAdminClient();
   const { error } = await admin
     .from("banks")
@@ -184,8 +202,8 @@ export async function applyFdicWebsite(
   cert: number,
   url: string,
 ): Promise<{ error?: string }> {
-  const owner = await requireOwner();
-  if (!owner) return { error: "Not authorized." };
+  const user = await currentUser();
+  if (!(await canApplyFdicChanges(user))) return { error: "Not authorized." };
 
   const clean = cleanUrl(url);
   let ok = false;
@@ -214,8 +232,8 @@ export async function applyFdicWebsite(
 export async function applyFdicAssets(
   pairs: { cert: number; assets: number }[],
 ): Promise<{ applied?: number; error?: string }> {
-  const owner = await requireOwner();
-  if (!owner) return { error: "Not authorized." };
+  const user = await currentUser();
+  if (!(await canApplyFdicChanges(user))) return { error: "Not authorized." };
   const admin = createAdminClient();
 
   let applied = 0;
@@ -238,8 +256,8 @@ export async function applyFdicCityState(
   city: string | null,
   state: string | null,
 ): Promise<{ error?: string }> {
-  const owner = await requireOwner();
-  if (!owner) return { error: "Not authorized." };
+  const user = await currentUser();
+  if (!(await canApplyFdicChanges(user))) return { error: "Not authorized." };
   const patch: Record<string, unknown> = {};
   if (city) patch.city = city;
   if (state) patch.state = String(state).toUpperCase();
@@ -252,4 +270,52 @@ export async function applyFdicCityState(
     .is("deleted_at", null);
   if (error) return { error: error.message };
   return {};
+}
+
+/**
+ * Deletes a closed/merged bank (per FDIC) from the database — but ONLY for
+ * users who have no active accounts there. A user's copy (and any accounts)
+ * is left completely untouched if they hold an account at that bank, so
+ * nobody's real holdings disappear just because the bank's status is stale.
+ * Soft-deletes (moves to Trash, same as every other bank delete in the app)
+ * rather than a hard delete, so it's still recoverable if the FDIC call
+ * turns out to be wrong.
+ */
+export async function deleteClosedBank(
+  cert: number,
+): Promise<{ deleted?: number; skipped?: number; error?: string }> {
+  const user = await currentUser();
+  if (!(await canApplyFdicChanges(user))) return { error: "Not authorized." };
+
+  const admin = createAdminClient();
+  const { data: bankRows, error } = await admin
+    .from("banks")
+    .select("id, user_id")
+    .eq("cert", cert)
+    .is("deleted_at", null);
+  if (error) return { error: error.message };
+  if (!bankRows || bankRows.length === 0) return { deleted: 0, skipped: 0 };
+
+  let deleted = 0;
+  let skipped = 0;
+  const now = new Date().toISOString();
+
+  for (const row of bankRows) {
+    const { count } = await admin
+      .from("accounts")
+      .select("id", { count: "exact", head: true })
+      .eq("bank_id", row.id as string)
+      .is("deleted_at", null);
+    if (count && count > 0) {
+      skipped++;
+      continue;
+    }
+    const { error: delErr } = await admin
+      .from("banks")
+      .update({ deleted_at: now })
+      .eq("id", row.id as string);
+    if (!delErr) deleted++;
+  }
+
+  return { deleted, skipped };
 }

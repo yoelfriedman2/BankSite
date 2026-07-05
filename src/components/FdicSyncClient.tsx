@@ -14,6 +14,8 @@ import {
   Building2,
   ShieldAlert,
   Info,
+  Trash2,
+  Lock,
 } from "lucide-react";
 import {
   fdicCheck,
@@ -21,8 +23,9 @@ import {
   applyFdicWebsite,
   applyFdicAssets,
   applyFdicCityState,
+  deleteClosedBank,
   type FdicReport,
-} from "@/app/(app)/admin/fdic/actions";
+} from "@/app/(app)/fdic-sync/actions";
 import { formatAssets } from "@/lib/format";
 
 type Status = "pending" | "applying" | "done" | "error" | "dismissed";
@@ -37,7 +40,7 @@ function fmtTime(iso?: string) {
   });
 }
 
-export function FdicSyncClient() {
+export function FdicSyncClient({ canApply }: { canApply: boolean }) {
   const [report, setReport] = useState<FdicReport | null>(null);
   const [checking, setChecking] = useState(false);
   const [checkError, setCheckError] = useState<string | null>(null);
@@ -46,6 +49,7 @@ export function FdicSyncClient() {
   // Per-row status keyed by "<section>:<cert>"
   const [status, setStatus] = useState<Record<string, Status>>({});
   const [rowError, setRowError] = useState<Record<string, string>>({});
+  const [rowNote, setRowNote] = useState<Record<string, string>>({});
 
   function runCheck() {
     setChecking(true);
@@ -60,6 +64,7 @@ export function FdicSyncClient() {
       setReport(res);
       setStatus({});
       setRowError({});
+      setRowNote({});
     });
   }
 
@@ -114,6 +119,24 @@ export function FdicSyncClient() {
     });
   }
 
+  function deleteClosed(cert: number, name: string) {
+    if (!confirm(`Delete "${name}" from the database? Anyone with an active account there keeps their copy untouched.`)) return;
+    const key = `closed:${cert}`;
+    setRowStatus(key, "applying");
+    startTransition(async () => {
+      const res = await deleteClosedBank(cert);
+      if (res.error) {
+        setRowStatus(key, "error", res.error);
+        return;
+      }
+      const parts: string[] = [];
+      if (res.deleted) parts.push(`removed for ${res.deleted}`);
+      if (res.skipped) parts.push(`kept for ${res.skipped} (has an account)`);
+      setRowNote((m) => ({ ...m, [key]: parts.join(", ") || "no matching rows" }));
+      setRowStatus(key, "done");
+    });
+  }
+
   function dismiss(section: string, cert: number) {
     setRowStatus(`${section}:${cert}`, "dismissed");
   }
@@ -128,8 +151,10 @@ export function FdicSyncClient() {
           </h1>
           <p className="mt-1 max-w-xl text-sm text-slate-500">
             Compares every bank (by cert number) against the FDIC&apos;s live BankFind
-            database and shows only the differences. Nothing is written until you
-            accept a specific item — banks are never removed or renamed automatically.
+            database and shows only the differences. Anyone can run this check;
+            {canApply
+              ? " you can apply the changes shown below."
+              : " only an FDIC admin can apply a change — ask the owner if you need that."}
           </p>
         </div>
         <button
@@ -162,26 +187,54 @@ export function FdicSyncClient() {
             <span>{report.total} banks compared</span>
           </div>
 
-          {/* ── Closed / merged: informational only, never auto-removed ── */}
+          {/* ── Closed / merged: never auto-removed; delete requires the role ── */}
           <Section
             icon={<Ban className="h-4 w-4 text-rose-500" />}
             title="Closed or merged"
             count={report.closed.length}
             empty="No banks in your list have closed or merged since you last checked."
-            note="Informational only — nothing is deleted. Review each and retag or remove by hand when ready."
+            note="Nothing is deleted automatically. Deleting only removes the bank for users with no active account there — anyone holding an account keeps their copy."
           >
             <ul className="divide-y divide-slate-100">
-              {report.closed.map((r) => (
-                <li key={r.cert} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
-                  <div className="min-w-0">
-                    <Link href={`/banks?cert=${r.cert}`} className="font-medium text-slate-800 hover:underline">
-                      {r.name}
-                    </Link>
-                    <span className="ml-2 text-xs text-slate-400">{r.state}</span>
-                  </div>
-                  <span className="shrink-0 text-xs text-slate-400">no longer insured since {r.endDate}</span>
-                </li>
-              ))}
+              {report.closed.map((r) => {
+                const key = `closed:${r.cert}`;
+                const st = status[key];
+                return (
+                  <li key={r.cert} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+                    <div className="min-w-0">
+                      <Link href={`/banks?cert=${r.cert}`} className="font-medium text-slate-800 hover:underline">
+                        {r.name}
+                      </Link>
+                      <span className="ml-2 text-xs text-slate-400">{r.state}</span>
+                      {st === "done" && rowNote[key] && (
+                        <p className="text-xs text-emerald-600">{rowNote[key]}</p>
+                      )}
+                      {st === "error" && rowError[key] && (
+                        <p className="text-xs text-rose-600">{rowError[key]}</p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className="text-xs text-slate-400">no longer insured since {r.endDate}</span>
+                      {st !== "done" &&
+                        (canApply ? (
+                          <button
+                            type="button"
+                            onClick={() => deleteClosed(r.cert, r.name)}
+                            disabled={st === "applying"}
+                            className="flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                          >
+                            {st === "applying" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                            Delete
+                          </button>
+                        ) : (
+                          <span className="flex items-center gap-1 text-xs text-slate-300" title="FDIC admin only">
+                            <Lock className="h-3 w-3" />
+                          </span>
+                        ))}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </Section>
 
@@ -206,6 +259,7 @@ export function FdicSyncClient() {
                     <RowActions
                       status={st}
                       error={rowError[key]}
+                      canApply={canApply}
                       onAccept={() => acceptRename(r.cert, r.proposedName)}
                       onDismiss={() => dismiss("rename", r.cert)}
                     />
@@ -221,7 +275,7 @@ export function FdicSyncClient() {
             title="Websites"
             count={report.websites.length}
             empty="No website differences found."
-            note="Each address is live-checked again at the moment you accept it — if it doesn't respond, nothing is written."
+            note="Each address is live-checked again at the moment it's accepted — if it doesn't respond, nothing is written."
           >
             <ul className="divide-y divide-slate-100">
               {report.websites.map((r) => {
@@ -238,6 +292,7 @@ export function FdicSyncClient() {
                     <RowActions
                       status={st}
                       error={rowError[key]}
+                      canApply={canApply}
                       onAccept={() => acceptWebsite(r.cert, r.proposed)}
                       onDismiss={() => dismiss("website", r.cert)}
                     />
@@ -254,7 +309,7 @@ export function FdicSyncClient() {
             count={report.assets.length}
             empty="No asset differences found."
             action={
-              report.assets.some((a) => status[`assets:${a.cert}`] !== "done")
+              canApply && report.assets.some((a) => status[`assets:${a.cert}`] !== "done")
                 ? <button type="button" onClick={acceptAllAssets} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">Accept all</button>
                 : undefined
             }
@@ -276,6 +331,7 @@ export function FdicSyncClient() {
                     <RowActions
                       status={st}
                       error={rowError[key]}
+                      canApply={canApply}
                       onAccept={() => acceptAsset(r.cert, r.proposed)}
                       onDismiss={() => dismiss("assets", r.cert)}
                     />
@@ -310,6 +366,7 @@ export function FdicSyncClient() {
                     <RowActions
                       status={st}
                       error={rowError[key]}
+                      canApply={canApply}
                       onAccept={() => acceptCityState(r.cert, r.fdicCity, r.fdicState)}
                       onDismiss={() => dismiss("citystate", r.cert)}
                     />
@@ -381,11 +438,13 @@ function Section({
 function RowActions({
   status,
   error,
+  canApply,
   onAccept,
   onDismiss,
 }: {
   status?: Status;
   error?: string;
+  canApply: boolean;
   onAccept: () => void;
   onDismiss: () => void;
 }) {
@@ -400,15 +459,21 @@ function RowActions({
   return (
     <div className="flex shrink-0 flex-col items-end gap-1">
       <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onAccept}
-          disabled={status === "applying"}
-          className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-        >
-          {status === "applying" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-          Accept
-        </button>
+        {canApply ? (
+          <button
+            type="button"
+            onClick={onAccept}
+            disabled={status === "applying"}
+            className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+          >
+            {status === "applying" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+            Accept
+          </button>
+        ) : (
+          <span className="flex items-center gap-1 text-xs text-slate-300" title="FDIC admin only">
+            <Lock className="h-3 w-3" />
+          </span>
+        )}
         <button
           type="button"
           onClick={onDismiss}
