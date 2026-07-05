@@ -2,17 +2,35 @@
 
 Running list of things to review and decide. (Feature ideas live in IDEAS.md — this is for open work items.)
 
-## Build: FDIC API sync (revisit)
+## Review: FDIC sync tool (built 2026-07-03, NOT YET PUSHED)
 
-Keep the app aligned with FDIC BankFind automatically (the 2026-07-03 pull was one-off).
-Open decisions before building:
-- Which fields sync automatically vs. propose-for-review (owner was clear: NOT everything —
-  some app data is deliberately different from FDIC's).
-- Candidates to auto-sync: assets (quarterly), active/closed flag (alert when a bank drops off).
-- Candidates to propose-only: name changes, website changes, city/state.
-- Cadence: monthly via the existing daily cron (like the Monday backup) vs. manual button.
-- Where diffs surface: admin-only page vs. a "Check against FDIC" button for everyone.
-The comparison pipeline already exists in scripts form (see `fdic-comparison-2026-07-03.xlsx`).
+Built and verified against live data, sitting uncommitted in the working tree pending your
+review: `src/app/(app)/admin/fdic/{page.tsx,actions.ts}`, `src/components/FdicSyncClient.tsx`,
+plus a "FDIC sync" link on the Admin/Users page.
+
+**How it works:** an owner-only page (`/admin/fdic`) with a manual "Check against FDIC" button
+— nothing runs on a schedule. It compares every bank (by cert) against FDIC BankFind live and
+shows five sections, each with per-row Accept/Ignore (never bulk-applies except Assets, which
+has an explicit "Accept all"):
+- **Closed or merged** — informational only, no accept action, banks are NEVER deleted or
+  auto-flagged; you review and retag by hand in the app as before.
+- **Name changes** — proposes "New Name (formerly Old Name)"; Accept writes it to every user's
+  copy of that bank (same propagation as shared fields elsewhere in the app).
+- **Websites** — Accept re-verifies the URL actually loads *at that moment* before writing;
+  refuses with an error if it doesn't respond, so a stale/renamed domain can't sneak in.
+- **Assets** — per-row or "Accept all" (low-risk, just a quarterly refresh).
+- **City / state** — per-row correction.
+
+Private fields (status, priority, notes, target balance) are never touched. Verified read-only
+against production today: current diff counts are closed=21, renames=3 (the previously-skipped
+cosmetic ones — legitimate to show, dismissible), websites=11 (exactly the ones that failed
+today's live check — correctly still proposed, and would fail Accept's re-check too unless
+they're back up by then), assets=405 (expected — app data is 2023, FDIC is Q1 2026), city/state=6.
+
+**To review:** run `npm run dev`, sign in as the owner, open Admin → FDIC sync, click "Check
+against FDIC", and look through each section before deciding whether/how to ship it. Once you're
+happy, it just needs `git add` + commit + push (no migration required — it reuses existing
+columns plus the `website` column from migration 0023).
 
 ## One-time setup pending
 
