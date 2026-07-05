@@ -11,8 +11,10 @@ import {
   CalendarSearch,
   CalendarDays,
   Printer,
+  MapPin,
   FileText,
   MessageSquare,
+  Bell,
   Sparkles,
   Settings,
   Trash2,
@@ -41,13 +43,16 @@ const TOPICS: Topic[] = [
     title: "Dashboard",
     blurb: "Your home base — a snapshot of what needs you right now.",
     points: [
-      "Accounts about to go dormant",
+      "Accounts about to go dormant, or with no activity ever logged",
+      "Accounts below your minimum balance",
       "CDs maturing soon",
+      "Your open reminders",
       "Money still moved out, waiting to return",
       "Totals across everything you track",
     ],
     tips: [
       "It updates itself — as you log activity, move money, or change a balance, the lists here adjust automatically.",
+      "Which of these show up — and your minimum balance — is up to you in Settings → Alerts & emails.",
     ],
   },
   {
@@ -58,15 +63,17 @@ const TOPICS: Topic[] = [
       "The shared master list of mutual banks. Everyone sees the same banks; what you do with each is your own.",
     points: [
       "Set your status on each bank",
-      "FDIC info and how-to-open details",
+      "FDIC info, website, and how-to-open details",
       "Community notes from the team",
       "Add the accounts you hold there",
       "See related / linked banks",
+      "Bulk-import from a spreadsheet",
     ],
     tips: [
-      "Bank info — how to open, conversion stage, contact — is shared with everyone. Your status, notes, priority, and target balance stay private to you.",
+      "Bank info — how to open, conversion stage, contact, website — is shared with everyone. Your status, notes, priority, and target balance stay private to you.",
       "When you edit shared info, everyone sees exactly what you changed.",
       "Add a brand-new bank and it's added to everyone's list automatically.",
+      "Import works the same from Banks or Accounts — a spreadsheet row can carry bank info, account info, or both.",
     ],
   },
   {
@@ -97,6 +104,7 @@ const TOPICS: Topic[] = [
       "Optional online-login details",
       "An activity log to keep it alive",
       "Attach statements and documents",
+      "Bulk-import from a spreadsheet",
     ],
     tips: [
       "Adding the first account flips the bank's status to Open for you automatically.",
@@ -112,6 +120,7 @@ const TOPICS: Topic[] = [
       "Accounts can go dormant without activity (default 12 months). The app keeps them from slipping.",
     points: [
       "Color warnings as the deadline nears",
+      "Flags accounts with no activity ever recorded (e.g. just imported)",
       "Email reminders before it's too late",
       "Log an activity date to reset the clock",
     ],
@@ -119,6 +128,7 @@ const TOPICS: Topic[] = [
     tips: [
       "Sweeping money out and returning it both count as activity, so they reset the clock too.",
       "Reminder emails won't repeat more than once every 30 days for the same account.",
+      "Turn any of these alerts off, or change your minimum balance, in Settings → Alerts & emails.",
     ],
   },
   {
@@ -170,10 +180,27 @@ const TOPICS: Topic[] = [
       "X/Y alignment nudge for your printer",
       "Check number continues automatically",
       "Real MICR (E-13B) bottom line",
+      "Every check you print is logged",
     ],
     tips: [
       "The check number is remembered per account and bumps to the next number after each print.",
       "Your stock type (blank vs pre-printed) and alignment are saved on your device for next time.",
+      "The check log — number, payee, amount, date — shows on this page and inside the print window. Remove a check from the log if it was voided or never cashed.",
+    ],
+  },
+  {
+    id: "address-change",
+    icon: MapPin,
+    title: "Address change",
+    blurb: "Moved? Track notifying every bank where you hold an account.",
+    points: [
+      "Auto-builds a checklist from your accounts",
+      "Each bank's phone & website right there",
+      "Check off as each one has your new address",
+    ],
+    tips: [
+      "Only one address change can be in progress at a time — finish or cancel it before starting another.",
+      "This is private to you; it doesn't affect your bank statuses or shared data.",
     ],
   },
   {
@@ -202,6 +229,21 @@ const TOPICS: Topic[] = [
     ],
   },
   {
+    id: "reminders",
+    icon: Bell,
+    title: "Reminders",
+    blurb: "A private follow-up on any bank, with a date — set it from the bank editor.",
+    points: [
+      "Set a note and a due date on any bank",
+      "Emailed to you when it's due",
+      "All your open reminders show on the dashboard",
+    ],
+    tips: [
+      "Reminders are private — only you see the ones you set.",
+      "Mark one done right from the dashboard without opening the bank.",
+    ],
+  },
+  {
     id: "updates",
     icon: Sparkles,
     title: "Updates",
@@ -219,15 +261,15 @@ const TOPICS: Topic[] = [
     id: "settings",
     icon: Settings,
     title: "Settings",
-    blurb: "Make it yours and manage your account.",
+    blurb: "Make it yours — organized into four tabs.",
     points: [
-      "Display name & dormancy window",
-      "Choose which emails you get",
-      "Export all your data",
-      "Sign out of every device",
-      "Delete your account",
+      "Profile: display name & account holder names",
+      "Alerts & emails: dormancy window, minimum balance, which Needs-attention alerts are on, which emails you get",
+      "Your data: full backup or spreadsheet export",
+      "Account: sign out everywhere, feedback, delete your account",
     ],
     tips: [
+      "Every Needs-attention alert (no activity, low balance, CD maturing) can be turned off individually, and your minimum balance defaults to $100 but is yours to change.",
       "Deleting your account removes everything, including your uploaded documents — export a backup first if you want a copy.",
     ],
   },
