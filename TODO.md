@@ -19,6 +19,9 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
   `/road-trip` and click **"Refresh branch locations"** once to populate it (moved there from
   `/fdic-sync` per feedback — one less page to visit) — the planner has nothing to show until
   that's been run at least once.
+- Run migration **0032_road_trips.sql** in the Supabase SQL editor. Adds the `road_trips` table
+  (saved/draft trips — see below). Until it's run, saving a trip shows a friendly "run this
+  migration" message instead of crashing; everything else on the page still works.
 
 ## Live (owner-only for now): Road trip planner
 
@@ -57,21 +60,24 @@ sync was never the problem, only this one query.
 explicit two-button choice instead of an unlabeled checkbox; "Add more banks nearby" got a search
 box to add any specific bank regardless of distance; the map got a color-key legend.
 
-**Discussed, not yet built** — needs a decision on scope/sequencing before starting:
-1. **Saved/draft trips**: create a trip, save it, come back and edit it later (new `road_trips`
-   table, private per-user by default).
-2. **Public/private sharing** of saved trips — a shared/published trip other users can browse
-   (like community bank notes), vs. one that stays private.
-3. **Import a past Google Maps trip link**: paste in a link from a road trip you already took.
-   Auto-detecting which banks it covered is possible but not fully reliable — works by reverse-
-   matching each waypoint's lat/lng against `bank_branches` within a small tolerance, which only
-   works for links that carry raw coordinates (the common `dir/?api=1&origin=lat,lng&...` format);
-   links built from place names instead of coordinates wouldn't match automatically and would need
-   manual bank/branch tagging. Any auto-match should be presented as a suggestion to confirm, not
-   applied silently.
-4. **Surface a matching past trip**: when adding a must-visit bank to a new trip, if a saved trip
-   (yours or a shared one) already covered that bank, suggest reusing it instead of replanning.
-   Depends on (1)–(2) existing first.
+**Built (2026-07-05, second feedback round) — all four of the previously-discussed items above**:
+1. **Saved/draft trips** — `road_trips` table (migration 0032), `RoadTripTrips.tsx`. Save the
+   current plan under a title, come back and edit/delete it later.
+2. **Public/private sharing** — a "Share with everyone" checkbox on save (`is_public`); RLS alone
+   handles visibility (own rows, or anyone's public rows) — no admin client needed. Loading someone
+   else's public trip always makes an unlinked private copy on save, never an accidental overwrite.
+3. **Import a past Google Maps trip link** — `parseGoogleMapsLink()` + `nearestWithinTolerance()`
+   in `roadtrip.ts`. Works well for links with raw coordinates; place-name-only links come back
+   flagged as unmatched rather than guessed at. Seeds a new unsaved plan for review.
+4. **Surface a matching past trip** — an inline suggestion when a just-added bank's cert is already
+   covered by another saved/shared trip.
+
+Also in this round: **multi-day trips** (a "Number of days" field; the itinerary splits into day
+sections with one Google Maps link per day, no overnight return-to-anchor charged between days —
+see `buildMultiDayItinerary()` in `roadtrip.ts`), a **per-bank branch/location picker** (every synced
+office is available per bank now, not just the main office — defaults to nearest-to-anchor, with a
+"N locations ▾" override control on each itinerary row), and a **map marker contrast fix** (the
+"nearby" candidate dots were a muted gray that was genuinely hard to see — now indigo).
 
 ## Live: address change per holder + monthly fee
 

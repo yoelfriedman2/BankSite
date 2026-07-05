@@ -11,6 +11,7 @@
 // ---------------------------------------------------------------------------
 import type { Account, Bank, BankComment, Profile } from "./types";
 import { BANKS_SEED } from "./banks-seed";
+import type { RoadTripPlan } from "@/app/(app)/road-trip/actions";
 
 // Demo mode bypasses auth entirely, so it must never be active on the live
 // production deployment — even if DEMO_MODE=true is left set there by mistake.
@@ -207,12 +208,24 @@ const BANK_OVERRIDES: Record<number, Partial<BankFields>> = {
   },
 };
 
+export type DemoTrip = {
+  id: string;
+  user_id: string;
+  title: string;
+  is_public: boolean;
+  plan: RoadTripPlan;
+  bank_certs: number[];
+  created_at: string;
+  updated_at: string;
+};
+
 type DemoStore = {
   profile: Profile;
   banks: Bank[];
   accounts: Account[];
   comments: BankComment[];
   commentReads: Record<number, string>;
+  roadTrips: DemoTrip[];
 };
 
 function createInitialStore(): DemoStore {
@@ -308,7 +321,7 @@ function createInitialStore(): DemoStore {
         ]
       : [];
 
-  return { profile, banks, accounts, comments, commentReads: {} };
+  return { profile, banks, accounts, comments, commentReads: {}, roadTrips: [] };
 }
 
 const g = globalThis as unknown as { __btDemo?: DemoStore };
@@ -431,21 +444,58 @@ function demoBranchCoords(cert: number, state: string | null): { lat: number; ln
   return { lat: center.lat + jitter(cert), lng: center.lng + jitter(cert * 7 + 1) };
 }
 
-export function getDemoBranches(): { cert: number; main_office: boolean; address: string | null; city: string | null; state: string | null; latitude: number | null; longitude: number | null }[] {
-  return getDemoBanks()
-    .filter((b) => b.cert != null)
-    .map((b) => {
-      const { lat, lng } = demoBranchCoords(b.cert!, b.state);
-      return {
-        cert: b.cert!,
-        main_office: true,
-        address: b.branch_location ?? `1 Main St, ${b.city ?? "?"}`,
+export type DemoBranch = {
+  id: string;
+  cert: number;
+  main_office: boolean;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  latitude: number | null;
+  longitude: number | null;
+};
+
+/** A couple of banks get a 2nd/3rd office (deterministically, by cert) so the
+ *  "pick a different branch location" UI has something real to demo. */
+export function getDemoBranches(): DemoBranch[] {
+  const out: DemoBranch[] = [];
+  for (const b of getDemoBanks()) {
+    if (b.cert == null) continue;
+    const officeCount = 1 + (b.cert % 3); // 1–3 offices per bank
+    for (let i = 0; i < officeCount; i++) {
+      const { lat, lng } = demoBranchCoords(b.cert * 10 + i, b.state);
+      out.push({
+        id: `${b.cert}-${i}`,
+        cert: b.cert,
+        main_office: i === 0,
+        address: i === 0 ? (b.branch_location ?? `1 Main St, ${b.city ?? "?"}`) : `${100 + i} Branch Ave, ${b.city ?? "?"}`,
         city: b.city,
         state: b.state,
         latitude: lat,
         longitude: lng,
-      };
-    });
+      });
+    }
+  }
+  return out;
+}
+
+// ---- Saved road trips ----
+export function getDemoTrips(): DemoTrip[] {
+  return store().roadTrips;
+}
+export function addDemoTrip(fields: { title: string; is_public: boolean; plan: RoadTripPlan; bank_certs: number[] }): string {
+  const now = new Date().toISOString();
+  const trip: DemoTrip = { id: crypto.randomUUID(), user_id: DEMO_USER.id, created_at: now, updated_at: now, ...fields };
+  store().roadTrips = [trip, ...store().roadTrips];
+  return trip.id;
+}
+export function updateDemoTrip(id: string, fields: Partial<Pick<DemoTrip, "title" | "is_public" | "plan" | "bank_certs">>): void {
+  store().roadTrips = store().roadTrips.map((t) =>
+    t.id === id ? { ...t, ...fields, updated_at: new Date().toISOString() } : t,
+  );
+}
+export function deleteDemoTrip(id: string): void {
+  store().roadTrips = store().roadTrips.filter((t) => t.id !== id);
 }
 
 // ---- Comments (shared community notes) ----

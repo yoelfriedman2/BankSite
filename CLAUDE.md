@@ -129,6 +129,65 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-05 (road trip planner — multi-day, branch picker, saved trips)** —
+Big second round on the road trip planner, all from chat feedback:
+
+- **Multi-day trips**: new "Number of days" field (Section 2). The route is
+  still one flat ordered sequence (`orderStops`/`cheapestInsertion` unchanged)
+  — `buildMultiDayItinerary()` in `roadtrip.ts` just splits that sequence into
+  day-buckets bounded by the same daily start/end window, greedily rolling a
+  stop into the next day if it would overflow the current one (a day always
+  gets at least one stop, so a single long visit can't stall things forever).
+  No overnight drive back to the anchor is charged between days — you're
+  assumed to continue the next morning from wherever the previous day ended.
+  "Round trip" now means returning to the start at the end of the *whole*
+  trip, not every day. One Google Maps link per day (each starting from the
+  previous day's last stop, not just intra-day stops, so even a single-stop
+  day gets a real "drive there" link).
+- **Per-bank branch/location picker**: `bank_branches` always had every office
+  for a bank, but the planner only ever used one (main office). Now every
+  `RoadTripBank` carries its full `branches[]` list; the default is whichever
+  office is nearest the trip's anchor point (not always the main office), and
+  each itinerary row has a "N locations ▾" control to pick a different one —
+  stored as a `branchOverrides: Record<bankId, branchId>` map that feeds back
+  into all the routing/cost math, not just the display.
+- **Map marker contrast fix**: candidate ("nearby") markers were a muted gray
+  that was genuinely hard to see against the map tiles — now a solid indigo
+  with a thicker outline.
+- **Saved/draft trips** (migration 0032, `road_trips` table, plain RLS — no
+  admin client needed): save the current plan under a title, come back and
+  edit it later, delete it. A trip can be marked "Share with everyone" (public
+  — any signed-in user can view/load it, same shared-vs-private shape as
+  community notes but per-row) or stay private. Loading someone *else's*
+  public trip always starts a fresh unlinked copy (title kept, id cleared) —
+  you can never accidentally overwrite a trip you don't own, and RLS would
+  block it anyway. New `RoadTripTrips.tsx` component owns this panel
+  (list/save/load/delete) plus the import feature below; `RoadTripClient.tsx`
+  owns the planner itself and applies whatever plan gets loaded into it.
+- **Import a past Google Maps link**: paste a directions URL, and
+  `parseGoogleMapsLink()` extracts stop coordinates from either the
+  `?api=1&origin=...&waypoints=...` deep-link format or the browser
+  `/dir/A/B/C/@lat,lng` share-link format, then `nearestWithinTolerance()`
+  (0.3mi) reverse-matches each coordinate against every synced branch to
+  guess which banks were visited. Coordinate-based links match reliably;
+  links built from place names can't be resolved without a geocoding service
+  and come back as "unmatched" rather than silently dropped or guessed at.
+  Matches seed a brand-new (unsaved) plan for the user to review/adjust/save.
+- **"A saved trip already covers this bank"**: when a just-added must-visit
+  bank's cert appears in any other trip's denormalized `bank_certs` array, an
+  inline suggestion offers to load that trip instead.
+
+Verification: build passes; `parseGoogleMapsLink`/`nearestWithinTolerance`/
+`buildMultiDayItinerary` all checked against hand-built cases via a standalone
+Node script (both URL formats, an out-of-tolerance match, a 3-stop/3-day
+split). Full click-tested via DEMO_MODE this time (own machine's dev server —
+not a worktree) — branch picker, multi-day split producing real "Day 1"/"Day
+2" sections with correct arrive times, save/load/delete a trip, the import
+flow with both a matching and a deliberately-unmatched link, and mobile width
+(375px, no overflow, including with the branch picker expanded). demo.ts
+gained deterministic fake multi-branch data (1–3 offices per bank) and a
+`road_trips` in-memory store to support all of this in DEMO_MODE.
+
 **2026-07-05 (road trip planner — real bug fix + feedback round)** — Fixed a
 genuine bug reported from live use: banks like Needham Bank and Fidelity Bank
 weren't showing up in the road trip planner's picker at all. Root cause was in

@@ -16,20 +16,22 @@ import {
   RefreshCw,
   Loader2,
   Info,
+  ChevronDown,
 } from "lucide-react";
-import type { RoadTripBank, RoadTripData } from "@/app/(app)/road-trip/actions";
+import type { RoadTripBank, RoadTripData, RoadTripPlan, BranchOption } from "@/app/(app)/road-trip/actions";
 import { refreshBranchLocations } from "@/app/(app)/fdic-sync/actions";
 import { STATUS_LABELS } from "@/lib/types";
 import {
   orderStops,
   cheapestInsertion,
-  buildItinerary,
+  buildMultiDayItinerary,
   buildGoogleMapsLinks,
   estimateDriveMinutes,
   haversineMiles,
   type LatLng,
 } from "@/lib/roadtrip";
 import type { MapPoint } from "@/components/RoadTripMap";
+import { RoadTripTrips } from "@/components/RoadTripTrips";
 
 const RoadTripMap = dynamic(() => import("@/components/RoadTripMap").then((m) => m.RoadTripMap), {
   ssr: false,
@@ -48,6 +50,21 @@ function fmtDuration(min: number): string {
   return `${h}h ${m}m`;
 }
 
+/** A bank resolved to one specific branch for this trip — either the user's
+ *  override, or (by default) whichever office is nearest the reference point. */
+type Stop = RoadTripBank & { lat: number; lng: number; branch: BranchOption };
+
+function nearestBranch(branches: BranchOption[], ref: LatLng | null): BranchOption {
+  if (!ref || branches.length === 1) return branches.find((b) => b.mainOffice) ?? branches[0];
+  return branches.reduce((best, b) => (haversineMiles(ref, b) < haversineMiles(ref, best) ? b : best));
+}
+
+/** Distance from `ref` to a bank's nearest office — used to decide whether a
+ *  bank counts as "within the detour radius" at all. */
+function bankDistanceMiles(bank: RoadTripBank, ref: LatLng): number {
+  return Math.min(...bank.branches.map((br) => haversineMiles(ref, br)));
+}
+
 export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripData; canRefreshBranches: boolean }) {
   const [query, setQuery] = useState("");
   const [mustVisitIds, setMustVisitIds] = useState<string[]>([]); // order = order added
@@ -57,8 +74,15 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
   const [minutesPerStop, setMinutesPerStop] = useState(60);
   const [radiusMiles, setRadiusMiles] = useState(50);
   const [roundTrip, setRoundTrip] = useState(true);
+  const [numDays, setNumDays] = useState(1);
   const [extraIds, setExtraIds] = useState<string[]>([]); // accepted candidates, order added
+  const [branchOverrides, setBranchOverrides] = useState<Record<string, string>>({});
   const [addQuery, setAddQuery] = useState(""); // search-to-add in section 3, any distance
+  const [openBranchPicker, setOpenBranchPicker] = useState<string | null>(null); // bank id whose branch picker is expanded
+
+  const [activeTripId, setActiveTripId] = useState<string | null>(null);
+  const [activeTripTitle, setActiveTripTitle] = useState("");
+
   const [branchStatus, setBranchStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [branchMessage, setBranchMessage] = useState<string | null>(null);
   const [, startBranchTransition] = useTransition();
@@ -93,60 +117,92 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
   }
 
   const mustVisitBanks = mustVisitIds.map((id) => banksById.get(id)).filter((b): b is RoadTripBank => !!b);
-  const anchor = (startBankId && banksById.get(startBankId)) || mustVisitBanks[0] || null;
+  const anchorBank = (startBankId && banksById.get(startBankId)) || mustVisitBanks[0] || null;
+
+  function toStop(bank: RoadTripBank, ref: LatLng | null): Stop {
+    const overrideId = branchOverrides[bank.id];
+    const override = overrideId ? bank.branches.find((b) => b.id === overrideId) : undefined;
+    const branch = override ?? nearestBranch(bank.branches, ref);
+    return { ...bank, lat: branch.lat, lng: branch.lng, branch };
+  }
+
+  const anchor: Stop | null = anchorBank ? toStop(anchorBank, null) : null;
 
   // Order the remaining must-visits, then fold in accepted extras one at a time
   // (cheapest-insertion) in the order the user added them.
-  const routeAfterAnchor = useMemo<RoadTripBank[]>(() => {
+  const routeAfterAnchor = useMemo<Stop[]>(() => {
     if (!anchor) return [];
-    const rest = mustVisitBanks.filter((b) => b.id !== anchor.id);
+    const rest = mustVisitBanks.filter((b) => b.id !== anchor.id).map((b) => toStop(b, anchor));
     let route = orderStops(anchor, rest);
     for (const id of extraIds) {
-      const extra = banksById.get(id);
-      if (!extra) continue;
+      const bank = banksById.get(id);
+      if (!bank) continue;
+      const extra = toStop(bank, anchor);
       const { insertAt } = cheapestInsertion(anchor, route, extra);
       route = [...route.slice(0, insertAt), extra, ...route.slice(insertAt)];
     }
     return route;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [anchor?.id, mustVisitIds.join(","), extraIds.join(",")]);
+  }, [anchor?.id, anchor?.branch.id, mustVisitIds.join(","), extraIds.join(","), branchOverrides]);
 
-  const fullSequence = anchor ? [anchor, ...routeAfterAnchor] : [];
+  const fullSequence: Stop[] = anchor ? [anchor, ...routeAfterAnchor] : [];
   const startMinutes = parseTime(startTime);
   const endMinutes = parseTime(endTime);
-  const budgetMinutes = Math.max(0, endMinutes - startMinutes);
+  const dailyBudgetMinutes = Math.max(0, endMinutes - startMinutes);
+  const budgetMinutes = dailyBudgetMinutes * Math.max(1, numDays);
 
   const itinerary = anchor
-    ? buildItinerary(anchor, fullSequence, startMinutes, minutesPerStop)
+    ? buildMultiDayItinerary(anchor, fullSequence, startMinutes, endMinutes, minutesPerStop)
     : null;
   const roundTripDriveBack =
     roundTrip && fullSequence.length > 0 ? estimateDriveMinutes(fullSequence[fullSequence.length - 1], anchor!) : 0;
-  const usedMinutes = itinerary ? itinerary.endMinutes - startMinutes + roundTripDriveBack : 0;
+  const visitMinutesTotal = fullSequence.length * minutesPerStop;
+  const usedMinutes = (itinerary?.totalDriveMinutes ?? 0) + visitMinutesTotal + roundTripDriveBack;
   const remainingMinutes = budgetMinutes - usedMinutes;
+  const daysNeeded = itinerary?.days.length ?? 0;
 
   const selectedIds = new Set([...mustVisitIds, ...extraIds]);
   const candidatePool = useMemo(() => {
     if (!anchor) return [];
-    return data.banks.filter((b) => !selectedIds.has(b.id) && haversineMiles(anchor, b) <= radiusMiles);
+    return data.banks.filter((b) => !selectedIds.has(b.id) && bankDistanceMiles(b, anchor) <= radiusMiles);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [anchor?.id, radiusMiles, data.banks, mustVisitIds.join(","), extraIds.join(",")]);
+  }, [anchor?.id, anchor?.branch.id, radiusMiles, data.banks, mustVisitIds.join(","), extraIds.join(",")]);
 
   const rankedCandidates = useMemo(() => {
     if (!anchor) return [];
     return candidatePool
       .map((b) => {
-        const { addedMinutes } = cheapestInsertion(anchor, routeAfterAnchor, b);
+        const stop = toStop(b, anchor);
+        const { addedMinutes } = cheapestInsertion(anchor, routeAfterAnchor, stop);
         const totalCost = addedMinutes + minutesPerStop;
         return { bank: b, addedMinutes, totalCost, projectedRemaining: remainingMinutes - totalCost };
       })
       .sort((a, b) => a.totalCost - b.totalCost);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchor, candidatePool, routeAfterAnchor, minutesPerStop, remainingMinutes]);
 
-  const googleLinks = useMemo(() => {
-    const pts: LatLng[] = fullSequence.map((b) => ({ lat: b.lat, lng: b.lng }));
-    if (roundTrip && anchor && pts.length > 1) pts.push({ lat: anchor.lat, lng: anchor.lng });
-    return buildGoogleMapsLinks(pts);
-  }, [fullSequence, roundTrip, anchor]);
+  const googleLinksByDay = useMemo(() => {
+    if (!itinerary || !anchor) return [];
+    return itinerary.days.map((day, i) => {
+      const stops = day.stops.map((s) => fullSequence.find((f) => f.id === s.id)!).filter(Boolean);
+      const pts: LatLng[] = stops.map((s) => ({ lat: s.lat, lng: s.lng }));
+      // Every day after the first starts from wherever the previous day's
+      // last stop left off (no overnight drive back to the anchor) — include
+      // that as the day's starting point so a single-stop day still gets a
+      // real "drive there" link instead of silently having none.
+      if (i > 0) {
+        const prevDay = itinerary.days[i - 1];
+        const prevLast = prevDay.stops[prevDay.stops.length - 1];
+        const prevStop = fullSequence.find((f) => f.id === prevLast.id);
+        if (prevStop) pts.unshift({ lat: prevStop.lat, lng: prevStop.lng });
+      }
+      if (roundTrip && i === itinerary.days.length - 1 && pts.length > 1) {
+        pts.push({ lat: anchor.lat, lng: anchor.lng });
+      }
+      return buildGoogleMapsLinks(pts);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itinerary, fullSequence, roundTrip, anchor]);
 
   const mapPoints: MapPoint[] = useMemo(() => {
     const pts: MapPoint[] = [];
@@ -155,11 +211,13 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
       pts.push({ id: b.id, name: b.name, lat: b.lat, lng: b.lng, role: mustVisitIds.includes(b.id) ? "must-visit" : "accepted" });
     }
     for (const c of rankedCandidates.slice(0, 80)) {
-      pts.push({ id: c.bank.id, name: c.bank.name, lat: c.bank.lat, lng: c.bank.lng, role: "candidate", addedMinutes: c.addedMinutes });
+      const stop = anchor ? toStop(c.bank, anchor) : null;
+      if (!stop) continue;
+      pts.push({ id: c.bank.id, name: c.bank.name, lat: stop.lat, lng: stop.lng, role: "candidate", addedMinutes: c.addedMinutes });
     }
     return pts;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [anchor?.id, routeAfterAnchor, rankedCandidates.length]);
+  }, [anchor?.id, anchor?.branch.id, routeAfterAnchor, rankedCandidates.length]);
 
   const routeLine: LatLng[] = fullSequence.map((b) => ({ lat: b.lat, lng: b.lng }));
   const fitKey = `${anchor?.id ?? "none"}-${radiusMiles}`;
@@ -188,7 +246,8 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
     return data.banks
       .filter((b) => !selectedIds.has(b.id) && `${b.name} ${b.city ?? ""} ${b.state ?? ""}`.toLowerCase().includes(q))
       .map((b) => {
-        const { addedMinutes } = cheapestInsertion(anchor, routeAfterAnchor, b);
+        const stop = toStop(b, anchor);
+        const { addedMinutes } = cheapestInsertion(anchor, routeAfterAnchor, stop);
         return { bank: b, addedMinutes, totalCost: addedMinutes + minutesPerStop };
       })
       .sort((a, b) => a.totalCost - b.totalCost)
@@ -196,13 +255,34 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addQuery, data.banks, anchor, routeAfterAnchor, minutesPerStop]);
 
-  if (data.error) {
-    return (
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-6 py-8 text-sm text-amber-800">
-        {data.error}
-      </div>
-    );
+  function applyPlan(plan: RoadTripPlan, tripId: string, title: string) {
+    setMustVisitIds(plan.mustVisitIds.filter((id) => banksById.has(id)));
+    setStartBankId(plan.startBankId);
+    setStartTime(plan.startTime);
+    setEndTime(plan.endTime);
+    setMinutesPerStop(plan.minutesPerStop);
+    setRadiusMiles(plan.radiusMiles);
+    setRoundTrip(plan.roundTrip);
+    setNumDays(plan.numDays ?? 1);
+    setExtraIds(plan.extraIds.filter((id) => banksById.has(id)));
+    setBranchOverrides(plan.branchOverrides ?? {});
+    setActiveTripId(tripId);
+    setActiveTripTitle(title);
   }
+
+  const currentPlan: RoadTripPlan = {
+    mustVisitIds,
+    startBankId,
+    startTime,
+    endTime,
+    minutesPerStop,
+    radiusMiles,
+    roundTrip,
+    numDays,
+    extraIds,
+    branchOverrides,
+  };
+  const currentBankCerts = [...new Set(fullSequence.map((s) => s.cert))];
 
   const branchRefreshBar = canRefreshBranches && (
     <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
@@ -233,6 +313,14 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
     </div>
   );
 
+  if (data.error) {
+    return (
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-6 py-8 text-sm text-amber-800">
+        {data.error}
+      </div>
+    );
+  }
+
   if (data.banks.length === 0) {
     return (
       <div>
@@ -248,6 +336,21 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
   return (
     <div className="space-y-6">
       {branchRefreshBar}
+
+      <RoadTripTrips
+        banks={data.banks}
+        currentPlan={currentPlan}
+        currentBankCerts={currentBankCerts}
+        activeTripId={activeTripId}
+        activeTripTitle={activeTripTitle}
+        onApplyPlan={applyPlan}
+        onSaved={(id, title) => {
+          setActiveTripId(id);
+          setActiveTripTitle(title);
+        }}
+        justAddedCert={mustVisitBanks[mustVisitBanks.length - 1]?.cert ?? null}
+      />
+
       {/* ── 1. Must-visit banks ── */}
       <Card title="1. Must-visit banks" subtitle="Which banks does this trip need to cover?">
         <div className="relative mb-3">
@@ -321,9 +424,9 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
         </div>
       ) : (
         <>
-          {/* ── 2. Your day ── */}
-          <Card title="2. Your day" subtitle="Defaults to a one-day trip, 9am–4pm, an hour per bank.">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {/* ── 2. Your day(s) ── */}
+          <Card title="2. Your day(s)" subtitle="Defaults to a one-day trip, 9am–4pm, an hour per bank.">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
               <Field label="Start time">
                 <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inputCls} />
               </Field>
@@ -350,16 +453,28 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                   className={inputCls}
                 />
               </Field>
+              <Field label="Number of days">
+                <input
+                  type="number"
+                  min={1}
+                  max={14}
+                  value={numDays}
+                  onChange={(e) => setNumDays(Math.min(14, Math.max(1, Number(e.target.value) || 1)))}
+                  className={inputCls}
+                />
+              </Field>
             </div>
             <p className="mt-1.5 flex items-start gap-1.5 text-xs text-slate-400">
               <Info className="mt-0.5 h-3 w-3 shrink-0" />
-              Detour radius: how far out of your way you're willing to drive to pick up an extra
-              bank. Only affects the "Add more banks nearby" suggestions below — you can always
-              search for and add a specific bank regardless of distance.
+              Detour radius: how far out of your way you&apos;re willing to drive to pick up an extra
+              bank. Only affects the &quot;Add more banks nearby&quot; suggestions below — you can
+              always search for and add a specific bank regardless of distance. For a multi-day
+              trip, each day gets its own overnight stay — you continue the next morning from
+              wherever the previous day ended, rather than driving back every night.
             </p>
 
             <div className="mt-4">
-              <span className="mb-1.5 block text-xs font-medium text-slate-500">End the day</span>
+              <span className="mb-1.5 block text-xs font-medium text-slate-500">End the trip</span>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -382,7 +497,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
               </div>
             </div>
 
-            <BudgetBar usedMinutes={usedMinutes} budgetMinutes={budgetMinutes} />
+            <BudgetBar usedMinutes={usedMinutes} budgetMinutes={budgetMinutes} daysNeeded={daysNeeded} numDays={numDays} />
           </Card>
 
           {/* ── 3. Nearby candidates + map ── */}
@@ -435,7 +550,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" /> Added
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-slate-500" /> Nearby (click to add)
+                <span className="h-2.5 w-2.5 rounded-full border border-slate-500 bg-indigo-500" /> Nearby (click to add)
               </span>
             </div>
 
@@ -503,76 +618,125 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
           </Card>
 
           {/* ── 4. Itinerary ── */}
-          <Card title="4. Your itinerary" subtitle="Timed stop order, with Google Maps links for driving.">
-            <ol className="space-y-2">
-              {itinerary?.stops.map((s, i) => {
-                const bank = fullSequence[i];
-                return (
-                  <li key={s.id} className="flex items-start gap-3 rounded-lg border border-slate-100 px-3 py-2.5 text-sm">
-                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-500">
-                      {i + 1}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-baseline gap-x-2">
-                        <span className="font-medium text-slate-900">{s.name}</span>
-                        <span className="text-xs text-slate-400">
-                          arrive {s.arrive} · leave {s.depart}
-                          {i > 0 && ` · ${s.driveMinutesFromPrev}min drive`}
-                        </span>
-                      </div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-slate-400">
-                        {bank?.branchAddress && (
-                          <span className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3" />
-                            {bank.branchAddress}
-                          </span>
-                        )}
-                        {bank?.phone && (
-                          <span className="flex items-center gap-1">
-                            <Phone className="h-3 w-3" />
-                            {bank.phone}
-                          </span>
-                        )}
-                        {bank?.website && (
-                          <a href={bank.website} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-blue-500">
-                            <Globe className="h-3 w-3" />
-                            Website
-                          </a>
-                        )}
-                      </div>
+          <Card title="4. Your itinerary" subtitle="Timed stop order, with a Google Maps link for each day.">
+            <div className="space-y-5">
+              {itinerary?.days.map((day, dayIdx) => (
+                <div key={day.dayIndex}>
+                  {itinerary.days.length > 1 && (
+                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Day {dayIdx + 1}</h3>
+                  )}
+                  <ol className="space-y-2">
+                    {day.stops.map((s) => {
+                      const stop = fullSequence.find((f) => f.id === s.id);
+                      if (!stop) return null;
+                      const pickerOpen = openBranchPicker === stop.id;
+                      return (
+                        <li key={s.id} className="rounded-lg border border-slate-100 px-3 py-2.5 text-sm">
+                          <div className="flex items-start gap-3">
+                            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-500">
+                              {dayIdx === 0 ? day.stops.indexOf(s) + 1 : `${dayIdx + 1}.${day.stops.indexOf(s) + 1}`}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-baseline gap-x-2">
+                                <span className="font-medium text-slate-900">{stop.name}</span>
+                                <span className="text-xs text-slate-400">
+                                  arrive {s.arrive} · leave {s.depart}
+                                  {s.driveMinutesFromPrev > 0 && ` · ${s.driveMinutesFromPrev}min drive`}
+                                </span>
+                              </div>
+                              <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-slate-400">
+                                {stop.branch.address && (
+                                  <span className="flex items-center gap-1">
+                                    <MapPin className="h-3 w-3" />
+                                    {stop.branch.address}
+                                  </span>
+                                )}
+                                {stop.phone && (
+                                  <span className="flex items-center gap-1">
+                                    <Phone className="h-3 w-3" />
+                                    {stop.phone}
+                                  </span>
+                                )}
+                                {stop.website && (
+                                  <a href={stop.website} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-blue-500">
+                                    <Globe className="h-3 w-3" />
+                                    Website
+                                  </a>
+                                )}
+                                {stop.branches.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setOpenBranchPicker(pickerOpen ? null : stop.id)}
+                                    className="flex items-center gap-0.5 font-medium text-blue-500 hover:text-blue-700"
+                                  >
+                                    {stop.branches.length} locations <ChevronDown className={`h-3 w-3 transition-transform ${pickerOpen ? "rotate-180" : ""}`} />
+                                  </button>
+                                )}
+                              </div>
+                              {pickerOpen && (
+                                <ul className="mt-2 space-y-1 rounded-lg border border-slate-100 bg-slate-50 p-1.5">
+                                  {stop.branches.map((br) => {
+                                    const dist = anchor ? haversineMiles(anchor, br) : 0;
+                                    const selected = br.id === stop.branch.id;
+                                    return (
+                                      <li key={br.id}>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setBranchOverrides((cur) => ({ ...cur, [stop.id]: br.id }));
+                                            setOpenBranchPicker(null);
+                                          }}
+                                          className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs ${
+                                            selected ? "bg-blue-100 text-blue-800" : "hover:bg-white"
+                                          }`}
+                                        >
+                                          <span className="min-w-0 truncate">
+                                            {br.address}
+                                            {br.mainOffice && <span className="ml-1.5 text-slate-400">(main office)</span>}
+                                          </span>
+                                          <span className="shrink-0 text-slate-400">{dist.toFixed(1)}mi from start</span>
+                                        </button>
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              )}
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                  {googleLinksByDay[dayIdx]?.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {googleLinksByDay[dayIdx].map((link, i) => (
+                        <a
+                          key={link}
+                          href={link}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          Day {dayIdx + 1}: Open in Google Maps{googleLinksByDay[dayIdx].length > 1 ? ` — leg ${i + 1}` : ""}
+                        </a>
+                      ))}
                     </div>
-                  </li>
-                );
-              })}
-            </ol>
+                  )}
+                </div>
+              ))}
+            </div>
             {roundTrip && anchor && fullSequence.length > 1 && (
-              <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
+              <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
                 <Navigation className="h-3 w-3" />
-                Drive back to {anchor.name}: ~{fmtDuration(roundTripDriveBack)}
+                Drive back to {anchor.name} at the end of the trip: ~{fmtDuration(roundTripDriveBack)}
               </p>
             )}
-            {remainingMinutes < 0 && (
+            {daysNeeded > numDays && (
               <p className="mt-3 flex items-center gap-1.5 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                This plan runs {fmtDuration(-remainingMinutes)} past your end time — remove a stop or extend the day.
+                This plan needs {daysNeeded} days, but you set {numDays} — add a day above or remove a stop.
               </p>
-            )}
-
-            {googleLinks.length > 0 && (
-              <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
-                {googleLinks.map((link, i) => (
-                  <a
-                    key={link}
-                    href={link}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    Open in Google Maps{googleLinks.length > 1 ? ` — leg ${i + 1}` : ""}
-                  </a>
-                ))}
-              </div>
             )}
           </Card>
         </>
@@ -603,15 +767,25 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: string;
   );
 }
 
-function BudgetBar({ usedMinutes, budgetMinutes }: { usedMinutes: number; budgetMinutes: number }) {
+function BudgetBar({
+  usedMinutes,
+  budgetMinutes,
+  daysNeeded,
+  numDays,
+}: {
+  usedMinutes: number;
+  budgetMinutes: number;
+  daysNeeded: number;
+  numDays: number;
+}) {
   const pct = budgetMinutes > 0 ? Math.min(100, (usedMinutes / budgetMinutes) * 100) : 0;
-  const over = usedMinutes > budgetMinutes;
+  const over = usedMinutes > budgetMinutes || daysNeeded > numDays;
   return (
     <div className="mt-4">
       <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
         <span>
-          Day so far: <span className={over ? "font-semibold text-rose-600" : "font-medium text-slate-700"}>{fmtDuration(usedMinutes)}</span>{" "}
-          of {fmtDuration(budgetMinutes)}
+          Trip so far: <span className={over ? "font-semibold text-rose-600" : "font-medium text-slate-700"}>{fmtDuration(usedMinutes)}</span>{" "}
+          of {fmtDuration(budgetMinutes)} ({numDays} day{numDays === 1 ? "" : "s"})
         </span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-slate-100">

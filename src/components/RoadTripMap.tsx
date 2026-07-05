@@ -13,11 +13,13 @@ export type MapPoint = {
   addedMinutes?: number; // shown in the popup for candidates
 };
 
-const ROLE_STYLE: Record<MapPoint["role"], { color: string; radius: number; fillOpacity: number }> = {
-  anchor: { color: "#d97706", radius: 10, fillOpacity: 0.95 },
-  "must-visit": { color: "#2563eb", radius: 8, fillOpacity: 0.9 },
-  accepted: { color: "#059669", radius: 8, fillOpacity: 0.9 },
-  candidate: { color: "#64748b", radius: 6, fillOpacity: 0.85 },
+const ROLE_STYLE: Record<MapPoint["role"], { color: string; radius: number; fillOpacity: number; weight: number }> = {
+  anchor: { color: "#d97706", radius: 10, fillOpacity: 0.95, weight: 1.5 },
+  "must-visit": { color: "#2563eb", radius: 8, fillOpacity: 0.9, weight: 1.5 },
+  accepted: { color: "#059669", radius: 8, fillOpacity: 0.9, weight: 1.5 },
+  // Was a muted gray that was genuinely hard to spot against the map tiles —
+  // indigo with a darker outline stands out clearly at any zoom level.
+  candidate: { color: "#6366f1", radius: 7, fillOpacity: 0.9, weight: 2 },
 };
 
 /** No image assets (avoids the classic Leaflet-in-a-bundler broken-marker-icon
@@ -76,7 +78,7 @@ export function RoadTripMap({
         const style = ROLE_STYLE[p.role];
         const marker = L.circleMarker([p.lat, p.lng], {
           color: "#fff",
-          weight: 1.5,
+          weight: style.weight,
           fillColor: style.color,
           fillOpacity: style.fillOpacity,
           radius: style.radius,

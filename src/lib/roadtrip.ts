@@ -131,28 +131,53 @@ export interface ItineraryStop {
   depart: string;
 }
 
-/** Walks the ordered stop list from a start time, allotting `minutesPerStop`
- *  at each — the timed itinerary shown to the user. */
-export function buildItinerary(
+export interface DayPlan {
+  dayIndex: number; // 0-based
+  stops: ItineraryStop[];
+}
+
+/**
+ * Splits an ordered stop sequence into days, each bounded by the same daily
+ * start/end time window. A day always gets at least one stop (so a single
+ * very long stop can't stall the trip forever) — otherwise a stop that would
+ * push the day past its end time rolls into the next day instead. There's no
+ * overnight drive charged between days: you're assumed to end a day wherever
+ * the last stop left off and simply continue from there the next morning.
+ */
+export function buildMultiDayItinerary(
   start: LatLng,
   stops: (LatLng & { id: string; name: string })[],
-  startTimeMinutes: number,
+  dailyStartMinutes: number,
+  dailyEndMinutes: number,
   minutesPerStop: number,
-): { stops: ItineraryStop[]; endMinutes: number; totalDriveMinutes: number } {
-  let clock = startTimeMinutes;
+): { days: DayPlan[]; totalDriveMinutes: number } {
+  const days: DayPlan[] = [];
+  let dayStops: ItineraryStop[] = [];
+  let clock = dailyStartMinutes;
   let prev: LatLng = start;
   let totalDriveMinutes = 0;
-  const result: ItineraryStop[] = [];
-  for (const s of stops) {
-    const drive = estimateDriveMinutes(prev, s);
-    totalDriveMinutes += drive;
+
+  const pushDay = () => {
+    if (dayStops.length) days.push({ dayIndex: days.length, stops: dayStops });
+    dayStops = [];
+  };
+
+  stops.forEach((s, i) => {
+    const drive = i === 0 ? 0 : estimateDriveMinutes(prev, s);
+    if (dayStops.length > 0 && clock + drive + minutesPerStop > dailyEndMinutes) {
+      pushDay();
+      clock = dailyStartMinutes;
+    }
     clock += drive;
+    totalDriveMinutes += drive;
     const arrive = fmtClock(clock);
     clock += minutesPerStop;
-    result.push({ id: s.id, name: s.name, driveMinutesFromPrev: Math.round(drive), arrive, depart: fmtClock(clock) });
+    dayStops.push({ id: s.id, name: s.name, driveMinutesFromPrev: Math.round(drive), arrive, depart: fmtClock(clock) });
     prev = s;
-  }
-  return { stops: result, endMinutes: clock, totalDriveMinutes };
+  });
+  pushDay();
+
+  return { days, totalDriveMinutes };
 }
 
 const MAX_STOPS_PER_LINK = 10; // origin + destination + waypoints, kept conservative
@@ -179,6 +204,92 @@ export function buildGoogleMapsLinks(points: LatLng[]): string[] {
     links.push(`https://www.google.com/maps/dir/?${params.toString()}`);
   }
   return links;
+}
+
+/** Everything a coordinate lookup found (or didn't) in a pasted Maps link. */
+export interface ParsedMapsLink {
+  points: LatLng[];
+  /** Segments that looked like a stop but weren't a bare "lat,lng" pair (a place name, usually) —
+   *  surfaced so the import UI can say "N stops couldn't be auto-matched" rather than pretend
+   *  every stop in the original trip was found. */
+  unmatchedSegments: string[];
+}
+
+const COORD_RE = /^-?\d{1,3}(?:\.\d+)?,-?\d{1,3}(?:\.\d+)?$/;
+
+function coordFromSegment(raw: string): LatLng | null {
+  const s = raw.trim();
+  if (!COORD_RE.test(s)) return null;
+  const [lat, lng] = s.split(",").map(Number);
+  if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
+  return { lat, lng };
+}
+
+/**
+ * Extracts stop coordinates from a Google Maps directions link. Handles two
+ * shapes: the `?api=1&origin=...&destination=...&waypoints=a|b` deep-link
+ * format (what this app generates, and what most "share" buttons produce),
+ * and the browser address-bar `/maps/dir/A/B/C/@lat,lng,zoom` format, where
+ * each `/`-separated segment is either a "lat,lng" pair or a place name.
+ * Place names can't be resolved to coordinates without a geocoding service,
+ * so they come back as `unmatchedSegments` rather than silently dropped.
+ */
+export function parseGoogleMapsLink(rawUrl: string): ParsedMapsLink {
+  let url: URL;
+  try {
+    url = new URL(rawUrl.trim());
+  } catch {
+    return { points: [], unmatchedSegments: [] };
+  }
+
+  const points: LatLng[] = [];
+  const unmatchedSegments: string[] = [];
+  const addSegment = (raw: string | null) => {
+    if (!raw) return;
+    const p = coordFromSegment(raw);
+    if (p) points.push(p);
+    else unmatchedSegments.push(raw);
+  };
+
+  const origin = url.searchParams.get("origin");
+  const destination = url.searchParams.get("destination");
+  if (origin || destination) {
+    addSegment(origin);
+    const waypoints = url.searchParams.get("waypoints");
+    if (waypoints) for (const w of waypoints.split("|")) addSegment(w);
+    addSegment(destination);
+    return { points, unmatchedSegments };
+  }
+
+  const dirMatch = url.pathname.match(/\/dir\/(.+)/);
+  if (dirMatch) {
+    for (const seg of dirMatch[1].split("/").filter(Boolean)) {
+      if (seg.startsWith("@")) continue; // map view center, not a stop
+      addSegment(decodeURIComponent(seg.replace(/\+/g, " ")));
+    }
+  }
+
+  return { points, unmatchedSegments };
+}
+
+/** Nearest candidate to `point`, but only if it's within `toleranceMiles` —
+ *  used to reverse-match a coordinate from an imported link back to a real
+ *  bank branch. Returns null rather than a wildly-off guess. */
+export function nearestWithinTolerance<T extends LatLng>(
+  point: LatLng,
+  candidates: T[],
+  toleranceMiles = 0.3,
+): T | null {
+  let best: T | null = null;
+  let bestDist = Infinity;
+  for (const c of candidates) {
+    const d = haversineMiles(point, c);
+    if (d < bestDist) {
+      bestDist = d;
+      best = c;
+    }
+  }
+  return best && bestDist <= toleranceMiles ? best : null;
 }
 
 export { routeMinutes };
