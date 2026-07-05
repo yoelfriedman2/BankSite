@@ -12,6 +12,7 @@ import {
   CalendarDays,
   Printer,
   MapPin,
+  RefreshCw,
   FileText,
   MessageSquare,
   Bell,
@@ -201,6 +202,21 @@ const TOPICS: Topic[] = [
     tips: [
       "Only one address change can be in progress at a time — finish or cancel it before starting another.",
       "This is private to you; it doesn't affect your bank statuses or shared data.",
+    ],
+  },
+  {
+    id: "fdic-sync",
+    icon: RefreshCw,
+    title: "FDIC sync",
+    blurb: "Compare the bank list against the FDIC's live records.",
+    points: [
+      "Anyone can run a check — it's read-only",
+      "Shows name changes, websites, assets, city/state, and closed banks",
+      "Applying a change needs the FDIC admin role",
+    ],
+    tips: [
+      "Only the owner can grant the FDIC admin role, from Admin → Users. Everyone else sees the same results with a lock icon instead of an Accept button.",
+      "A closed bank can be removed from the database, but never for someone who still has an active account there — their copy is left untouched.",
     ],
   },
   {

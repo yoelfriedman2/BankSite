@@ -2,15 +2,27 @@
 
 Running list of things to review and decide. (Feature ideas live in IDEAS.md — this is for open work items.)
 
-## Live: FDIC sync tool
+## One-time setup pending
 
-Owner-only page at `/admin/fdic` (linked from Admin → Users). Manual "Check against FDIC"
-button — nothing runs on a schedule, nothing writes until you click Accept on a specific item.
-Five sections: Closed or merged (informational only, banks are NEVER auto-deleted), Name
-changes, Websites (re-verifies the URL loads at the moment you accept it), Assets (per-row or
-"Accept all"), City/state. Accepted changes propagate to every user's copy of that bank by cert,
-same as any other shared field. Private fields (status, priority, notes, target balance) are
-never touched.
+- Run migration **0026_fdic_admin_role.sql** in the Supabase SQL editor to enable the FDIC-admin
+  role toggle on Admin → Users. Until then: the owner still has full apply access (that check
+  doesn't depend on the column), the Users page still works normally, and toggling the role for
+  someone else shows a friendly "run the migration" message instead of a crash.
+
+## Live: FDIC sync tool (role-based)
+
+Page at `/fdic-sync`, in the main nav for **everyone** signed in. Manual "Check against FDIC"
+button — nothing runs on a schedule, and running the check is read-only for anyone. **Applying**
+a change (or deleting a closed bank) requires the **FDIC admin** role: the owner always has it;
+the owner grants/revokes it per user from Admin → Users (a checkbox per row). Users without the
+role see the same diffs with a lock icon instead of an Accept/Delete button.
+
+Five sections: Closed or merged (delete removes the bank from the database, but skips — leaves
+completely untouched — any user who has an active account there, so real holdings never
+disappear because a bank's status went stale), Name changes, Websites (re-verifies the URL loads
+at the moment it's accepted), Assets (per-row or "Accept all"), City/state. Accepted changes
+propagate to every user's copy of that bank by cert, same as any other shared field. Private
+fields (status, priority, notes, target balance) are never touched.
 
 ## Decide: which FDIC fields should sync on a schedule (still open)
 

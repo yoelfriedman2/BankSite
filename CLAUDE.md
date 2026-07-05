@@ -67,8 +67,15 @@ info, notes); each user's status/notes/accounts/balances are private via RLS.
   target_balance are private and never propagate. See `sharedFieldChanges` /
   `shouldPropagate` in `app/(app)/banks/actions.ts`.
 - **Owner/admin gating**: `requireOwner()`-style checks compare
-  `user.email` to `process.env.ADMIN_EMAIL`. Admin-only pages
-  (`/admin`, `/admin/fdic`) redirect non-owners to `/`.
+  `user.email` to `process.env.ADMIN_EMAIL`. Admin-only pages (`/admin`)
+  redirect non-owners to `/`.
+- **Scoped roles beyond owner**: `profiles.is_fdic_admin` (migration 0026) is
+  the pattern for "everyone can view, only specific people can write" — the
+  owner grants it per user from Admin → Users. `/fdic-sync` is visible to
+  every signed-in user (the check is read-only for anyone); only the owner or
+  an `is_fdic_admin` user can actually apply a change or delete a closed bank.
+  If more roles like this are ever needed, follow this same shape rather than
+  inventing a generic permissions system nobody asked for.
 - **Cron**: Vercel free tier caps at 2 cron jobs (`vercel.json`), both already
   used (`/api/keepalive`, `/api/cron/reminders`). New scheduled work rides the
   existing daily reminders cron rather than adding a third job (see the Monday
@@ -108,6 +115,21 @@ the code:
    verify via the `DEMO_MODE` preview flow described above.
 
 ## Current state (update this — most recent first)
+
+**2026-07-04 (later)** — FDIC sync reworked from owner-only to a scoped role.
+Moved `/admin/fdic` → `/fdic-sync` (top-level nav item, visible to every signed-in
+user — running the read-only check no longer requires being the owner). Added
+migration 0026 (`profiles.is_fdic_admin`): the owner grants this per user from
+Admin → Users (new checkbox column) to let specific people actually apply
+changes; everyone else sees the same diffs with a lock icon instead of an
+Accept button. Also added: deleting a closed/merged bank now actually removes
+it from the database (soft-delete, same as every other bank delete — see
+Trash) — but only for users with no active account there; anyone holding an
+account keeps their copy completely untouched, checked per user row. Made
+`admin/actions.ts`'s user list resilient to migration 0026 not being run yet
+(is_fdic_admin queried as a separate call so a missing column can't blank out
+display names). Fixed a stale line in the delete-user confirmation dialog that
+still said community notes get removed — they haven't since migration 0022.
 
 **2026-07-04** — Migrations 0021–0025 all confirmed applied (verified live via
 read-only schema probe, not just chat confirmation). Fixed a real bug: importing

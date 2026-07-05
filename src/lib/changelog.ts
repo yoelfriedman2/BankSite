@@ -12,6 +12,13 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-07-04",
+    title: "FDIC sync, open to everyone",
+    items: [
+      "The FDIC sync tool has its own place in the nav now, and anyone can run a check comparing the bank list against the FDIC's live records. Applying a change (or removing a closed bank) is limited to whoever the owner has set as an FDIC admin — everyone else sees the same results with a lock icon instead.",
+    ],
+  },
+  {
+    date: "2026-07-04",
     title: "Import from Accounts too, and a crash fixed",
     items: [
       "Import now works from the Accounts page as well as Banks — same wizard either way, since a row can carry bank info, account info, or both.",
