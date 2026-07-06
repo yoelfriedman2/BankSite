@@ -195,7 +195,7 @@ function parseBankNameNotes(raw: string): NameNotes {
     /\b2nd\s+offering\b/i.test(raw) &&
     !/2nd\s+offering\s+not\s+interesting/i.test(raw)
   ) {
-    result.conversionStage = "second_possible";
+    result.conversionStage = "partial";
   } else if (/\bgoing\s+public\b/i.test(raw)) {
     result.conversionStage = "filed";
   }

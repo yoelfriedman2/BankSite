@@ -37,7 +37,7 @@ export type ConversionStage =
   | "filed"
   | "subscription"
   | "completed"
-  | "second_possible";
+  | "partial";
 
 /**
  * A bank in the user's master list: FDIC reference data plus the user's
@@ -261,7 +261,7 @@ export const CONVERSION_STAGE_LABELS: Record<ConversionStage, string> = {
   filed: "Filed / announced",
   subscription: "Subscription open",
   completed: "Converted",
-  second_possible: "2nd IPO possible",
+  partial: "Partial (2nd IPO possible)",
 };
 
 export const CONVERSION_STAGE_ORDER: ConversionStage[] = [
@@ -270,5 +270,5 @@ export const CONVERSION_STAGE_ORDER: ConversionStage[] = [
   "filed",
   "subscription",
   "completed",
-  "second_possible",
+  "partial",
 ];

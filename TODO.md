@@ -4,6 +4,12 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 
 ## One-time setup pending
 
+- Run migration **0033_conversion_stage_partial.sql** in the Supabase SQL editor. Renames the
+  `conversion_stage` value `second_possible` to `partial` (updates existing rows, then swaps the
+  DB check constraint) — the app already reads/writes the new name, so any bank still stored as
+  `second_possible` won't match `CONVERSION_STAGE_LABELS`/`CONVERSION_STAGE_ORDER` until this runs
+  (shows up as an unstyled/unlabeled badge and a blank stage dropdown for just those banks — no
+  crash, self-corrects the moment the migration runs).
 - Run migration **0031_interest_rate_and_min_balance_exclusion.sql** in the Supabase SQL editor.
   Adds `accounts.interest_rate` (used by the new Fees & interest page's CD projections) and
   `accounts.exclude_min_balance` (the new per-account "don't flag for minimum balance" checkbox).
