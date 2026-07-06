@@ -4,13 +4,6 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 
 ## One-time setup pending
 
-- Run migration **0034_sweep_transactions.sql** in the Supabase SQL editor. Adds two Postgres
-  functions (`sweep_accounts`, `return_sweep`) that `money/actions.ts` now calls via `.rpc()` instead
-  of doing the balance update + sweep/history inserts as separate client statements — fixes a real
-  gap where a failure between those steps could leave a balance changed with no record of it, or let
-  a "return" apply twice on retry. **Until this migration is run, Money moved and Return will fail**
-  with a "could not find the function" error — this isn't a gracefully-degrading feature, since the
-  whole point was replacing the old racy write path, not adding something new on top of it.
 - Run migration **0031_interest_rate_and_min_balance_exclusion.sql** in the Supabase SQL editor.
   Adds `accounts.interest_rate` (used by the new Fees & interest page's CD projections) and
   `accounts.exclude_min_balance` (the new per-account "don't flag for minimum balance" checkbox).
@@ -32,7 +25,8 @@ Five real bugs/gaps found and fixed:
    insert. Fixed in `banks/actions.ts`'s `importBanks` — rows now reuse the bank already created
    earlier in the same import for the same cert/name. Only affects future imports; any duplicates
    already created by a past import need manual merging (ask if you want a cleanup script for that).
-2. **Money sweep/return race**: see the migration note above — now atomic via RPC.
+2. **Money sweep/return race**: now atomic via two new Postgres functions, migration
+   **0034_sweep_transactions.sql** (confirmed run 2026-07-06).
 3. **FDIC branch refresh wipe-on-failure**: `refreshBranchLocations()` deleted every bank's branches
    up front, then re-inserted in chunks — a failed chunk left many banks with zero road-trip
    location data until the next successful run. Now processes delete+insert per cert-batch so a
