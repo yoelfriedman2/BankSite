@@ -61,11 +61,15 @@ info, notes); each user's status/notes/accounts/balances are private via RLS.
   hard-crashing. Several pages do this on purpose (e.g. `dormancy.ts`'s
   `attentionPrefsFromProfile`, the address-change page's "migration needed" notice).
 - **Shared vs. private bank fields**: `banks` rows are per-user copies keyed by
-  FDIC `cert`. Editing a shared field (open_methods, eligibility, branch_location,
-  phone, website, min_to_open, conversion_stage) propagates to every other user's
-  copy of that cert via the admin client. Status, priority, notes, and
-  target_balance are private and never propagate. See `sharedFieldChanges` /
-  `shouldPropagate` in `app/(app)/banks/actions.ts`.
+  FDIC `cert`. Editing a shared field (city, state, assets, holding_company,
+  open_methods, eligibility, branch_location, phone, website, min_to_open,
+  conversion_stage) propagates to every other user's copy of that cert via the
+  admin client. Status, priority, notes, and target_balance are private and never
+  propagate. Name and cert are also excluded from propagation on purpose — cert is
+  the join key used to find the other copies, and name is treated as the
+  canonical identifier (same precedent as `importBanks`'s matched-row handling) —
+  so an edit to either stays local rather than silently overwriting everyone
+  else's. See `sharedFieldChanges` / `shouldPropagate` in `app/(app)/banks/actions.ts`.
 - **Owner/admin gating**: `requireOwner()`-style checks compare
   `user.email` to `process.env.ADMIN_EMAIL`. Admin-only pages (`/admin`)
   redirect non-owners to `/`.
@@ -128,6 +132,36 @@ the code:
    verification.
 
 ## Current state (update this — most recent first)
+
+**2026-07-06 (data-consistency fixes from a code review pass)** — Fixed five real bugs surfaced by
+reviewing the codebase for data-integrity risks (import correctness, money-tracking safety, backup
+completeness). See `TODO.md`'s "data-consistency fixes" entry for the full list and reasoning; the
+short version:
+- Import no longer creates duplicate bank rows when a spreadsheet has multiple accounts under one
+  brand-new bank (`banks/actions.ts`'s `importBanks`).
+- Money sweep ("move out") and return are now atomic DB transactions via two new Postgres functions
+  (migration **0034_sweep_transactions.sql**, `sweep_accounts`/`return_sweep`, called via
+  `.rpc()` from `money/actions.ts`) instead of separate client-side writes — closes a real gap where
+  a failure mid-operation could desync a balance from its audit trail, or let a return double-apply
+  on retry. **This one isn't optional/gracefully-degrading** — Money moved/Return will error until
+  migration 0034 is run.
+- FDIC branch refresh (`refreshBranchLocations`) now deletes+inserts per cert-batch instead of
+  wiping every bank's branches up front, so a failed sync only affects the batch in flight.
+- The "Bank info" section's city/state/assets/holding_company now actually propagate to every
+  family member's copy on edit, matching the green "Shared" badge they'd always had (name and cert
+  stay local-only on purpose — see the "Shared vs. private bank fields" note above).
+- Weekly automated backup (`lib/backup.ts`) now includes the `address_campaigns`/
+  `address_campaign_items` and `road_trips` tables. The user-facing "Full backup" download
+  (`/api/export/full`) now also includes login credentials, interest rate, monthly-fee settings, and
+  new sheets for Activity log, Money moves, Checks, Reminders, and Address changes — it undersold
+  itself before (only flattened banks/accounts columns).
+
+Verified via `npm run build` (passes clean, no type errors) — `xlsx`'s dependency was temporarily
+pointed at a plain npm-registry version to get `npm install` past the CDN-block issue documented in
+the entry below, then `package.json`/`package-lock.json` were restored to their exact committed
+state afterward. No interactive/DEMO_MODE click-testing this round — all five changes are
+server-action/backend logic with no new UI surface (the shared-field propagation change has no new
+UI, it's the same form; the export change only adds sheets to a downloaded file).
 
 **2026-07-06 (partial/minority conversion stage + IPO status filter)** — Two
 things from chat feedback:

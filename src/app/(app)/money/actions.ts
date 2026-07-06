@@ -45,8 +45,6 @@ function revalidate() {
   revalidatePath("/");
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
-
 /** Accounts the user can sweep from (with current balance), for the new-move form. */
 export async function getSweepAccountOptions(): Promise<SweepAccountOption[]> {
   if (DEMO_MODE) {
@@ -139,59 +137,21 @@ export async function createSweepBatch(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
-  const acctIds = valid.map((i) => i.accountId);
-  const { data: accts } = await supabase
-    .from("accounts")
-    .select("id, balance, activity_log")
-    .in("id", acctIds);
-  const byId = new Map((accts ?? []).map((a) => [a.id as string, a]));
-
-  const sweepRows: Record<string, unknown>[] = [];
-  const histRows: Record<string, unknown>[] = [];
-
-  for (const item of valid) {
-    const acct = byId.get(item.accountId);
-    if (!acct) continue;
-    const current = acct.balance != null ? Number(acct.balance) : 0;
-    // Never move out more than is actually there, so the return is symmetric
-    // (returning the recorded amount restores the original balance exactly).
-    const out = Math.min(item.amount, Math.max(0, current));
-    if (out <= 0) continue;
-    const newBalance = Number((current - out).toFixed(2));
-    const log = [
-      ...((acct.activity_log as { date: string; note: string | null }[]) ?? []),
-      { date: item.movedOutAt, note: `Moved out ${out} — ${r}` },
-    ];
-    const { error: updErr } = await supabase
-      .from("accounts")
-      .update({ balance: newBalance, last_activity_date: item.movedOutAt, activity_log: log })
-      .eq("id", item.accountId);
-    if (updErr) return { error: updErr.message };
-
-    sweepRows.push({
-      user_id: user.id,
-      account_id: item.accountId,
-      reason: r,
-      amount: out,
-      left_behind: newBalance,
-      moved_out_at: item.movedOutAt,
-    });
-    histRows.push({
-      user_id: user.id,
-      account_id: item.accountId,
-      as_of_date: item.movedOutAt,
-      balance: newBalance,
-      change_amount: -out,
-      reason: `sweep out — ${r}`,
-    });
-  }
-
-  if (sweepRows.length === 0) return { error: "Those accounts have no balance to move." };
-
-  if (sweepRows.length) {
-    const { error } = await supabase.from("account_sweeps").insert(sweepRows);
-    if (error) return { error: error.message };
-    await supabase.from("account_balance_history").insert(histRows);
+  // Runs as one atomic DB transaction (migration 0034's sweep_accounts
+  // function) — the old version updated each account's balance, then
+  // inserted the sweep/history rows as separate statements, so a failure
+  // partway through could leave a balance changed with no record of it.
+  const { data, error } = await supabase.rpc("sweep_accounts", {
+    p_reason: r,
+    p_items: valid.map((i) => ({
+      account_id: i.accountId,
+      amount: i.amount,
+      moved_out_at: i.movedOutAt,
+    })),
+  });
+  if (error) return { error: error.message };
+  if (!data || (data as unknown[]).length === 0) {
+    return { error: "Those accounts have no balance to move." };
   }
 
   revalidate();
@@ -213,41 +173,17 @@ export async function returnSweep(sweepId: string): Promise<{ error?: string }> 
 
   const { data: sweep } = await supabase
     .from("account_sweeps")
-    .select("id, account_id, amount, reason, returned_at")
+    .select("id, returned_at")
     .eq("id", sweepId)
     .maybeSingle();
   if (!sweep) return { error: "Move not found." };
   if (sweep.returned_at) return {};
 
-  const { data: acct } = await supabase
-    .from("accounts")
-    .select("balance, activity_log")
-    .eq("id", sweep.account_id)
-    .maybeSingle();
-  const current = acct?.balance != null ? Number(acct.balance) : 0;
-  const amount = Number(sweep.amount);
-  const newBalance = Number((current + amount).toFixed(2));
-  const d = today();
-  const log = [
-    ...((acct?.activity_log as { date: string; note: string | null }[]) ?? []),
-    { date: d, note: `Returned ${amount} — ${sweep.reason}` },
-  ];
-
-  const { error: updErr } = await supabase
-    .from("accounts")
-    .update({ balance: newBalance, last_activity_date: d, activity_log: log })
-    .eq("id", sweep.account_id);
-  if (updErr) return { error: updErr.message };
-
-  await supabase.from("account_sweeps").update({ returned_at: d }).eq("id", sweepId);
-  await supabase.from("account_balance_history").insert({
-    user_id: user.id,
-    account_id: sweep.account_id,
-    as_of_date: d,
-    balance: newBalance,
-    change_amount: amount,
-    reason: `return — ${sweep.reason}`,
-  });
+  // Runs as one atomic DB transaction (migration 0034's return_sweep
+  // function), which also row-locks the sweep so a concurrent/retried call
+  // can't apply the same return twice.
+  const { error } = await supabase.rpc("return_sweep", { p_sweep_id: sweepId });
+  if (error) return { error: error.message };
 
   revalidate();
   return {};

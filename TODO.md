@@ -4,6 +4,13 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 
 ## One-time setup pending
 
+- Run migration **0034_sweep_transactions.sql** in the Supabase SQL editor. Adds two Postgres
+  functions (`sweep_accounts`, `return_sweep`) that `money/actions.ts` now calls via `.rpc()` instead
+  of doing the balance update + sweep/history inserts as separate client statements — fixes a real
+  gap where a failure between those steps could leave a balance changed with no record of it, or let
+  a "return" apply twice on retry. **Until this migration is run, Money moved and Return will fail**
+  with a "could not find the function" error — this isn't a gracefully-degrading feature, since the
+  whole point was replacing the old racy write path, not adding something new on top of it.
 - Run migration **0031_interest_rate_and_min_balance_exclusion.sql** in the Supabase SQL editor.
   Adds `accounts.interest_rate` (used by the new Fees & interest page's CD projections) and
   `accounts.exclude_min_balance` (the new per-account "don't flag for minimum balance" checkbox).
@@ -13,6 +20,43 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
   role toggle on Admin → Users. Until then: the owner still has full apply access (that check
   doesn't depend on the column), the Users page still works normally, and toggling the role for
   someone else shows a friendly "run the migration" message instead of a crash.
+
+## Live: data-consistency fixes (2026-07-06, from a code review pass)
+
+Five real bugs/gaps found and fixed:
+
+1. **Import creating duplicate banks**: importing a spreadsheet with several accounts under one
+   brand-new bank (e.g. 3 holders at a bank not yet in the system) silently created 3 separate bank
+   rows — one per account — instead of one bank with 3 accounts, because every row in a "create
+   new" review group got stamped the same generic `CREATE_NEW` marker and each one triggered its own
+   insert. Fixed in `banks/actions.ts`'s `importBanks` — rows now reuse the bank already created
+   earlier in the same import for the same cert/name. Only affects future imports; any duplicates
+   already created by a past import need manual merging (ask if you want a cleanup script for that).
+2. **Money sweep/return race**: see the migration note above — now atomic via RPC.
+3. **FDIC branch refresh wipe-on-failure**: `refreshBranchLocations()` deleted every bank's branches
+   up front, then re-inserted in chunks — a failed chunk left many banks with zero road-trip
+   location data until the next successful run. Now processes delete+insert per cert-batch so a
+   failure only affects the batch in flight, matching what the function's own comment always
+   claimed. No migration needed; existing data unaffected until the next sync.
+4. **Shared bank-info badge didn't match what actually propagated**: the "Bank info" section
+   (name/city/state/cert/assets/holding company) had the same green "Shared" badge as sections that
+   really do sync to every family member's copy, but city/state/assets/holding_company silently
+   stayed local-only. Decided to make behavior match the badge rather than relabel it: those four
+   fields now propagate on edit, same as open_methods/eligibility/branch_location/etc. **Name and
+   cert stay local-only on purpose** — cert is the join key used to find other users' copies of a
+   bank, and name is treated as the canonical identifier (same reasoning already used in
+   `importBanks`), so neither should get silently overwritten by one person's edit.
+5. **Export/backup gaps**: the weekly automated backup (`lib/backup.ts`) was missing the
+   `address_campaigns`/`address_campaign_items` and `road_trips` tables — added both. Separately,
+   the user-facing "Full backup" download (`/api/export/full`) only ever exported flattened
+   banks/accounts columns; it now also includes login credentials/URL, interest rate, monthly-fee
+   settings, and new sheets for Activity log, Money moves, Checks, Reminders, and Address changes.
+   **User-visible**: the downloaded zip is now noticeably bigger with more sheets than before.
+
+Verified via `npm run build` (temporarily pointed the `xlsx` dependency at a plain npm-registry
+version for this one build — the CDN one is blocked by this environment's egress policy, same
+known issue as the 2026-07-06 partial/minority entry below; `package.json`/`package-lock.json` were
+restored to their committed state immediately after, no dependency change was actually made).
 
 ## Live (open to everyone, 2026-07-05): Road trip planner
 

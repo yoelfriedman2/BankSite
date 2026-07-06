@@ -18,6 +18,9 @@ const TABLES = [
   "reminders",
   "audit_log",
   "printed_checks",
+  "address_campaigns",
+  "address_campaign_items",
+  "road_trips",
 ];
 
 type Row = Record<string, unknown>;

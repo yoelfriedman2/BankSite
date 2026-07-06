@@ -404,14 +404,30 @@ export async function refreshBranchLocations(): Promise<{ count?: number; error?
       updated_at: new Date().toISOString(),
     }));
 
-  const { error: delErr } = await admin.from("bank_branches").delete().in("cert", [...certs]);
-  if (delErr) return { error: delErr.message };
+  // Delete + insert per cert-batch (not delete-everything-then-insert-in-
+  // chunks) so a failure partway through only affects the batch in flight —
+  // certs not yet reached keep their previous refresh's rows, matching the
+  // guarantee this function is documented to make.
+  const byCert = new Map<number, typeof toInsert>();
+  for (const row of toInsert) {
+    if (!byCert.has(row.cert)) byCert.set(row.cert, []);
+    byCert.get(row.cert)!.push(row);
+  }
 
+  const certList = [...certs];
+  const CERT_BATCH = 100;
   let count = 0;
-  for (let i = 0; i < toInsert.length; i += 500) {
-    const { error } = await admin.from("bank_branches").insert(toInsert.slice(i, i + 500));
-    if (error) return { error: error.message, count };
-    count += toInsert.slice(i, i + 500).length;
+  for (let i = 0; i < certList.length; i += CERT_BATCH) {
+    const certBatch = certList.slice(i, i + CERT_BATCH);
+    const { error: delErr } = await admin.from("bank_branches").delete().in("cert", certBatch);
+    if (delErr) return { error: delErr.message, count };
+
+    const rowsForBatch = certBatch.flatMap((cert) => byCert.get(cert) ?? []);
+    if (rowsForBatch.length) {
+      const { error: insErr } = await admin.from("bank_branches").insert(rowsForBatch);
+      if (insErr) return { error: insErr.message, count };
+      count += rowsForBatch.length;
+    }
   }
   return { count };
 }

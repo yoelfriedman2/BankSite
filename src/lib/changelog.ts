@@ -12,6 +12,15 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-07-06",
+    title: "Fixed a duplicate-bank import bug, and a bigger Full backup",
+    items: [
+      "Importing a spreadsheet with several accounts under one brand-new bank no longer splits them into duplicate bank entries — they now correctly land under a single bank.",
+      "Editing a bank's city, state, assets, or holding company now syncs to everyone else's copy of that bank, same as the other bank-info fields already did.",
+      "The \"Full backup\" download on Settings now also includes your saved logins, interest rates, monthly fees, activity log, money moves, printed checks, reminders, and address-change history — not just banks and accounts.",
+    ],
+  },
+  {
+    date: "2026-07-06",
     title: "Filter banks by IPO status, plus a clearer partial-conversion stage",
     items: [
       "New IPO status filter on the Banks page — check off Rumored, Filed, Subscription open, Converted, and/or Partial to narrow the list to just those.",

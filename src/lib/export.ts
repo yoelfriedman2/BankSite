@@ -42,11 +42,29 @@ export function buildExportRows(banks: Bank[], accounts: Account[]) {
       "Last activity": a.last_activity_date ?? "",
       "CD maturity": a.cd_maturity_date ?? "",
       "Date opened": a.date_opened ?? "",
+      "Login URL": a.online_url ?? "",
+      Username: a.username ?? "",
+      Password: a.password ?? "",
+      "Interest rate": a.interest_rate ?? "",
+      "Monthly fee": a.monthly_fee ?? "",
+      "Monthly fee day": a.monthly_fee_day ?? "",
+      "Excluded from min-balance alert": a.exclude_min_balance ? "yes" : "",
       Notes: a.notes ?? "",
     };
   });
 
-  return { bankRows, acctRows };
+  const activityRows = accounts.flatMap((a) => {
+    const bk = bankMap.get(a.bank_id);
+    return (a.activity_log ?? []).map((entry) => ({
+      Bank: bk?.name ?? "",
+      Holder: a.holder ?? "",
+      Date: entry.date,
+      Type: entry.type ?? "",
+      Note: entry.note ?? "",
+    }));
+  });
+
+  return { bankRows, acctRows, activityRows };
 }
 
 /** Build a workbook (Banks + Accounts, or just Accounts for non-owners) and

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { formatAssets } from "@/lib/format";
 import { sendCommunityNoteEmail } from "@/lib/email";
 import { logAudit, type AuditEntry } from "@/lib/audit";
 import type { User } from "@supabase/supabase-js";
@@ -47,6 +48,10 @@ const SHARED_FIELDS: {
   label: string;
   fmt: (v: unknown) => string;
 }[] = [
+  { key: "city", label: "City", fmt: (v) => (v as string) || "—" },
+  { key: "state", label: "State", fmt: (v) => (v as string) || "—" },
+  { key: "assets", label: "Assets", fmt: (v) => formatAssets(v as number | null) },
+  { key: "holding_company", label: "Holding company", fmt: (v) => (v as string) || "—" },
   { key: "open_methods", label: "Open methods", fmt: (v) => Array.isArray(v) && v.length ? (v as OpenMethod[]).map((m) => OPEN_METHOD_LABELS[m]).join(", ") : "none" },
   { key: "eligibility", label: "Who can open", fmt: (v) => v ? ELIGIBILITY_LABELS[v as keyof typeof ELIGIBILITY_LABELS] : "—" },
   { key: "eligibility_date", label: "Eligibility date", fmt: (v) => (v as string) || "—" },
@@ -222,7 +227,7 @@ export async function upsertBank(
   if (values.id) {
     const { data: prev } = await supabase
       .from("banks")
-      .select("open_methods, eligibility, eligibility_date, branch_location, phone, website, min_to_open, conversion_stage")
+      .select("city, state, assets, holding_company, open_methods, eligibility, eligibility_date, branch_location, phone, website, min_to_open, conversion_stage")
       .eq("id", values.id)
       .maybeSingle();
     oldShared = prev ?? null;
@@ -278,6 +283,10 @@ export async function upsertBank(
 
   // Propagate shared ("global") fields to all other users' copies of the same bank.
   // Private fields (status, priority, notes, target_balance) are intentionally excluded.
+  // name and cert are also excluded here: cert is the join key used to find the
+  // other copies below, and name is the canonical identifier (same reasoning as
+  // importBanks' matched-row handling) — neither should get silently overwritten
+  // by one person's edit the way descriptive fields do.
   // shared_fields_updated_at / shared_updated_by are stamped on OTHER users' rows so the
   // amber unread dot fires for them — never on the editor's own row.
   //
@@ -302,6 +311,10 @@ export async function upsertBank(
     const summary = changes.length ? changes.join("; ") : null;
 
     const sharedPatch = {
+      city: patch.city,
+      state: patch.state,
+      assets: patch.assets,
+      holding_company: patch.holding_company,
       open_methods: patch.open_methods,
       eligibility: patch.eligibility,
       eligibility_date: patch.eligibility_date,
@@ -583,12 +596,18 @@ export async function importBanks(
   const accountInserts: Record<string, unknown>[] = [];
   const noteInserts: { cert: number; body: string }[] = [];
   let banksTouched = 0;
+  // Rows the review UI grouped under the same "create new bank" entry (same
+  // cert, or same name when no cert) all get stamped matched_bank_id ===
+  // "CREATE_NEW" — reuse the bank created for the first row in that group
+  // instead of inserting one new bank per row.
+  const createdThisImport = new Map<string, ExistingEntry>();
 
   for (const row of rows) {
     // Client review step may have pre-resolved a bank ID
     let found: ExistingEntry | undefined;
     if (row.matched_bank_id === "CREATE_NEW") {
-      found = undefined; // explicitly force new bank creation
+      const key = row.cert != null ? `cert:${row.cert}` : `name:${row.name.toLowerCase()}`;
+      found = createdThisImport.get(key);
     } else if (row.matched_bank_id) {
       found = byId.get(row.matched_bank_id);
     } else {
@@ -660,6 +679,10 @@ export async function importBanks(
       const entry: ExistingEntry = { id: bankId, cert: row.cert, status: "open" };
       if (row.cert != null) byCert.set(row.cert, entry);
       byName.set(row.name.toLowerCase(), entry);
+      if (row.matched_bank_id === "CREATE_NEW") {
+        const key = row.cert != null ? `cert:${row.cert}` : `name:${row.name.toLowerCase()}`;
+        createdThisImport.set(key, entry);
+      }
     }
     banksTouched++;
 
