@@ -129,6 +129,33 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-06 (partial/minority conversion stage + IPO status filter)** — Two
+things from chat feedback:
+- Renamed the `conversion_stage` value `second_possible` → `partial` (label
+  now "Partial (2nd IPO possible)") across `types.ts`, `badges.tsx`, and
+  `ImportDialog.tsx`'s text-parser. This isn't a new 6th stage — it replaces
+  the old one, since what it was actually describing (a bank that sold only a
+  minority stake to the public via an MHC structure, as opposed to a full
+  conversion — which is exactly what makes a future 2nd-step conversion
+  possible) is clearer as one merged label than a vague "2nd offering."
+  Migration **0033_conversion_stage_partial.sql** updates existing rows and
+  swaps the DB check constraint — see `TODO.md` for the one-time-setup note
+  and how it degrades until run.
+- New IPO status filter on `/banks` (`BanksClient.tsx`): a multi-select
+  popover (checkboxes, same interaction pattern as `AccountsClient.tsx`'s
+  `QuickLogButton`) next to the existing State/Sort controls, so you can view
+  e.g. every Rumored bank across all tracking statuses. The mobile filter row
+  (state / IPO status / sort / sort-direction) moved from a plain `flex` row
+  to `grid grid-cols-2 sm:flex` to fit a 4th control at 375px without overflow.
+- **Note**: build could not be verified in this session — this remote
+  environment's `node_modules` isn't installed, and `npm install` fails
+  because `xlsx` is fetched from `cdn.sheetjs.com` (a non-npm-registry CDN
+  host blocked by this environment's egress policy) rather than the npm
+  registry. Changes were reviewed by hand instead (grepped for every
+  remaining `second_possible` reference, confirmed none left outside the old
+  migration file and the frozen 2023-import script). Run `npm run build`
+  wherever `node_modules` is actually installed before considering this done.
+
 **2026-07-05 (road trip planner — opened to everyone)** — The road trip
 planner is no longer owner-only: removed `ownerOnly` from its two nav entries
 (`SideNav.tsx`/`TopNav.tsx`) and swapped the `requireOwner()` gates in

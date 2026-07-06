@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -14,14 +14,18 @@ import {
   ChevronsUpDown,
   Link2,
   ListPlus,
+  TrendingUp,
 } from "lucide-react";
 import {
   STATUS_LABELS,
   STATUS_ORDER,
   ASSIGNABLE_STATUSES,
+  CONVERSION_STAGE_LABELS,
+  CONVERSION_STAGE_ORDER,
   type Account,
   type Bank,
   type BankStatus,
+  type ConversionStage,
 } from "@/lib/types";
 import {
   getActivityLevel,
@@ -163,6 +167,79 @@ function sortBanks(
   return arr;
 }
 
+/** Multi-select popover for filtering by IPO/conversion stage. */
+function IpoStageFilterButton({
+  value,
+  onChange,
+}: {
+  value: Set<ConversionStage>;
+  onChange: (next: Set<ConversionStage>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  function toggle(stage: ConversionStage) {
+    const next = new Set(value);
+    if (next.has(stage)) next.delete(stage);
+    else next.add(stage);
+    onChange(next);
+  }
+
+  return (
+    <div ref={ref} className="relative flex-1 sm:flex-none">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm outline-none focus:border-amber-500 sm:w-auto ${
+          value.size > 0
+            ? "border-amber-300 bg-amber-50 text-amber-800"
+            : "border-slate-300 text-slate-700"
+        }`}
+      >
+        <TrendingUp className="h-4 w-4" />
+        IPO status{value.size > 0 ? ` (${value.size})` : ""}
+        <ChevronDown className="h-3 w-3" />
+      </button>
+      {open && (
+        <div className="absolute left-0 z-20 mt-1 w-56 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+          {CONVERSION_STAGE_ORDER.map((s) => (
+            <label
+              key={s}
+              className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              <input
+                type="checkbox"
+                checked={value.has(s)}
+                onChange={() => toggle(s)}
+                className="h-3.5 w-3.5 rounded border-slate-300 text-amber-500 focus:ring-amber-400"
+              />
+              {CONVERSION_STAGE_LABELS[s]}
+            </label>
+          ))}
+          {value.size > 0 && (
+            <button
+              type="button"
+              onClick={() => onChange(new Set())}
+              className="mt-1 block w-full border-t border-slate-100 px-3 py-1.5 text-left text-sm text-slate-500 hover:bg-slate-50"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function BanksClient({
   banks,
   accounts,
@@ -200,6 +277,7 @@ export function BanksClient({
     initialStatus ?? "all",
   );
   const [stateFilter, setStateFilter] = useState<string>("all");
+  const [stageFilter, setStageFilter] = useState<Set<ConversionStage>>(new Set());
   const [query, setQuery] = useState(initialQuery ?? "");
   const [sort, setSort] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -248,6 +326,7 @@ export function BanksClient({
     let list = banks;
     if (statusFilter !== "all") list = list.filter((b) => b.status === statusFilter);
     if (stateFilter !== "all") list = list.filter((b) => b.state === stateFilter);
+    if (stageFilter.size > 0) list = list.filter((b) => stageFilter.has(b.conversion_stage));
     const q = query.trim().toLowerCase();
     if (q) {
       list = list.filter((b) => {
@@ -266,6 +345,7 @@ export function BanksClient({
     accountsByBank,
     statusFilter,
     stateFilter,
+    stageFilter,
     query,
     sort,
     sortDir,
@@ -506,11 +586,11 @@ export function BanksClient({
               className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
             />
           </div>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:flex">
             <select
               value={stateFilter}
               onChange={(e) => setStateFilter(e.target.value)}
-              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500 sm:flex-none"
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500"
             >
               <option value="all">All states</option>
               {states.map((s) => (
@@ -520,37 +600,41 @@ export function BanksClient({
               ))}
             </select>
 
-            <select
-              value={sort}
-              onChange={(e) => {
-                const k = e.target.value as SortKey;
-                setSort(k);
-                setSortDir(DEFAULT_DIR[k]);
-              }}
-              aria-label="Sort banks by"
-              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500 sm:flex-none"
-            >
-              {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
-                <option key={k} value={k}>
-                  Sort: {SORT_LABELS[k]}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-              title={sortDir === "asc" ? "Ascending" : "Descending"}
-              aria-label={`Sort direction: ${
-                sortDir === "asc" ? "ascending" : "descending"
-              }`}
-              className="flex shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-white px-2.5 text-slate-600 hover:bg-slate-50"
-            >
-              {sortDir === "asc" ? (
-                <ChevronUp className="h-4 w-4" />
-              ) : (
-                <ChevronDown className="h-4 w-4" />
-              )}
-            </button>
+            <IpoStageFilterButton value={stageFilter} onChange={setStageFilter} />
+
+            <div className="col-span-2 flex gap-2 sm:contents">
+              <select
+                value={sort}
+                onChange={(e) => {
+                  const k = e.target.value as SortKey;
+                  setSort(k);
+                  setSortDir(DEFAULT_DIR[k]);
+                }}
+                aria-label="Sort banks by"
+                className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500 sm:flex-none"
+              >
+                {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+                  <option key={k} value={k}>
+                    Sort: {SORT_LABELS[k]}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+                title={sortDir === "asc" ? "Ascending" : "Descending"}
+                aria-label={`Sort direction: ${
+                  sortDir === "asc" ? "ascending" : "descending"
+                }`}
+                className="flex shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-white px-2.5 text-slate-600 hover:bg-slate-50"
+              >
+                {sortDir === "asc" ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>

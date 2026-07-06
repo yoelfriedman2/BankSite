@@ -67,7 +67,7 @@ const CONVERSION_STYLES: Record<ConversionStage, string> = {
   filed: "bg-amber-100 text-amber-800 ring-amber-200",
   subscription: "bg-rose-100 text-rose-700 ring-rose-200",
   completed: "bg-emerald-100 text-emerald-700 ring-emerald-200",
-  second_possible: "bg-violet-100 text-violet-700 ring-violet-200",
+  partial: "bg-violet-100 text-violet-700 ring-violet-200",
 };
 
 export function ConversionBadge({ stage }: { stage: ConversionStage }) {

@@ -11,6 +11,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-07-06",
+    title: "Filter banks by IPO status, plus a clearer partial-conversion stage",
+    items: [
+      "New IPO status filter on the Banks page — check off Rumored, Filed, Subscription open, Converted, and/or Partial to narrow the list to just those.",
+      "\"2nd IPO possible\" is now \"Partial (2nd IPO possible)\" — it's specifically for banks that only sold a minority stake to the public (an MHC structure) rather than fully converting, which is what makes a future 2nd-step conversion possible.",
+    ],
+  },
+  {
     date: "2026-07-05",
     title: "Plan a road trip to open banks in person",
     items: [
