@@ -55,6 +55,7 @@ export interface Bank {
   regulator: string | null;
   assets: number | null; // total assets in $000
   holding_company: string | null;
+  holding_company_id: string | null; // links to HoldingCompany, set only by the /holding-companies sync wizard
 
   // How to open (shared)
   open_methods: OpenMethod[] | null;
@@ -153,6 +154,18 @@ export interface BankComment {
   author_name: string | null;
   body: string;
   created_at: string;
+}
+
+/** A holding/mutual-holding company that owns one or more banks. Shared
+ *  reference data, populated only by the /holding-companies sync wizard. */
+export interface HoldingCompany {
+  id: string;
+  name: string;
+  assets: number | null; // total consolidated assets, $000
+  assets_as_of: string | null; // NIC financial reporting period, e.g. "2026 Q1"
+  nic_rssd_id: number | null;
+  created_at: string;
+  updated_at: string;
 }
 
 /** A global bidirectional link between two banks (keyed by cert). */

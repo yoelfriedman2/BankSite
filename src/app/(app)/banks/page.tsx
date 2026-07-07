@@ -9,10 +9,11 @@ import {
   getDemoAccounts,
   getDemoProfile,
   getKnownHolders,
+  getDemoHoldingCompanies,
 } from "@/lib/demo";
 import { seedBanks, getUnreadCommentCerts, getRelatedByCert } from "./actions";
 import { isOwnerEmail } from "@/lib/isOwner";
-import type { Account, Bank, BankStatus } from "@/lib/types";
+import type { Account, Bank, BankStatus, HoldingCompany } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +54,7 @@ export default async function BanksPage({
         banks={getDemoBanks()}
         accounts={getDemoAccounts()}
         knownHolders={getKnownHolders()}
+        holdingCompanies={getDemoHoldingCompanies()}
         defaultDormancyMonths={demoProfile.default_dormancy_months}
         userDisplayName={demoProfile.display_name ?? ""}
         currentUserId={DEMO_USER.id}
@@ -116,9 +118,11 @@ export default async function BanksPage({
     ]),
   ).sort();
 
-  const [unreadCerts, relatedByCert] = await Promise.all([
+  const [unreadCerts, relatedByCert, holdingCompaniesRes] = await Promise.all([
     getUnreadCommentCerts(),
     getRelatedByCert(),
+    // Table may not exist yet if migration 0035 hasn't been run — degrade to none.
+    supabase.from("holding_companies").select("*"),
   ]);
 
   return (
@@ -126,6 +130,7 @@ export default async function BanksPage({
       banks={(banks ?? []) as Bank[]}
       accounts={accountList}
       knownHolders={knownHolders}
+      holdingCompanies={(holdingCompaniesRes.data ?? []) as HoldingCompany[]}
       defaultDormancyMonths={profile?.default_dormancy_months ?? 12}
       userDisplayName={profile?.display_name ?? ""}
       currentUserId={user?.id ?? null}

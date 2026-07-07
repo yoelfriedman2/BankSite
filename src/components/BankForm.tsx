@@ -36,8 +36,10 @@ import {
   addBankRelationship,
   removeBankRelationship,
   searchBanksForRelationship,
+  getHoldingCompanyInfo,
   type BankFormValues,
   type RelatedBank,
+  type HoldingCompanyInfo,
 } from "@/app/(app)/banks/actions";
 import { deleteAccount, duplicateAccount } from "@/app/(app)/accounts/actions";
 import {
@@ -156,6 +158,8 @@ export function BankForm({
 
   // Related banks
   const [relatedBanks, setRelatedBanks] = useState<RelatedBank[]>([]);
+  // Verified holding company (from the /holding-companies sync wizard)
+  const [holdingCompanyInfo, setHoldingCompanyInfo] = useState<HoldingCompanyInfo | null>(null);
   const [relSearch, setRelSearch] = useState("");
   const [relResults, setRelResults] = useState<Awaited<ReturnType<typeof searchBanksForRelationship>>>([]);
   const [relBusy, setRelBusy] = useState(false);
@@ -229,12 +233,14 @@ export function BankForm({
     setReadAt(new Date().toISOString());
     setRelatedBanks([]);
     setReminders([]);
+    setHoldingCompanyInfo(null);
     if (initial?.id) getReminders(initial.id).then(setReminders).catch(() => {});
     if (initial?.cert != null) {
       const cert = initial.cert;
       getBankComments(cert).then(setComments).catch(() => {});
       markCommentsRead(cert).catch(() => {});
       getRelatedBanks(cert).then(setRelatedBanks).catch(() => {});
+      getHoldingCompanyInfo(cert).then(setHoldingCompanyInfo).catch(() => {});
     }
   }, [initial?.id]);
 
@@ -692,6 +698,47 @@ export function BankForm({
                     <input id="holding_company" className={inputClass} value={values.holding_company} onChange={(e) => set("holding_company", e.target.value)} />
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Verified holding company (from the /holding-companies sync wizard) */}
+            {holdingCompanyInfo && (
+              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="mb-1 flex items-center justify-between text-xs font-medium text-slate-500 uppercase tracking-wide">
+                  Holding company
+                  <span className="text-[10px] font-normal normal-case text-slate-400">verified via Fed data</span>
+                </p>
+                <p className="text-sm text-slate-700">
+                  <span className="font-medium">{holdingCompanyInfo.name}</span>
+                  {holdingCompanyInfo.assets != null && (
+                    <span className="text-slate-400">
+                      {" "}
+                      · ${(holdingCompanyInfo.assets / 1000).toFixed(0)}M assets
+                      {holdingCompanyInfo.assetsAsOf ? ` (as of ${holdingCompanyInfo.assetsAsOf})` : ""}
+                    </span>
+                  )}
+                </p>
+                {holdingCompanyInfo.siblingBanks.length > 0 && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Also owns:{" "}
+                    {holdingCompanyInfo.siblingBanks.map((sb, i) => (
+                      <span key={sb.cert}>
+                        {i > 0 && ", "}
+                        {sb.bankId && onOpenBank ? (
+                          <button
+                            type="button"
+                            onClick={() => onOpenBank(sb.bankId!)}
+                            className="text-amber-700 hover:underline"
+                          >
+                            {sb.name}
+                          </button>
+                        ) : (
+                          sb.name
+                        )}
+                      </span>
+                    ))}
+                  </p>
+                )}
               </div>
             )}
 

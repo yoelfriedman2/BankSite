@@ -4,6 +4,18 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 
 ## One-time setup pending
 
+- Run migration **0035_holding_companies.sql** in the Supabase SQL editor. Adds the shared
+  `holding_companies` table and `banks.holding_company_id`, needed for the new Holding companies
+  page (`/holding-companies`) to work at all — until run, the page's DB writes will error (the
+  Banks page's "Holding co." filter and the bank drawer's holding-company section both degrade
+  gracefully to showing nothing in the meantime).
+- **`/holding-companies`'s NIC file parsing is unverified against a real downloaded file.** The
+  column-name matching in `src/lib/nicParse.ts` is a best-effort guess at NIC's file format (I
+  couldn't fetch a real sample — NIC's site CAPTCHA-blocks automated access, confirmed by testing
+  from both this environment and a PowerShell session on a real machine). The wizard shows exactly
+  which columns it detected (or a clear error with the actual headers found) at each upload step —
+  expect the first real run to need a follow-up fix to `nicParse.ts` once we see the actual file
+  structure.
 - Run migration **0031_interest_rate_and_min_balance_exclusion.sql** in the Supabase SQL editor.
   Adds `accounts.interest_rate` (used by the new Fees & interest page's CD projections) and
   `accounts.exclude_min_balance` (the new per-account "don't flag for minimum balance" checkbox).

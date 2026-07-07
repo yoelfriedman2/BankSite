@@ -15,6 +15,7 @@ import {
   Link2,
   ListPlus,
   TrendingUp,
+  Building2,
 } from "lucide-react";
 import {
   STATUS_LABELS,
@@ -26,6 +27,7 @@ import {
   type Bank,
   type BankStatus,
   type ConversionStage,
+  type HoldingCompany,
 } from "@/lib/types";
 import {
   getActivityLevel,
@@ -240,11 +242,89 @@ function IpoStageFilterButton({
   );
 }
 
+/** Multi-select popover for filtering by (verified) holding company. */
+function HoldingCompanyFilterButton({
+  options,
+  value,
+  onChange,
+}: {
+  options: { id: string; label: string }[];
+  value: Set<string>;
+  onChange: (next: Set<string>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  function toggle(id: string) {
+    const next = new Set(value);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onChange(next);
+  }
+
+  if (options.length === 0) return null;
+
+  return (
+    <div ref={ref} className="relative flex-1 sm:flex-none">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm outline-none focus:border-amber-500 sm:w-auto ${
+          value.size > 0
+            ? "border-amber-300 bg-amber-50 text-amber-800"
+            : "border-slate-300 text-slate-700"
+        }`}
+      >
+        <Building2 className="h-4 w-4" />
+        Holding co.{value.size > 0 ? ` (${value.size})` : ""}
+        <ChevronDown className="h-3 w-3" />
+      </button>
+      {open && (
+        <div className="absolute left-0 z-20 mt-1 max-h-72 w-64 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+          {options.map((o) => (
+            <label
+              key={o.id}
+              className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              <input
+                type="checkbox"
+                checked={value.has(o.id)}
+                onChange={() => toggle(o.id)}
+                className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-amber-500 focus:ring-amber-400"
+              />
+              <span className="truncate">{o.label}</span>
+            </label>
+          ))}
+          {value.size > 0 && (
+            <button
+              type="button"
+              onClick={() => onChange(new Set())}
+              className="mt-1 block w-full border-t border-slate-100 px-3 py-1.5 text-left text-sm text-slate-500 hover:bg-slate-50"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function BanksClient({
   banks,
   accounts,
   defaultDormancyMonths,
   knownHolders,
+  holdingCompanies,
   userDisplayName,
   currentUserId,
   unreadCerts,
@@ -258,6 +338,7 @@ export function BanksClient({
   accounts: Account[];
   defaultDormancyMonths: number;
   knownHolders: string[];
+  holdingCompanies: HoldingCompany[];
   userDisplayName: string;
   currentUserId: string | null;
   unreadCerts: number[];
@@ -278,6 +359,7 @@ export function BanksClient({
   );
   const [stateFilter, setStateFilter] = useState<string>("all");
   const [stageFilter, setStageFilter] = useState<Set<ConversionStage>>(new Set());
+  const [hcFilter, setHcFilter] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState(initialQuery ?? "");
   const [sort, setSort] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -322,11 +404,24 @@ export function BanksClient({
     return Array.from(set).sort();
   }, [banks]);
 
+  const hcNameById = useMemo(
+    () => new Map(holdingCompanies.map((h) => [h.id, h.name])),
+    [holdingCompanies],
+  );
+  const holdingCompanyOptions = useMemo(() => {
+    const ids = new Set<string>();
+    for (const b of banks) if (b.holding_company_id) ids.add(b.holding_company_id);
+    return Array.from(ids)
+      .map((id) => ({ id, label: hcNameById.get(id) ?? "Unknown" }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [banks, hcNameById]);
+
   const filtered = useMemo(() => {
     let list = banks;
     if (statusFilter !== "all") list = list.filter((b) => b.status === statusFilter);
     if (stateFilter !== "all") list = list.filter((b) => b.state === stateFilter);
     if (stageFilter.size > 0) list = list.filter((b) => stageFilter.has(b.conversion_stage));
+    if (hcFilter.size > 0) list = list.filter((b) => b.holding_company_id && hcFilter.has(b.holding_company_id));
     const q = query.trim().toLowerCase();
     if (q) {
       list = list.filter((b) => {
@@ -346,6 +441,7 @@ export function BanksClient({
     statusFilter,
     stateFilter,
     stageFilter,
+    hcFilter,
     query,
     sort,
     sortDir,
@@ -601,6 +697,12 @@ export function BanksClient({
             </select>
 
             <IpoStageFilterButton value={stageFilter} onChange={setStageFilter} />
+
+            <HoldingCompanyFilterButton
+              options={holdingCompanyOptions}
+              value={hcFilter}
+              onChange={setHcFilter}
+            />
 
             <div className="col-span-2 flex gap-2 sm:contents">
               <select

@@ -133,6 +133,57 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-07 (holding companies — new shared table + sync wizard)** — Built the holding-company
+feature discussed in chat: a bank's holding company is no longer just the free-text
+`holding_company` field (still there, still per-user, unchanged) — there's now a real shared
+`holding_companies` table (migration **0035_holding_companies.sql**: `holding_companies` + new
+`banks.holding_company_id` FK) so a holding company's own consolidated assets can be tracked once
+and linked to every bank it owns, instead of retyping a number per bank.
+
+- **Why manual**: the Fed's National Information Center (NIC), which tracks bank ownership, has no
+  automatable API — confirmed CAPTCHA-gated when probed both from this environment and a real
+  PowerShell session on the user's own machine (uniform 403s across every guessed endpoint, then an
+  actual "CAPTCHA Error" page on the bulk-download URL). So this can't be a live sync like
+  `/fdic-sync`; instead the user downloads 3 files from NIC by hand every few months.
+- **New `/holding-companies` page** (`HoldingCompaniesClient.tsx`): a step-by-step wizard —
+  download-and-upload for each of 3 NIC files (Relationships, Attributes-Active, Financial Data),
+  then a review screen, then apply. Visible to every signed-in user (matches `/fdic-sync`'s own
+  visibility), but **applying is gated the same way `/fdic-sync` is** (owner or
+  `profiles.is_fdic_admin`, reusing `getFdicPermissions()` from `fdic-sync/actions.ts` rather than
+  inventing a new role) — anyone can run the wizard through the review screen, only that role sees
+  the Accept button.
+- **Parsing happens client-side** (`src/lib/nicParse.ts`, `src/lib/nicDiff.ts`): the browser unzips
+  (`jszip`, already a dependency) and parses (`xlsx`, already used for import) each uploaded file,
+  filters to just the RSSDs relevant to our ~426 banks, and builds the diff — nothing server-side
+  ever handles the full nationwide file, avoiding any request-size limit question entirely. The one
+  server round-trip before uploads (`getBankRssdCrosswalk` in `holding-companies/actions.ts`) looks
+  up every tracked bank's Federal Reserve RSSD id live from the FDIC API (same API `/fdic-sync`
+  already calls, just requesting one more field) — that part **is** automatic and confirmed 100%
+  coverage (426/426 banks) in testing.
+- **Column-name matching in `nicParse.ts` is a best-effort guess, not verified against a real NIC
+  file** — I was never able to obtain one (NIC blocks automated fetches; the user's one real
+  download attempt hit the CAPTCHA page). Every parse step shows exactly which column it picked (or
+  a clear error with the real headers found) specifically so a wrong guess is fixable, not silently
+  wrong. See `TODO.md` — expect the first real 3-file run to need a follow-up fix.
+- Bank drawer (`BankForm.tsx`) gained a read-only "Holding company · verified via Fed data" section
+  (name, assets, sibling banks) shown only once a bank has been linked by the wizard —
+  `getHoldingCompanyInfo()` in `banks/actions.ts`. Banks page (`BanksClient.tsx`) gained a "Holding
+  co." multi-select filter, same interaction pattern as the existing IPO-status filter.
+- **Demo mode**: `demo.ts` seeds one fake holding company shared by the first two seed banks, plus a
+  "Load sample data" button in the wizard (demo-mode only) that skips real file uploads so the
+  whole flow — review, apply, drawer, filter — can be click-tested without real NIC files.
+
+Verified via `npm run build` (temporarily pointed `xlsx` at a plain npm-registry version to install
+in this sandbox, then restored `package.json`/`package-lock.json` to their committed state
+afterward — same workaround as the 2026-07-06 entry below) and a full interactive pass in
+DEMO_MODE using a headless Playwright browser (this environment has no visual preview tool, but
+Chromium + Playwright are pre-installed) — drawer info, filter narrowing, wizard through to a
+successful apply, and mobile width (375px, no overflow) on both `/banks` and `/holding-companies`
+all confirmed working. One real bug caught and fixed this way: the wizard's permission check
+wasn't demo-mode-aware (called the real Supabase auth check unconditionally), so the demo "Load
+sample data" flow silently returned zero banks — fixed by special-casing `DEMO_MODE` in
+`getHoldingCompanySyncPermissions()`, same pattern `/fdic-sync`'s own page already used.
+
 **2026-07-06 (data-consistency fixes from a code review pass)** — Fixed five real bugs surfaced by
 reviewing the codebase for data-integrity risks (import correctness, money-tracking safety, backup
 completeness). See `TODO.md`'s "data-consistency fixes" entry for the full list and reasoning; the

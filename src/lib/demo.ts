@@ -9,7 +9,7 @@
 // every page render (Next can otherwise load this module more than once).
 // Changes persist only while the dev server runs.
 // ---------------------------------------------------------------------------
-import type { Account, Bank, BankComment, Profile } from "./types";
+import type { Account, Bank, BankComment, HoldingCompany, Profile } from "./types";
 import { BANKS_SEED } from "./banks-seed";
 import type { RoadTripPlan } from "@/app/(app)/road-trip/actions";
 
@@ -137,6 +137,7 @@ function seedToBankFields(s: (typeof BANKS_SEED)[number]): BankFields {
     regulator: s.regulator,
     assets: s.assets,
     holding_company: s.holding_company,
+    holding_company_id: null,
     status: "untracked",
     priority: null,
     open_methods: null,
@@ -226,12 +227,28 @@ type DemoStore = {
   comments: BankComment[];
   commentReads: Record<number, string>;
   roadTrips: DemoTrip[];
+  holdingCompanies: HoldingCompany[];
 };
 
 function createInitialStore(): DemoStore {
   const banks = BANKS_SEED.map((s, i) =>
     makeBank({ ...seedToBankFields(s), ...(BANK_OVERRIDES[i] ?? {}) }),
   );
+
+  // A couple of banks under the same holding company, so the /banks filter and
+  // bank-drawer "verified holding company" section have something to show.
+  const now = new Date().toISOString();
+  const sampleHoldingCompany: HoldingCompany = {
+    id: crypto.randomUUID(),
+    name: "Sample Mutual Holding Company",
+    assets: 850000,
+    assets_as_of: "2026 Q1",
+    nic_rssd_id: 900001,
+    created_at: now,
+    updated_at: now,
+  };
+  if (banks[0]) banks[0].holding_company_id = sampleHoldingCompany.id;
+  if (banks[1]) banks[1].holding_company_id = sampleHoldingCompany.id;
 
   const accounts: Account[] = [
     makeAccount(banks[0].id, {
@@ -321,7 +338,15 @@ function createInitialStore(): DemoStore {
         ]
       : [];
 
-  return { profile, banks, accounts, comments, commentReads: {}, roadTrips: [] };
+  return {
+    profile,
+    banks,
+    accounts,
+    comments,
+    commentReads: {},
+    roadTrips: [],
+    holdingCompanies: [sampleHoldingCompany],
+  };
 }
 
 const g = globalThis as unknown as { __btDemo?: DemoStore };
@@ -346,6 +371,63 @@ export function getDemoTrashedBanks(): Bank[] {
 }
 export function addDemoBank(fields: BankFields): void {
   store().banks = [makeBank(fields), ...store().banks];
+}
+
+// ---- Holding companies ----
+export function getDemoHoldingCompanies(): HoldingCompany[] {
+  return store().holdingCompanies;
+}
+export function getDemoHoldingCompanyInfo(cert: number): {
+  name: string;
+  assets: number | null;
+  assetsAsOf: string | null;
+  siblingBanks: { cert: number; name: string; bankId: string | null }[];
+} | null {
+  const bank = getDemoBanks().find((b) => b.cert === cert);
+  if (!bank?.holding_company_id) return null;
+  const hc = store().holdingCompanies.find((h) => h.id === bank.holding_company_id);
+  if (!hc) return null;
+  const siblings = getDemoBanks().filter(
+    (b) => b.holding_company_id === hc.id && b.cert !== cert,
+  );
+  return {
+    name: hc.name,
+    assets: hc.assets,
+    assetsAsOf: hc.assets_as_of,
+    siblingBanks: siblings.map((b) => ({ cert: b.cert as number, name: b.name, bankId: b.id })),
+  };
+}
+/** Applies holding-company sync changes against the in-memory demo store —
+ *  mirrors applyHoldingCompanyChanges' real-mode upsert-by-nic_rssd_id logic. */
+export function applyDemoHoldingCompanyChanges(
+  changes: { parentRssd: number; name: string; assets: number | null; assetsAsOf: string | null; certs: number[] }[],
+): number {
+  let applied = 0;
+  for (const change of changes) {
+    let hc = store().holdingCompanies.find((h) => h.nic_rssd_id === change.parentRssd);
+    const now = new Date().toISOString();
+    if (hc) {
+      hc = { ...hc, name: change.name, assets: change.assets, assets_as_of: change.assetsAsOf, updated_at: now };
+      store().holdingCompanies = store().holdingCompanies.map((h) => (h.id === hc!.id ? hc! : h));
+    } else {
+      hc = {
+        id: crypto.randomUUID(),
+        name: change.name,
+        assets: change.assets,
+        assets_as_of: change.assetsAsOf,
+        nic_rssd_id: change.parentRssd,
+        created_at: now,
+        updated_at: now,
+      };
+      store().holdingCompanies = [...store().holdingCompanies, hc];
+    }
+    const certSet = new Set(change.certs);
+    store().banks = store().banks.map((b) =>
+      b.cert != null && certSet.has(b.cert) ? { ...b, holding_company_id: hc!.id } : b,
+    );
+    applied++;
+  }
+  return applied;
 }
 export function updateDemoBank(id: string, fields: Partial<BankFields>): void {
   store().banks = store().banks.map((b) =>
@@ -601,6 +683,7 @@ export function importDemoRows(rows: ImportRow[]): {
         regulator: row.regulator,
         assets: row.assets,
         holding_company: row.holding_company,
+        holding_company_id: null,
         status,
         priority: null,
         open_methods: row.open_methods,

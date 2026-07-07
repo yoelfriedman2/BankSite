@@ -11,6 +11,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-07-07",
+    title: "See which banks share a holding company, and how big it really is",
+    items: [
+      "New Holding companies page: walks you through downloading 3 free files from the Federal Reserve every few months, then automatically matches them against every tracked bank — no manual typing.",
+      "Once matched, the Banks page has a new \"Holding co.\" filter, and a bank's page shows the holding company's own total assets plus every other bank it owns.",
+      "This is separate from the \"Holding company\" text field you can still type in yourself — this new version is verified against the Fed's own records, including the holding company's real consolidated assets (which can be bigger than any one bank's own number for a multi-bank holding company).",
+    ],
+  },
+  {
     date: "2026-07-06",
     title: "Fixed a duplicate-bank import bug, and a bigger Full backup",
     items: [

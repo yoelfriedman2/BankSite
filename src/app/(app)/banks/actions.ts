@@ -24,6 +24,7 @@ import {
   deleteDemoComment,
   getDemoUnreadCerts,
   markDemoCommentsRead,
+  getDemoHoldingCompanyInfo,
   type BankFields,
   type ImportRow,
 } from "@/lib/demo";
@@ -1397,6 +1398,59 @@ export async function getRelatedBanks(cert: number): Promise<RelatedBank[]> {
   }
 
   return Array.from(results.values());
+}
+
+export type HoldingCompanyInfo = {
+  name: string;
+  assets: number | null;
+  assetsAsOf: string | null;
+  siblingBanks: { cert: number; name: string; bankId: string | null }[];
+};
+
+/** The verified holding company (from the /holding-companies sync wizard, not
+ *  the free-text field above) linked to this bank, plus every other bank in
+ *  the user's own list under the same holding company. Null if this bank
+ *  hasn't been linked by a sync yet. */
+export async function getHoldingCompanyInfo(cert: number): Promise<HoldingCompanyInfo | null> {
+  if (DEMO_MODE) return getDemoHoldingCompanyInfo(cert);
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: thisBank } = await supabase
+    .from("banks")
+    .select("holding_company_id")
+    .eq("cert", cert)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const hcId = thisBank?.holding_company_id as string | null;
+  if (!hcId) return null;
+
+  const [{ data: hc }, { data: siblings }] = await Promise.all([
+    supabase.from("holding_companies").select("name, assets, assets_as_of").eq("id", hcId).maybeSingle(),
+    supabase
+      .from("banks")
+      .select("id, cert, name")
+      .eq("user_id", user.id)
+      .eq("holding_company_id", hcId)
+      .neq("cert", cert)
+      .is("deleted_at", null),
+  ]);
+  if (!hc) return null;
+
+  return {
+    name: hc.name as string,
+    assets: hc.assets as number | null,
+    assetsAsOf: hc.assets_as_of as string | null,
+    siblingBanks: (siblings ?? []).map((b) => ({
+      cert: b.cert as number,
+      name: b.name as string,
+      bankId: b.id as string,
+    })),
+  };
 }
 
 /** Adds a bidirectional link between two banks. Idempotent. */
