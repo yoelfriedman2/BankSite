@@ -98,7 +98,16 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
         return;
       }
       setBranchStatus("done");
-      setBranchMessage(`${res.count ?? 0} office locations saved. Reload the page to pick up the new data.`);
+      const count = res.count ?? 0;
+      const diagnostic =
+        count === 0
+          ? res.certsChecked === 0
+            ? " (no tracked banks with a cert found — nothing to sync)"
+            : res.rawRows === 0
+              ? ` (checked ${res.certsChecked} bank${res.certsChecked === 1 ? "" : "s"}, but the FDIC returned no office data for them — try again shortly in case this was a temporary FDIC API issue)`
+              : ` (checked ${res.certsChecked} bank${res.certsChecked === 1 ? "" : "s"}, FDIC returned ${res.rawRows} office row${res.rawRows === 1 ? "" : "s"} but none had usable coordinates)`
+          : "";
+      setBranchMessage(`${count} office locations saved.${diagnostic} Reload the page to pick up the new data.`);
     });
   }
 

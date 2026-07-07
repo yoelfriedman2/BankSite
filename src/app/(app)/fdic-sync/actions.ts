@@ -366,7 +366,12 @@ async function fetchFdicLocations(certs: number[]): Promise<FdicLocationRow[]> {
  * so a partial failure just leaves the previous refresh's rows in place for
  * certs it didn't reach.
  */
-export async function refreshBranchLocations(): Promise<{ count?: number; error?: string }> {
+export async function refreshBranchLocations(): Promise<{
+  count?: number;
+  error?: string;
+  certsChecked?: number;
+  rawRows?: number;
+}> {
   const user = await currentUser();
   if (!(await canApplyFdicChanges(user))) return { error: "Not authorized." };
 
@@ -383,13 +388,16 @@ export async function refreshBranchLocations(): Promise<{ count?: number; error?
     for (const row of data ?? []) certs.add(row.cert as number);
     if (!data || data.length < 1000) break;
   }
+  const certsChecked = certs.size;
+  if (certsChecked === 0) return { count: 0, certsChecked: 0, rawRows: 0 };
 
   let rows: FdicLocationRow[];
   try {
     rows = await fetchFdicLocations([...certs]);
   } catch (err) {
-    return { error: String(err) };
+    return { error: String(err), certsChecked };
   }
+  const rawRows = rows.length;
 
   const toInsert = rows
     .filter((r) => r.LATITUDE != null && r.LONGITUDE != null)
@@ -423,14 +431,14 @@ export async function refreshBranchLocations(): Promise<{ count?: number; error?
   for (let i = 0; i < certList.length; i += CERT_BATCH) {
     const certBatch = certList.slice(i, i + CERT_BATCH);
     const { error: delErr } = await admin.from("bank_branches").delete().in("cert", certBatch);
-    if (delErr) return { error: delErr.message, count };
+    if (delErr) return { error: delErr.message, count, certsChecked, rawRows };
 
     const rowsForBatch = certBatch.flatMap((cert) => byCert.get(cert) ?? []);
     if (rowsForBatch.length) {
       const { error: insErr } = await admin.from("bank_branches").insert(rowsForBatch);
-      if (insErr) return { error: insErr.message, count };
+      if (insErr) return { error: insErr.message, count, certsChecked, rawRows };
       count += rowsForBatch.length;
     }
   }
-  return { count };
+  return { count, certsChecked, rawRows };
 }

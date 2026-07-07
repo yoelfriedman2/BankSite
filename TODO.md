@@ -145,6 +145,22 @@ office is available per bank now, not just the main office — defaults to neare
 "N locations ▾" override control on each itinerary row), and a **map marker contrast fix** (the
 "nearby" candidate dots were a muted gray that was genuinely hard to see — now indigo).
 
+**Open bug report (2026-07-07): "Refresh branch locations" saving 0 rows** — the user reported
+`/road-trip` showing "0 office locations saved" after clicking refresh, and the page falling back to
+"No banks have a synced branch location yet." This means `bank_branches` is (or briefly was) empty in
+production, a regression from the 405/426-synced state confirmed above on 2026-07-05. Reviewed
+`refreshBranchLocations()`/`fetchFdicLocations()` in `fdic-sync/actions.ts` line by line — found no
+logic bug (the cert-batch delete/insert refactor from the 2026-07-06 data-consistency pass is sound),
+and this sandbox's outbound network policy blocks `api.fdic.gov` entirely (confirmed via the proxy
+status endpoint — a hard policy denial, not a code path), so the live FDIC "locations" response
+couldn't be inspected directly to confirm whether it's a real FDIC-side change/outage or something
+else. Since a silent `count: 0` gave no way to tell "no certs to check" apart from "FDIC returned
+nothing" apart from "rows came back but had no coordinates," added diagnostics: `refreshBranchLocations`
+now also returns `certsChecked`/`rawRows`, and the UI message on a zero result now says which of those
+three cases it was. **Next step**: click "Refresh branch locations" again on the live site and report
+back the detailed message it now shows — that will pinpoint whether this is an FDIC API problem
+(transient or otherwise) versus something in our own query.
+
 ## Live: address change per holder + monthly fee
 
 Migrations **0028_address_change_per_holder.sql** and **0029_monthly_fee.sql** confirmed run
