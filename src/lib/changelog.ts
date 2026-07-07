@@ -12,6 +12,15 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-07-07",
+    title: "Banks page: sort by Accounts again, plus a header-casing fix",
+    items: [
+      "The Accounts column on the Banks page is sortable again (click it to sort by how many accounts you have there) — it never should have lost that when it lost its old filter.",
+      "Column headers on the Banks and Accounts pages were an inconsistent mix of Title Case and ALL CAPS depending on the column — now they all match.",
+      "Widened the Bank name column so more names fit on one line without wrapping.",
+    ],
+  },
+  {
+    date: "2026-07-07",
     title: "Fixed holding companies showing no total assets",
     items: [
       "Holding companies were matching to the right banks but every single one showed blank total assets — the Federal Reserve's Financial Data file turned out to use a different format than the other 2 files, which broke the numbers silently. Re-run \"Run sync\" (same 3 files, no need to re-download) to pick up real figures.",

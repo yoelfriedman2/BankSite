@@ -736,7 +736,7 @@ export function AccountsClient({
             <col className="w-[4%]" />
           </colgroup>
           <thead>
-            <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+            <tr className="border-b border-slate-200 text-left text-xs tracking-wide text-slate-500">
               <Th label="Bank" sortKey="bank" />
               <Th
                 label="Holder"

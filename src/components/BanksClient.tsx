@@ -52,6 +52,7 @@ type SortKey =
   | "assets"
   | "status"
   | "priority"
+  | "accounts"
   | "balance"
   | "health";
 type SortDir = "asc" | "desc";
@@ -62,6 +63,7 @@ const SORT_LABELS: Record<SortKey, string> = {
   assets: "Assets",
   status: "Status",
   priority: "Priority",
+  accounts: "Accounts",
   balance: "Balance",
   health: "Health",
 };
@@ -73,6 +75,7 @@ const DEFAULT_DIR: Record<SortKey, SortDir> = {
   assets: "desc",
   status: "asc",
   priority: "asc",
+  accounts: "desc",
   balance: "desc",
   health: "asc",
 };
@@ -142,6 +145,9 @@ function sortBanks(
         r =
           (PRIORITY_RANK[a.priority ?? ""] ?? 3) -
           (PRIORITY_RANK[b.priority ?? ""] ?? 3);
+        break;
+      case "accounts":
+        r = accts(a).length - accts(b).length;
         break;
       case "balance":
         r = total(a) - total(b);
@@ -816,21 +822,21 @@ export function BanksClient({
 
       {/* Table (md and up) */}
       <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white md:block">
-        <table className="w-full min-w-[880px] table-fixed text-sm">
+        <table className="w-full min-w-[960px] table-fixed text-sm">
           <colgroup>
-            <col className="w-[24%]" />
+            <col className="w-[29%]" />
             <col className="w-[7%]" />
             <col className="w-[9%]" />
-            <col className="w-[12%]" />
+            <col className="w-[10%]" />
             <col className="w-[11%]" />
+            <col className="w-[7%]" />
+            <col className="w-[7%]" />
             <col className="w-[8%]" />
-            <col className="w-[8%]" />
-            <col className="w-[9%]" />
             <col className="w-[7%]" />
             <col className="w-[5%]" />
           </colgroup>
           <thead>
-            <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+            <tr className="border-b border-slate-200 text-left text-xs tracking-wide text-slate-500">
               <Th label="Bank" sortKey="name" />
               <Th
                 label="State"
@@ -857,7 +863,7 @@ export function BanksClient({
                 }}
               />
               <Th label="Priority" sortKey="priority" />
-              <Th label="Accounts" />
+              <Th label="Accounts" sortKey="accounts" />
               <Th label="Balance" sortKey="balance" align="right" />
               <Th label="Health" sortKey="health" align="center" />
               <th className="px-3 py-3 text-right font-medium"></th>

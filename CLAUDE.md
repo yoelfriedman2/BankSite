@@ -336,6 +336,35 @@ Verified via `npm run build` (temp `xlsx` swap, restored after) plus the standal
 parsing test described above — no DEMO_MODE/Playwright pass needed for this one since nothing in the
 UI changed, only the parsing logic it depends on.
 
+**Fifth same-day follow-up — confirmed the deploy/cache had just been stale, plus a real polish
+round**: after the user confirmed the assets fix above was working live, three more small requests
+came in about the Banks page:
+1. **Accounts column sorting restored**: earlier this same day, "Accounts" lost its `sortKey` on
+   the Banks page per the user's own request that Accounts-count sorting belongs on the Accounts
+   page, not Banks. On reflection the user wants the column kept (still useful to see the count) but
+   *with* sorting restored — re-added `"accounts"` to `SortKey`/`SORT_LABELS`/`DEFAULT_DIR` and a
+   `case "accounts"` in `sortBanks` (`accts(a).length - accts(b).length`, default direction `desc`).
+2. **Real header-casing bug found and fixed, on both Banks and Accounts pages**: the user noticed
+   some column headers were ALL CAPS and others weren't. Root cause: the `thead`'s `<tr>` had a
+   Tailwind `uppercase` class meant to apply to every header uniformly, but Tailwind's preflight
+   reset sets `text-transform: none` on `<button>` elements specifically — so any header rendered as
+   a clickable sort button (has a `sortKey`) silently lost the inherited uppercase, while headers
+   with no `sortKey` (rendered as a plain `<span>` — "IPO status" and, before fix #1 above,
+   "Accounts" on Banks; "Account #"/"CD maturity" on Accounts) stayed uppercase. Fixed by removing
+   `uppercase` from both tables' header `<tr>` entirely (`BanksClient.tsx`, `AccountsClient.tsx`) —
+   all headers now render in the Title Case they're already authored in, consistently.
+3. **Bank column widened**: the Banks page `<colgroup>` gave Bank only 24% (table min-width 880px);
+   real long bank names were wrapping/squishing. Bumped Bank to 29% (took a point or two each from
+   IPO status/Priority/Accounts/Balance, which have much shorter content) and table min-width to
+   960px.
+
+Verified with a headless Playwright pass against DEMO_MODE: screenshotted the Banks header row
+before/after (confirmed "IPO STATUS"/"ACCOUNTS" were the only two rendering ALL CAPS pre-fix, all
+consistent Title Case after), confirmed clicking "Accounts" sorts and sets `aria-sort="descending"`,
+confirmed longer bank names now fit on fewer lines, and confirmed no mobile overflow (375px) on
+either `/banks` or `/accounts` after the colgroup change. `npm run build` clean (temp `xlsx` swap,
+restored after).
+
 **2026-07-06 (data-consistency fixes from a code review pass)** — Fixed five real bugs surfaced by
 reviewing the codebase for data-integrity risks (import correctness, money-tracking safety, backup
 completeness). See `TODO.md`'s "data-consistency fixes" entry for the full list and reasoning; the
