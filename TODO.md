@@ -29,15 +29,10 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
   fix, same as before — that's the "some MHCs are exempt" theory from before, now confirmed to
   co-exist with the parsing bug rather than replace it as the explanation. Re-run "Run sync" (same 3
   files, no re-download needed) to see the corrected results live.
-- Run migration **0031_interest_rate_and_min_balance_exclusion.sql** in the Supabase SQL editor.
-  Adds `accounts.interest_rate` (used by the new Fees & interest page's CD projections) and
-  `accounts.exclude_min_balance` (the new per-account "don't flag for minimum balance" checkbox).
-  Both pages/checks degrade gracefully until then — CDs just show no rate, the checkbox has
-  nothing to save yet — so nothing breaks in the meantime.
-- Run migration **0026_fdic_admin_role.sql** in the Supabase SQL editor to enable the FDIC-admin
-  role toggle on Admin → Users. Until then: the owner still has full apply access (that check
-  doesn't depend on the column), the Users page still works normally, and toggling the role for
-  someone else shows a friendly "run the migration" message instead of a crash.
+- ~~Run migration **0031_interest_rate_and_min_balance_exclusion.sql**~~ — confirmed run
+  (2026-07-07). `accounts.interest_rate` and `accounts.exclude_min_balance` are live.
+- ~~Run migration **0026_fdic_admin_role.sql**~~ — confirmed run (2026-07-07). The owner can now
+  grant the FDIC-admin role toggle on Admin → Users.
 
 ## Live: data-consistency fixes (2026-07-06, from a code review pass)
 
