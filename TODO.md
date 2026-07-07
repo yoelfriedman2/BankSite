@@ -164,13 +164,22 @@ branch count, so the cert lookup/query itself is fine — but **none of the 3088
 LATITUDE/LONGITUDE**, and this worked as recently as 2026-07-05 with the exact same code. Checked FDIC's
 own published field definitions for the `locations` endpoint — `LATITUDE`/`LONGITUDE` are confirmed the
 right field names, so it's not a renamed-field issue on our end. Still couldn't hit `api.fdic.gov`
-directly from this sandbox (blocked outbound) to see a raw response, so added one more diagnostic: on a
-zero-coordinate result, `refreshBranchLocations` now also returns one real raw office record
-(`sampleRow`, public data — office name/address/coordinates, nothing sensitive) which the Road trip page
-shows in a collapsible "Show one raw FDIC office record" section. **Next step**: click "Refresh branch
-locations" again on the live site, expand that section, and paste the JSON back — seeing one real row
-(is `LATITUDE` present as `null`, as an empty string, or missing from the object entirely?) will settle
-whether this is an FDIC-side outage/regression versus something fixable in our parsing.
+directly from this sandbox (blocked outbound) to see a raw response, so added a diagnostic instead: on a
+zero-coordinate result, `refreshBranchLocations` returns one real raw office record which the Road trip
+page shows in a collapsible "Show one raw FDIC office record" section.
+
+**Root cause found and fixed, from that real sample row**: the user ran it and the raw row had
+perfectly valid `LATITUDE`/`LONGITUDE` — the coordinates were never actually missing. The real bug: the
+FDIC is now returning `CERT` as a **JSON string** (`"CERT":"15912"`) rather than a number.
+`refreshBranchLocations` groups fetched rows into a `Map` keyed by `r.CERT`, then looks that map up using
+the numeric certs pulled from our own `banks` table — a string key `"15912"` never matches a numeric
+key `15912` in a JS `Map`, so every single row's lookup silently missed and nothing ever got inserted,
+even though every row was fetched successfully with real coordinates. `fetchFdic` (the main FDIC sync
+check, institutions endpoint) already guards against exactly this with `Number(item.data.CERT)` when
+building its own Map — `fetchFdicLocations`/`refreshBranchLocations` just never got the same treatment.
+Fixed by coercing `cert: Number(r.CERT)` when building the insert rows. Not yet re-verified against
+production (needs the user to click "Refresh branch locations" again post-deploy to confirm a
+non-zero count) but the failure mode is now fully understood, not guessed at.
 
 ## Live: address change per holder + monthly fee
 

@@ -328,7 +328,7 @@ export async function deleteClosedBank(
 }
 
 type FdicLocationRow = {
-  CERT: number; UNINUM: number; MAINOFF: number | string; OFFNAME: string | null;
+  CERT: number | string; UNINUM: number; MAINOFF: number | string; OFFNAME: string | null;
   ADDRESS: string | null; CITY: string | null; STALP: string | null; ZIP: string | number | null;
   LATITUDE: number | string | null; LONGITUDE: number | string | null;
 };
@@ -409,7 +409,11 @@ export async function refreshBranchLocations(): Promise<{
   const toInsert = rows
     .filter((r) => r.LATITUDE != null && r.LONGITUDE != null)
     .map((r) => ({
-      cert: r.CERT,
+      // The FDIC has been observed returning CERT as a JSON string (e.g.
+      // "15912") rather than a number — coerce it the same way fetchFdic
+      // already does, since it's used as a Map key matched against the
+      // numeric certs pulled from our own banks table below.
+      cert: Number(r.CERT),
       uninum: r.UNINUM,
       main_office: String(r.MAINOFF) === "1",
       name: r.OFFNAME,
