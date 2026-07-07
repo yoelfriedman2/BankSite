@@ -241,6 +241,55 @@ wasn't demo-mode-aware (called the real Supabase auth check unconditionally), so
 sample data" flow silently returned zero banks — fixed by special-casing `DEMO_MODE` in
 `getHoldingCompanySyncPermissions()`, same pattern `/fdic-sync`'s own page already used.
 
+**Third same-day follow-up**: after living with the redesigned Banks page filters for a bit, three
+more requests came in, plus a real bug report from the actual production sync run —
+1. **Banks page**: sorting by "Accounts" (number of accounts at a bank) was removed — the user
+   pointed out that's an Accounts-page question, not a Banks-page one (`BanksClient.tsx`'s `Th` for
+   that column just lost its `sortKey`, so it's still a visible column, just not clickable).
+2. **Accounts page reworked to match the Banks-page header pattern**: the standalone Holder/Type/Sort
+   `<select>` dropdowns above the table are gone — Holder and Type are now header-based filters
+   (funnel icon on their column, same `FilterMenu`/`Th` components duplicated into
+   `AccountsClient.tsx` from `BanksClient.tsx`), and sorting is click-the-column-header everywhere
+   (`Bank`/`Holder`/`Type`/`Balance`/`Last activity` — `Account #` and `CD maturity` stay unsortable,
+   no meaningful order). "Needs attention" and the search box were explicitly asked to stay exactly
+   where they are — untouched. Mobile gets the same single "Filters" bottom-sheet pattern as Banks.
+   **Learned from the Banks-page squish bug**: went straight to `table-fixed` + an explicit
+   `<colgroup>` this time instead of shipping auto-layout first and fixing it after — also caught
+   (via screenshot, not by luck) that `CdMaturityCell`'s own `min-w-[9rem]` inner div needs its
+   column to be wide enough to fit it, which set the effective floor for the whole table's
+   min-width. Also caught a fresh mobile squish *this same round*: the first pass put "Needs
+   attention" + search + "Filters" in a single mobile row (3 elements), which crushed the search box
+   down to a sliver even though it didn't technically overflow — moved "Filters" to its own full-width
+   row below, since 2-elements-per-row was the one arrangement already proven to fit at 375px.
+3. **Holding company assets bug — real root cause found (not just theorized)**: the user's live sync
+   matched every bank to holding companies successfully but showed **zero assets for all of them**,
+   not just some — which pointed away from the "some MHCs are legitimately exempt from filing"
+   theory from earlier and toward a real parsing bug. Diagnosis: `parseFinancials`'s (and
+   `parseAttributes`'s) RSSD-id column detection was a single loose "first header containing the
+   substring rssd" match — real NIC/Call-Report files commonly have *other* columns whose header
+   also contains "rssd" as a substring for unrelated metadata (e.g. a report-date field literally
+   named like `RSSD9999`), so if one of those sorts earlier in the header row, detection "succeeds"
+   silently on the wrong column, and the resulting IDs never match the real ones from
+   Relationships/Attributes — `assets: null` for every group, with no thrown error anywhere in the
+   chain. Hardened in `nicParse.ts` via a new `RSSD_ID_CANDIDATES` priority list (anchored forms
+   like `idrssd`/`rssdid` tried before the loose fallback) plus `ID_LIKE_EXCLUDE_TOKENS` (skip a
+   column that also looks date/period-like on the first pass). **Still flagged as best-effort, not
+   confirmed** — never verified against a real file. Also made the "Detected columns" diagnostic
+   persist (new `allDetected` state) into a collapsible "What we matched" section on the review
+   screen, instead of vanishing 600ms after each upload — the only realistic way this stays
+   debuggable without asking the user to screenshot within a fraction of a second.
+4. **Holding companies browse view is now sortable** (Name / Assets, click-to-toggle-direction) —
+   deliberately kept as a lightweight sort control over the existing card list rather than converting
+   to a real `<table>`, since each holding company's member-bank chip list wraps to a variable number
+   of lines and is a poor fit for rigid table rows (exactly the shape of bug already hit once this
+   session).
+
+All four re-verified via `npm run build` (temp `xlsx` swap, restored after) and a headless
+Playwright pass against DEMO_MODE covering: Accounts-column no longer sortable on Banks, the new
+Accounts header filters/sort actually filtering and sorting, both pages' unfiltered default view at
+1280px *and* 375px with no overflow (including the fresh mobile 3-element squish, caught and fixed
+in this same round), and the Holding Companies browse view's sort buttons.
+
 **2026-07-06 (data-consistency fixes from a code review pass)** — Fixed five real bugs surfaced by
 reviewing the codebase for data-integrity risks (import correctness, money-tracking safety, backup
 completeness). See `TODO.md`'s "data-consistency fixes" entry for the full list and reasoning; the

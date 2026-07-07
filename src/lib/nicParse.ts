@@ -54,10 +54,35 @@ function normHeader(h: string): string {
   return h.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+// NIC/Call-Report financial files commonly have several columns whose header
+// merely *contains* "rssd" for unrelated metadata (e.g. a report-date field
+// literally named like "RSSD9999"), not just the true entity-ID column. These
+// tokens mark a header as likely NOT the ID column even if it contains "rssd",
+// so the anchored candidates below get a chance before the loose fallback.
+const ID_LIKE_EXCLUDE_TOKENS = ["dt", "date", "period", "qtr", "quarter", "asof", "9999"];
+
+/** Anchored (most-specific-first) candidates for an entity RSSD-id column,
+ *  followed by the loose "just contains rssd" fallback — the fallback skips
+ *  any header matching ID_LIKE_EXCLUDE_TOKENS first, only falling back to
+ *  considering them too if nothing else matches at all. */
+const RSSD_ID_CANDIDATES: string[][] = [["idrssd"], ["rssdid"], ["rssd", "id"], ["rssd"]];
+
 /** First header whose normalized form contains every token in a candidate set,
- *  tried in priority order. Returns -1 if nothing matches any candidate. */
-function findColumn(headers: string[], candidates: string[][]): number {
+ *  tried in priority order. If `excludeTokens` is given, a header containing
+ *  any of them is skipped on a first pass and only considered on a second pass
+ *  if nothing else matched at all (so a genuine but oddly-named column isn't
+ *  lost entirely, while a probable false-positive is deprioritized). Returns
+ *  -1 if nothing matches any candidate. */
+function findColumn(headers: string[], candidates: string[][], excludeTokens?: string[]): number {
   const normed = headers.map(normHeader);
+  if (excludeTokens?.length) {
+    for (const tokens of candidates) {
+      const idx = normed.findIndex(
+        (h) => tokens.every((t) => h.includes(t)) && !excludeTokens.some((ex) => h.includes(ex)),
+      );
+      if (idx !== -1) return idx;
+    }
+  }
   for (const tokens of candidates) {
     const idx = normed.findIndex((h) => tokens.every((t) => h.includes(t)));
     if (idx !== -1) return idx;
@@ -69,8 +94,9 @@ function requireColumn(
   headers: string[],
   candidates: string[][],
   label: string,
+  excludeTokens?: string[],
 ): number {
-  const idx = findColumn(headers, candidates);
+  const idx = findColumn(headers, candidates, excludeTokens);
   if (idx === -1) {
     throw new Error(
       `Couldn't find a "${label}" column in this file. Headers found: ${headers.join(", ")}`,
@@ -129,7 +155,7 @@ export type ParsedAttributes = {
 
 /** RSSD -> legal/institution name, from the Attributes - Active file. */
 export function parseAttributes(table: CsvTable): ParsedAttributes {
-  const idIdx = requireColumn(table.headers, [["rssd"]], "RSSD id");
+  const idIdx = requireColumn(table.headers, RSSD_ID_CANDIDATES, "RSSD id", ID_LIKE_EXCLUDE_TOKENS);
   const nameIdx = requireColumn(
     table.headers,
     [["nm", "lgl"], ["legal", "name"], ["nm", "short"], ["short", "name"], ["name"]],
@@ -159,7 +185,7 @@ export type ParsedFinancials = {
  *  Financial Data Download (FR Y-9C / Y-9LP / Y-9SP). If an RSSD appears more
  *  than once (multiple periods in the file), the latest period wins. */
 export function parseFinancials(table: CsvTable): ParsedFinancials {
-  const idIdx = requireColumn(table.headers, [["rssd"]], "RSSD id");
+  const idIdx = requireColumn(table.headers, RSSD_ID_CANDIDATES, "RSSD id", ID_LIKE_EXCLUDE_TOKENS);
   const assetsIdx = requireColumn(
     table.headers,
     [["2170"], ["total", "assets"], ["assets"]],

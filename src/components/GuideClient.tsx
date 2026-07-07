@@ -273,7 +273,7 @@ const TOPICS: Topic[] = [
       "Anyone can run the wizard and see the proposed matches; only the owner or an FDIC admin can apply them",
     ],
     tips: [
-      "Use the search box at the top of the browse view to jump to a specific holding company or bank instead of scrolling.",
+      "Use the search box at the top of the browse view to jump to a specific holding company or bank instead of scrolling, and click Name/Assets to sort the list.",
       "The Fed's site blocks automated downloads (it shows a CAPTCHA), which is why this can't run on its own like FDIC sync does — a person has to download the files.",
     ],
   },

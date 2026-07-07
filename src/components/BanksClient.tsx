@@ -52,7 +52,6 @@ type SortKey =
   | "assets"
   | "status"
   | "priority"
-  | "accounts"
   | "balance"
   | "health";
 type SortDir = "asc" | "desc";
@@ -63,7 +62,6 @@ const SORT_LABELS: Record<SortKey, string> = {
   assets: "Assets",
   status: "Status",
   priority: "Priority",
-  accounts: "Accounts",
   balance: "Balance",
   health: "Health",
 };
@@ -75,7 +73,6 @@ const DEFAULT_DIR: Record<SortKey, SortDir> = {
   assets: "desc",
   status: "asc",
   priority: "asc",
-  accounts: "desc",
   balance: "desc",
   health: "asc",
 };
@@ -145,9 +142,6 @@ function sortBanks(
         r =
           (PRIORITY_RANK[a.priority ?? ""] ?? 3) -
           (PRIORITY_RANK[b.priority ?? ""] ?? 3);
-        break;
-      case "accounts":
-        r = accts(a).length - accts(b).length;
         break;
       case "balance":
         r = total(a) - total(b);
@@ -863,7 +857,7 @@ export function BanksClient({
                 }}
               />
               <Th label="Priority" sortKey="priority" />
-              <Th label="Accounts" sortKey="accounts" />
+              <Th label="Accounts" />
               <Th label="Balance" sortKey="balance" align="right" />
               <Th label="Health" sortKey="health" align="center" />
               <th className="px-3 py-3 text-right font-medium"></th>

@@ -14,6 +14,9 @@ import {
   ExternalLink,
   RefreshCw,
   Search,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
 } from "lucide-react";
 import {
   getBankRssdCrosswalk,
@@ -189,16 +192,34 @@ export function HoldingCompaniesClient({
   const [overview, setOverview] = useState<HoldingCompanyOverviewRow[] | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
   const [browseQuery, setBrowseQuery] = useState("");
+  const [browseSortKey, setBrowseSortKey] = useState<"name" | "assets">("assets");
+  const [browseSortDir, setBrowseSortDir] = useState<"asc" | "desc">("desc");
+
+  function toggleBrowseSort(key: "name" | "assets") {
+    if (browseSortKey === key) {
+      setBrowseSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setBrowseSortKey(key);
+      setBrowseSortDir(key === "name" ? "asc" : "desc");
+    }
+  }
 
   const filteredOverview = useMemo(() => {
     if (!overview) return overview;
     const q = browseQuery.trim().toLowerCase();
-    if (!q) return overview;
-    return overview.filter(
-      (hc) =>
-        hc.name.toLowerCase().includes(q) || hc.banks.some((b) => b.name.toLowerCase().includes(q)),
-    );
-  }, [overview, browseQuery]);
+    let list = !q
+      ? overview
+      : overview.filter(
+          (hc) =>
+            hc.name.toLowerCase().includes(q) || hc.banks.some((b) => b.name.toLowerCase().includes(q)),
+        );
+    list = [...list].sort((a, b) => {
+      const r =
+        browseSortKey === "name" ? a.name.localeCompare(b.name) : (a.assets ?? -1) - (b.assets ?? -1);
+      return browseSortDir === "desc" ? -r : r;
+    });
+    return list;
+  }, [overview, browseQuery, browseSortKey, browseSortDir]);
 
   function loadOverview() {
     setOverviewLoading(true);
@@ -226,6 +247,15 @@ export function HoldingCompaniesClient({
   const [busy, setBusy] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [detected, setDetected] = useState<DetectedColumns | null>(null);
+  // Persists past the transient `detected` flash (cleared ~600ms after each
+  // upload) so the review screen can show exactly what was matched in each of
+  // the 3 files — the only realistic way to debug a wrong column match after
+  // the fact, since NIC's real file structure has never been verified.
+  const [allDetected, setAllDetected] = useState<{
+    relationships: DetectedColumns | null;
+    attributes: DetectedColumns | null;
+    financials: DetectedColumns | null;
+  }>({ relationships: null, attributes: null, financials: null });
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [applying, setApplying] = useState(false);
@@ -261,6 +291,7 @@ export function HoldingCompaniesClient({
       const { parentByChild: parsed, detected: det } = parseRelationships(table);
       setParentByChild(parsed);
       setDetected(det);
+      setAllDetected((d) => ({ ...d, relationships: det }));
       setBusy(false);
       setTimeout(() => {
         setStep("attributes");
@@ -282,6 +313,7 @@ export function HoldingCompaniesClient({
       const { nameByRssd: parsed, detected: det } = parseAttributes(table);
       setNameByRssd(parsed);
       setDetected(det);
+      setAllDetected((d) => ({ ...d, attributes: det }));
       setBusy(false);
       setTimeout(() => {
         setStep("financials");
@@ -303,6 +335,7 @@ export function HoldingCompaniesClient({
       const { assetsByRssd: parsed, detected: det } = parseFinancials(table);
       setAssetsByRssd(parsed);
       setDetected(det);
+      setAllDetected((d) => ({ ...d, financials: det }));
       setBusy(false);
       setTimeout(() => {
         setStep("review");
@@ -379,6 +412,7 @@ export function HoldingCompaniesClient({
   function enterWizard() {
     setStep("intro");
     setMode("wizard");
+    setAllDetected({ relationships: null, attributes: null, financials: null });
   }
   function backToBrowse() {
     setMode("browse");
@@ -440,6 +474,36 @@ export function HoldingCompaniesClient({
               <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-400">
                 No holding companies or banks match &quot;{browseQuery}&quot;.
               </p>
+            )}
+
+            {filteredOverview && filteredOverview.length > 0 && (
+              <div className="mb-2 flex items-center gap-4 px-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <span>Sort by</span>
+                {(["name", "assets"] as const).map((key) => {
+                  const active = browseSortKey === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => toggleBrowseSort(key)}
+                      className={`inline-flex items-center gap-1 normal-case tracking-normal ${
+                        active ? "text-slate-700" : "hover:text-slate-600"
+                      }`}
+                    >
+                      <span>{key === "name" ? "Name" : "Assets"}</span>
+                      {active ? (
+                        browseSortDir === "asc" ? (
+                          <ChevronUp className="h-3 w-3" />
+                        ) : (
+                          <ChevronDown className="h-3 w-3" />
+                        )
+                      ) : (
+                        <ChevronsUpDown className="h-3 w-3 text-slate-300" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             )}
 
             <div className="space-y-2">
@@ -611,8 +675,40 @@ export function HoldingCompaniesClient({
           {diff.groups.length === 0 && (
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
               No matches found. This likely means the column-detection guessed wrong for one of the
-              files — worth sending me the error/detected-columns info from each step.
+              files — check &quot;What we matched&quot; below and send me the detected column names.
             </div>
+          )}
+
+          {(allDetected.relationships || allDetected.attributes || allDetected.financials) && (
+            <details className="mb-4 rounded-lg border border-slate-200 bg-slate-50 text-sm">
+              <summary className="cursor-pointer px-3 py-2 font-medium text-slate-600">
+                What we matched (for debugging a wrong or missing value)
+              </summary>
+              <div className="grid gap-3 border-t border-slate-200 px-3 py-2 sm:grid-cols-3">
+                {(
+                  [
+                    ["Relationships", allDetected.relationships],
+                    ["Attributes - Active", allDetected.attributes],
+                    ["Financial Data", allDetected.financials],
+                  ] as const
+                ).map(([label, det]) => (
+                  <div key={label}>
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+                    {det ? (
+                      <ul className="space-y-0.5 text-xs text-slate-600">
+                        {Object.entries(det).map(([field, col]) => (
+                          <li key={field}>
+                            {field}: <span className="font-mono">{col}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs text-slate-400">Not uploaded this run.</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </details>
           )}
 
           <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-1">

@@ -9,7 +9,12 @@ import {
   CalendarCheck,
   Loader2,
   UploadCloud,
+  ChevronUp,
   ChevronDown,
+  ChevronsUpDown,
+  Filter as FilterIcon,
+  SlidersHorizontal,
+  X,
 } from "lucide-react";
 import {
   ACCOUNT_TYPE_LABELS,
@@ -39,35 +44,186 @@ type BankRef = { id: string; name: string; cert: number | null };
 
 const ACTIVITY_TYPES = ["checking", "savings", "money_market"];
 
-type SortKey = "bank" | "balance_desc" | "balance_asc" | "holder" | "type";
+type SortKey = "bank" | "holder" | "type" | "balance" | "lastActivity";
+type SortDir = "asc" | "desc";
 
 const SORT_LABELS: Record<SortKey, string> = {
-  bank: "Bank (default)",
-  balance_desc: "Balance: high to low",
-  balance_asc: "Balance: low to high",
+  bank: "Bank",
   holder: "Holder",
   type: "Account type",
+  balance: "Balance",
+  lastActivity: "Last activity",
 };
 
-function sortRows(list: AccountRow[], sortBy: SortKey): AccountRow[] {
+/** The direction a column starts in the first time you sort by it. */
+const DEFAULT_DIR: Record<SortKey, SortDir> = {
+  bank: "asc",
+  holder: "asc",
+  type: "asc",
+  balance: "desc",
+  lastActivity: "asc",
+};
+
+/** account with no recorded activity/open date sorts last, regardless of direction. */
+function lastActivityTime(r: AccountRow): number | null {
+  const d = r.last_activity_date ?? r.date_opened;
+  return d ? new Date(d).getTime() : null;
+}
+
+function sortRows(list: AccountRow[], sort: SortKey, dir: SortDir): AccountRow[] {
   const sorted = [...list];
-  switch (sortBy) {
-    case "balance_desc":
-      return sorted.sort((a, b) => (b.balance ?? -Infinity) - (a.balance ?? -Infinity));
-    case "balance_asc":
-      return sorted.sort((a, b) => (a.balance ?? Infinity) - (b.balance ?? Infinity));
-    case "holder":
-      return sorted.sort((a, b) => (a.holder ?? "").localeCompare(b.holder ?? ""));
-    case "type":
-      return sorted.sort((a, b) =>
-        (a.account_type ? ACCOUNT_TYPE_LABELS[a.account_type] : "").localeCompare(
+  sorted.sort((a, b) => {
+    let r = 0;
+    switch (sort) {
+      case "holder":
+        r = (a.holder ?? "").localeCompare(b.holder ?? "");
+        break;
+      case "type":
+        r = (a.account_type ? ACCOUNT_TYPE_LABELS[a.account_type] : "").localeCompare(
           b.account_type ? ACCOUNT_TYPE_LABELS[b.account_type] : "",
-        ),
-      );
-    case "bank":
-    default:
-      return sorted.sort((a, b) => a.bankName.localeCompare(b.bankName));
-  }
+        );
+        break;
+      case "balance":
+        r = (a.balance ?? -Infinity) - (b.balance ?? -Infinity);
+        break;
+      case "lastActivity": {
+        const ta = lastActivityTime(a);
+        const tb = lastActivityTime(b);
+        if (ta == null && tb == null) r = 0;
+        else if (ta == null) return 1; // nulls always last
+        else if (tb == null) return -1;
+        else r = ta - tb;
+        break;
+      }
+      case "bank":
+      default:
+        r = 0;
+        break;
+    }
+    if (r === 0) r = a.bankName.localeCompare(b.bankName);
+    return dir === "desc" ? -r : r;
+  });
+  return sorted;
+}
+
+/** Small popover trigger (funnel icon) for a column-header filter — used both
+ *  attached to a desktop column header and standalone in the mobile filter sheet. */
+function FilterMenu({
+  active,
+  label,
+  align = "left",
+  children,
+}: {
+  active: boolean;
+  label: string;
+  align?: "left" | "right";
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative inline-flex">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        title={`Filter by ${label}`}
+        aria-label={`Filter by ${label}`}
+        className={`rounded p-0.5 ${active ? "text-amber-600" : "text-slate-300 hover:text-slate-500"}`}
+      >
+        <FilterIcon className="h-3.5 w-3.5" />
+      </button>
+      {open && (
+        <div
+          className={`absolute z-20 mt-1 max-h-72 w-56 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 text-left text-xs font-normal normal-case tracking-normal text-slate-700 shadow-lg ${
+            align === "right" ? "right-0" : "left-0"
+          }`}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TypeFilterOptions({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const options: Array<{ key: string; label: string }> = [
+    { key: "all", label: "All types" },
+    ...(Object.keys(ACCOUNT_TYPE_LABELS) as AccountType[]).map((t) => ({
+      key: t,
+      label: ACCOUNT_TYPE_LABELS[t],
+    })),
+  ];
+  return (
+    <>
+      {options.map((o) => (
+        <button
+          key={o.key}
+          type="button"
+          onClick={() => onChange(o.key)}
+          className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50 ${
+            value === o.key ? "font-semibold text-amber-700" : "text-slate-700"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </>
+  );
+}
+
+function HolderFilterOptions({
+  value,
+  onChange,
+  holders,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  holders: string[];
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => onChange("all")}
+        className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50 ${
+          value === "all" ? "font-semibold text-amber-700" : "text-slate-700"
+        }`}
+      >
+        All holders
+      </button>
+      {holders.map((h) => (
+        <button
+          key={h}
+          type="button"
+          onClick={() => onChange(h)}
+          className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50 ${
+            value === h ? "font-semibold text-amber-700" : "text-slate-700"
+          }`}
+        >
+          {h}
+        </button>
+      ))}
+    </>
+  );
 }
 
 /** Small colored "why" bubble — same color as the Needs attention level it
@@ -242,6 +398,8 @@ export function AccountsClient({
   const [holderFilter, setHolderFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<SortKey>("bank");
+  const [sortDir, setSortDir] = useState<SortDir>(DEFAULT_DIR.bank);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [attentionOnly, setAttentionOnly] = useState(initialAttention);
   const [editing, setEditing] = useState<AccountRow | null>(null);
@@ -290,8 +448,72 @@ export function AccountsClient({
         ),
       );
     }
-    return sortRows(list, sortBy);
-  }, [rows, attentionOnly, holderFilter, typeFilter, query, sortBy, defaultDormancyMonths, attentionPrefs]);
+    return sortRows(list, sortBy, sortDir);
+  }, [rows, attentionOnly, holderFilter, typeFilter, query, sortBy, sortDir, defaultDormancyMonths, attentionPrefs]);
+
+  /** Click a column to sort by it; click the active column again to flip direction. */
+  function toggleSort(key: SortKey) {
+    if (sortBy === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(key);
+      setSortDir(DEFAULT_DIR[key]);
+    }
+  }
+
+  const activeFilterCount = (typeFilter !== "all" ? 1 : 0) + (holderFilter !== "all" ? 1 : 0);
+
+  /** A column header: click the label to sort by `sortKey` (if given), click the
+   *  funnel icon to open a filter popover (if `filter` is given). */
+  function Th({
+    label,
+    sortKey,
+    align = "left",
+    filter,
+  }: {
+    label: string;
+    sortKey?: SortKey;
+    align?: "left" | "right" | "center";
+    filter?: { active: boolean; content: React.ReactNode };
+  }) {
+    const active = sortKey != null && sortBy === sortKey;
+    const justify =
+      align === "right" ? "justify-end" : align === "center" ? "justify-center" : "justify-start";
+    return (
+      <th
+        className="px-4 py-3 font-medium"
+        aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+      >
+        <div className={`flex items-center gap-1 ${justify}`}>
+          {sortKey ? (
+            <button
+              type="button"
+              onClick={() => toggleSort(sortKey)}
+              className={`group inline-flex items-center gap-1 ${active ? "text-slate-700" : "hover:text-slate-700"}`}
+            >
+              <span>{label}</span>
+              {active ? (
+                sortDir === "asc" ? (
+                  <ChevronUp className="h-3 w-3" />
+                ) : (
+                  <ChevronDown className="h-3 w-3" />
+                )
+              ) : (
+                <ChevronsUpDown className="h-3 w-3 text-slate-300 group-hover:text-slate-400" />
+              )}
+            </button>
+          ) : (
+            <span>{label}</span>
+          )}
+          {filter && (
+            <FilterMenu active={filter.active} label={label} align={align === "right" ? "right" : "left"}>
+              {filter.content}
+            </FilterMenu>
+          )}
+        </div>
+      </th>
+    );
+  }
 
   return (
     <div>
@@ -329,74 +551,113 @@ export function AccountsClient({
         </div>
       )}
 
-      {/* Filters — stacked on mobile, row on sm+ */}
+      {/* Needs attention + search — filters/sort live on the table's own
+          column headers now (desktop); mobile gets a single Filters button
+          since cards have no header row to attach them to. Attention+search
+          share a row (2 elements, fits at 375px); Filters gets its own row on
+          mobile rather than crowding into that same row as a 3rd element. */}
       <div className="mb-4 space-y-2">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setAttentionOnly((v) => !v)}
-            className={`flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-              attentionOnly
-                ? "border-amber-300 bg-amber-50 text-amber-700"
-                : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
-            }`}
-          >
-            <AlertTriangle className="h-4 w-4" />
-            Needs attention
-            <span className={attentionOnly ? "text-amber-500" : "text-slate-400"}>
-              {attentionCount}
-            </span>
-          </button>
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search accounts…"
-              className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-            />
-          </div>
-        </div>
-        {/* Three selects: 2-up grid on narrow screens (sort spans the full
-            width below), a single row from sm+ — three flex-1 selects don't
-            fit on a 375px screen without overflowing. */}
-        <div className="grid grid-cols-2 gap-2 sm:flex">
-          <select
-            value={holderFilter}
-            onChange={(e) => setHolderFilter(e.target.value)}
-            className="min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500 sm:flex-1"
-          >
-            <option value="all">All holders</option>
-            {knownHolders.map((h) => (
-              <option key={h} value={h}>
-                {h}
-              </option>
-            ))}
-          </select>
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className="min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500 sm:flex-1"
-          >
-            <option value="all">All types</option>
-            {(Object.keys(ACCOUNT_TYPE_LABELS) as AccountType[]).map((t) => (
-              <option key={t} value={t}>
-                {ACCOUNT_TYPE_LABELS[t]}
-              </option>
-            ))}
-          </select>
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as SortKey)}
-            className="col-span-2 min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500 sm:col-span-1 sm:flex-1"
-          >
-            {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
-              <option key={k} value={k}>
-                Sort: {SORT_LABELS[k]}
-              </option>
-            ))}
-          </select>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setAttentionOnly((v) => !v)}
+          className={`flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+            attentionOnly
+              ? "border-amber-300 bg-amber-50 text-amber-700"
+              : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          <AlertTriangle className="h-4 w-4" />
+          Needs attention
+          <span className={attentionOnly ? "text-amber-500" : "text-slate-400"}>
+            {attentionCount}
+          </span>
+        </button>
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search accounts…"
+            className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+          />
         </div>
       </div>
+        <button
+          type="button"
+          onClick={() => setMobileFiltersOpen(true)}
+          className={`flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium md:hidden ${
+            activeFilterCount > 0
+              ? "border-amber-300 bg-amber-50 text-amber-800"
+              : "border-slate-300 text-slate-700"
+          }`}
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+          Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+        </button>
+      </div>
+
+      {mobileFiltersOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 md:hidden">
+          <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-slate-900">Filters &amp; sort</h2>
+              <button type="button" onClick={() => setMobileFiltersOpen(false)} className="p-1 text-slate-400">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Type</p>
+                <div className="rounded-lg border border-slate-200 py-1">
+                  <TypeFilterOptions value={typeFilter} onChange={setTypeFilter} />
+                </div>
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Holder</p>
+                <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-200 py-1">
+                  <HolderFilterOptions value={holderFilter} onChange={setHolderFilter} holders={knownHolders} />
+                </div>
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Sort by</p>
+                <div className="flex gap-2">
+                  <select
+                    value={sortBy}
+                    onChange={(e) => {
+                      const k = e.target.value as SortKey;
+                      setSortBy(k);
+                      setSortDir(DEFAULT_DIR[k]);
+                    }}
+                    aria-label="Sort accounts by"
+                    className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500"
+                  >
+                    {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+                      <option key={k} value={k}>
+                        {SORT_LABELS[k]}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+                    aria-label={`Sort direction: ${sortDir === "asc" ? "ascending" : "descending"}`}
+                    className="flex shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-white px-2.5 text-slate-600"
+                  >
+                    {sortDir === "asc" ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMobileFiltersOpen(false)}
+              className="mt-5 w-full rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
+            >
+              Show {filtered.length} {filtered.length === 1 ? "account" : "accounts"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Mobile cards */}
       <div className="space-y-2 md:hidden">
@@ -463,16 +724,40 @@ export function AccountsClient({
 
       {/* Table (md and up) */}
       <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white md:block">
-        <table className="min-w-full text-sm">
+        <table className="w-full min-w-[1000px] table-fixed text-sm">
+          <colgroup>
+            <col className="w-[20%]" />
+            <col className="w-[13%]" />
+            <col className="w-[11%]" />
+            <col className="w-[11%]" />
+            <col className="w-[11%]" />
+            <col className="w-[14%]" />
+            <col className="w-[16%]" />
+            <col className="w-[4%]" />
+          </colgroup>
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-              <th className="px-4 py-3 font-medium">Bank</th>
-              <th className="px-4 py-3 font-medium">Holder</th>
-              <th className="px-4 py-3 font-medium">Type</th>
-              <th className="px-4 py-3 font-medium">Account #</th>
-              <th className="px-4 py-3 text-right font-medium">Balance</th>
-              <th className="px-4 py-3 font-medium">Last activity</th>
-              <th className="w-44 px-4 py-3 font-medium">CD maturity</th>
+              <Th label="Bank" sortKey="bank" />
+              <Th
+                label="Holder"
+                sortKey="holder"
+                filter={{
+                  active: holderFilter !== "all",
+                  content: <HolderFilterOptions value={holderFilter} onChange={setHolderFilter} holders={knownHolders} />,
+                }}
+              />
+              <Th
+                label="Type"
+                sortKey="type"
+                filter={{
+                  active: typeFilter !== "all",
+                  content: <TypeFilterOptions value={typeFilter} onChange={setTypeFilter} />,
+                }}
+              />
+              <Th label="Account #" />
+              <Th label="Balance" sortKey="balance" align="right" />
+              <Th label="Last activity" sortKey="lastActivity" />
+              <Th label="CD maturity" />
               <th className="px-4 py-3 text-right font-medium"></th>
             </tr>
           </thead>

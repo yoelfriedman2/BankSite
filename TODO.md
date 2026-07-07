@@ -5,15 +5,16 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 ## One-time setup pending
 
 - ~~Run migration **0035_holding_companies.sql**~~ — confirmed run (2026-07-07).
-- **Holding company assets are showing blank after a real sync run — needs the user's input to
-  diagnose.** Banks matched correctly (names, groupings), but every holding company's total assets
-  came back empty. Two live theories: (1) `nicParse.ts` guessed the wrong column in the real
-  Financial Data file (always a real risk — see below), or (2) some of these are small mutual
-  holding companies genuinely exempt from filing FR Y-9C/Y-9SP with the Fed at all, so they never
-  appear in that file (not a bug, a real data gap). To tell which: check whether even one matched
-  holding company that's definitely large enough to file (not a tiny single-branch MHC) still shows
-  blank — if so, it's theory 1 and the column detection needs a fix. Once fixed, re-running "Run
-  sync" with the same 3 files (no re-download needed) will correct it automatically.
+- **Holding company assets showing blank — likely fix shipped, not yet confirmed against real data.**
+  Every matched holding company came back with zero assets (100%, not just some), which pointed at a
+  real parsing bug rather than the "small MHCs are exempt from filing" theory. Root cause: the
+  RSSD-id column detection in `nicParse.ts` was a single loose "contains rssd anywhere" match, and
+  real NIC/Call-Report files commonly have other columns (e.g. a report-date field) whose header also
+  contains "rssd" — if one of those sorted earlier, detection silently bound to the wrong column with
+  no thrown error. Hardened via anchored candidates (`RSSD_ID_CANDIDATES`) tried before the loose
+  fallback, plus a `ID_LIKE_EXCLUDE_TOKENS` check. **Still needs a real "Run sync" re-run to confirm**
+  — re-run with the same 3 files (no re-download needed); the review screen now has a "What we
+  matched" section (persists past the old 600ms flash) to check if it's still wrong.
 - **`/holding-companies`'s NIC file parsing is unverified against a real downloaded file.** The
   column-name matching in `src/lib/nicParse.ts` is a best-effort guess at NIC's file format (I
   couldn't fetch a real sample — NIC's site CAPTCHA-blocks automated access, confirmed by testing
