@@ -371,6 +371,7 @@ export async function refreshBranchLocations(): Promise<{
   error?: string;
   certsChecked?: number;
   rawRows?: number;
+  sampleRow?: string;
 }> {
   const user = await currentUser();
   if (!(await canApplyFdicChanges(user))) return { error: "Not authorized." };
@@ -398,6 +399,12 @@ export async function refreshBranchLocations(): Promise<{
     return { error: String(err), certsChecked };
   }
   const rawRows = rows.length;
+  // If nothing survives the coordinate filter below, keep one raw row around
+  // (this is public branch-address data, nothing sensitive) so the "0 saved"
+  // message can show exactly what the FDIC actually sent back — the only way
+  // to see that, since this dev environment's egress policy blocks
+  // api.fdic.gov and can't inspect a live response directly.
+  const sampleRow = rows[0] ? JSON.stringify(rows[0]) : undefined;
 
   const toInsert = rows
     .filter((r) => r.LATITUDE != null && r.LONGITUDE != null)
@@ -431,14 +438,14 @@ export async function refreshBranchLocations(): Promise<{
   for (let i = 0; i < certList.length; i += CERT_BATCH) {
     const certBatch = certList.slice(i, i + CERT_BATCH);
     const { error: delErr } = await admin.from("bank_branches").delete().in("cert", certBatch);
-    if (delErr) return { error: delErr.message, count, certsChecked, rawRows };
+    if (delErr) return { error: delErr.message, count, certsChecked, rawRows, sampleRow };
 
     const rowsForBatch = certBatch.flatMap((cert) => byCert.get(cert) ?? []);
     if (rowsForBatch.length) {
       const { error: insErr } = await admin.from("bank_branches").insert(rowsForBatch);
-      if (insErr) return { error: insErr.message, count, certsChecked, rawRows };
+      if (insErr) return { error: insErr.message, count, certsChecked, rawRows, sampleRow };
       count += rowsForBatch.length;
     }
   }
-  return { count, certsChecked, rawRows };
+  return { count, certsChecked, rawRows, sampleRow: count === 0 ? sampleRow : undefined };
 }
