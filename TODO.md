@@ -157,9 +157,20 @@ couldn't be inspected directly to confirm whether it's a real FDIC-side change/o
 else. Since a silent `count: 0` gave no way to tell "no certs to check" apart from "FDIC returned
 nothing" apart from "rows came back but had no coordinates," added diagnostics: `refreshBranchLocations`
 now also returns `certsChecked`/`rawRows`, and the UI message on a zero result now says which of those
-three cases it was. **Next step**: click "Refresh branch locations" again on the live site and report
-back the detailed message it now shows — that will pinpoint whether this is an FDIC API problem
-(transient or otherwise) versus something in our own query.
+three cases it was.
+
+**Ran it live (2026-07-07)**: 426 banks checked, FDIC returned 3088 raw office rows — a plausible real
+branch count, so the cert lookup/query itself is fine — but **none of the 3088 had a usable
+LATITUDE/LONGITUDE**, and this worked as recently as 2026-07-05 with the exact same code. Checked FDIC's
+own published field definitions for the `locations` endpoint — `LATITUDE`/`LONGITUDE` are confirmed the
+right field names, so it's not a renamed-field issue on our end. Still couldn't hit `api.fdic.gov`
+directly from this sandbox (blocked outbound) to see a raw response, so added one more diagnostic: on a
+zero-coordinate result, `refreshBranchLocations` now also returns one real raw office record
+(`sampleRow`, public data — office name/address/coordinates, nothing sensitive) which the Road trip page
+shows in a collapsible "Show one raw FDIC office record" section. **Next step**: click "Refresh branch
+locations" again on the live site, expand that section, and paste the JSON back — seeing one real row
+(is `LATITUDE` present as `null`, as an empty string, or missing from the object entirely?) will settle
+whether this is an FDIC-side outage/regression versus something fixable in our parsing.
 
 ## Live: address change per holder + monthly fee
 
