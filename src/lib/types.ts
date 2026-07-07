@@ -206,6 +206,10 @@ export interface Profile {
   is_fdic_admin: boolean;
   banks_seeded: boolean;
   onboarded: boolean;
+  // Invite-only access gate (migration 0036).
+  access_status: "pending" | "approved" | "denied";
+  access_requested_at: string | null;
+  last_seen_at: string | null;
   created_at: string;
 }
 

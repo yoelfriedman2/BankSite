@@ -3,6 +3,7 @@
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getApprovedUser } from "@/lib/access";
 import { formatAssets } from "@/lib/format";
 
 /* FDIC sync: poll-and-propose only. The check is read-only and available to
@@ -101,7 +102,9 @@ async function fetchFdic(certs: number[]): Promise<Map<number, FdicRow>> {
  *  Read-only — available to any signed-in user. Nothing is written until an
  *  item is individually accepted by someone with the FDIC-admin role. */
 export async function fdicCheck(): Promise<FdicReport> {
-  const user = await currentUser();
+  // Reads the whole shared bank list via the admin client (bypasses RLS), so
+  // it must require an approved user, not merely a signed-in one.
+  const user = await getApprovedUser();
   if (!user) return { ...EMPTY, error: "Not authorized." };
 
   const admin = createAdminClient();

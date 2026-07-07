@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getApprovedUser } from "@/lib/access";
 import { formatAssets } from "@/lib/format";
 import { sendCommunityNoteEmail } from "@/lib/email";
 import { logAudit, type AuditEntry } from "@/lib/audit";
@@ -775,6 +776,18 @@ export async function seedBanks(): Promise<{ seeded?: number; error?: string }> 
     .eq("id", user.id)
     .maybeSingle();
   if (profile?.banks_seeded) return { seeded: 0 };
+
+  // Invite-only guard (migration 0036): never seed the shared bank list for a
+  // user who isn't approved. seedBanks uses the admin client below (bypasses
+  // RLS), so this is the choke point that keeps the list out of a pending
+  // account. Queried separately so a missing column (migration not run yet)
+  // just falls through to the previous behavior.
+  const { data: acc } = await supabase
+    .from("profiles")
+    .select("access_status")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (acc?.access_status && acc.access_status !== "approved") return { seeded: 0 };
 
   // Build the shared master set: union of all banks (by cert) across every user.
   // Admin client so we can see the whole team's banks, not just this user's.
@@ -1579,12 +1592,10 @@ export type CommentExportRow = {
 export async function getAllBankComments(): Promise<CommentExportRow[]> {
   if (DEMO_MODE) return [];
 
-  // Auth guard: the admin client bypasses RLS, so require a signed-in user
-  // before returning everyone's notes.
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Auth guard: the admin client bypasses RLS, so require an APPROVED user
+  // before returning everyone's notes — this path sidesteps the is_approved()
+  // RLS gate on bank_comments, so it has to re-check approval itself.
+  const user = await getApprovedUser();
   if (!user) return [];
 
   const admin = createAdminClient();

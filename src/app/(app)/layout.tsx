@@ -37,6 +37,31 @@ export default async function AppLayout({
       .eq("id", user.id)
       .maybeSingle();
 
+    // Access gate (migration 0036). Queried separately from the line above so
+    // that if the migration hasn't been run yet (columns don't exist), we fail
+    // OPEN — the app behaves exactly as before instead of locking everyone out.
+    const { data: acc, error: accErr } = await supabase
+      .from("profiles")
+      .select("access_status, last_seen_at")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (!accErr && acc) {
+      // Un-approved (or denied) users can't enter — they get the request screen.
+      // The owner is always let in, regardless of what the column says.
+      if (!isOwner && acc.access_status && acc.access_status !== "approved") {
+        redirect("/pending");
+      }
+      // Real "last seen" for the Admin page, throttled to at most once an hour
+      // so it isn't a database write on every single navigation.
+      const lastSeen = acc.last_seen_at ? new Date(acc.last_seen_at as string).getTime() : 0;
+      if (Date.now() - lastSeen > 60 * 60 * 1000) {
+        await supabase
+          .from("profiles")
+          .update({ last_seen_at: new Date().toISOString() })
+          .eq("id", user.id);
+      }
+    }
+
     // New users finish setup (confirm their name) before entering the app.
     if (!profile?.onboarded) redirect("/welcome");
 

@@ -179,6 +179,98 @@ export async function sendNewUserNotification(userName: string, userEmail: strin
   );
 }
 
+/* ── Access request → owner (someone signed in but isn't approved yet) ── */
+export async function sendAccessRequestEmail(
+  requesterName: string,
+  requesterEmail: string,
+) {
+  const adminEmail = process.env.ADMIN_EMAIL;
+  if (!adminEmail) {
+    console.warn("[email] ADMIN_EMAIL not set — skipping access-request email");
+    return {};
+  }
+  const who = escapeHtml(requesterName || requesterEmail || "Someone");
+  const safeEmail = escapeHtml(requesterEmail);
+  const when = new Date().toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:40px 16px;background:#f6f7f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;margin:0 auto;">
+    <tr>
+      <td style="background:#ffffff;border-radius:12px;padding:32px;box-shadow:0 2px 12px rgba(0,0,0,0.07);">
+        <div style="display:inline-block;background:#F59E0B;color:#000;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:4px 10px;border-radius:20px;margin-bottom:20px;">Access request</div>
+        <h2 style="margin:0 0 20px;font-size:20px;font-weight:700;color:#0f172a;">Someone is asking to join Bank Tracker</h2>
+
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
+          <tr>
+            <td style="font-size:13px;color:#64748b;padding-bottom:8px;">Name</td>
+            <td style="font-size:14px;font-weight:600;color:#0f172a;text-align:right;padding-bottom:8px;">${who}</td>
+          </tr>
+          <tr>
+            <td style="font-size:13px;color:#64748b;padding-bottom:8px;">Email</td>
+            <td style="font-size:14px;font-weight:600;color:#0f172a;text-align:right;padding-bottom:8px;">${safeEmail}</td>
+          </tr>
+          <tr>
+            <td style="font-size:13px;color:#64748b;">Requested</td>
+            <td style="font-size:14px;font-weight:600;color:#0f172a;text-align:right;">${when}</td>
+          </tr>
+        </table>
+
+        <p style="margin:0 0 22px;font-size:13px;color:#475569;line-height:1.6;">They can't see anything until you approve them. Open the Users page to approve or deny.</p>
+
+        <a href="${APP_URL}/admin" style="display:inline-block;background:#0f172a;color:#ffffff;font-size:13px;font-weight:600;text-decoration:none;padding:11px 24px;border-radius:8px;">
+          Review on the Users page &rarr;
+        </a>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  return sendEmail(adminEmail, `Bank Tracker — access request from ${requesterName || requesterEmail || "someone"}`, html);
+}
+
+/* ── Approval confirmation → the newly-approved user ── */
+export async function sendAccessApprovedEmail(to: string, name: string) {
+  if (!to) return {};
+  const first = name ? name.split(" ")[0] : "";
+  const greeting = first ? `Hi ${escapeHtml(first)},` : "Hi there,";
+
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f1f5f9;">
+<tr><td align="center" style="padding:40px 16px;">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:540px;">
+<tr><td bgcolor="#0f172a" style="border-radius:16px 16px 0 0;padding:28px 40px 24px;">
+  <div style="font-size:18px;font-weight:700;color:#ffffff;margin-bottom:2px;">Bank Tracker</div>
+  <div style="font-size:11px;font-weight:600;color:#F59E0B;letter-spacing:0.2em;text-transform:uppercase;">Access approved</div>
+</td></tr>
+<tr><td bgcolor="#ffffff" style="padding:32px 40px 30px;">
+  <p style="margin:0 0 8px;font-size:18px;font-weight:700;color:#0f172a;">${greeting}</p>
+  <p style="margin:0 0 24px;font-size:14px;color:#475569;line-height:1.65;">You're approved — welcome to Bank Tracker. Sign in and you'll go straight in.</p>
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation"><tr><td align="center">
+    <a href="${APP_URL}" style="display:inline-block;background:#F59E0B;color:#000000;font-size:14px;font-weight:700;text-decoration:none;padding:13px 32px;border-radius:10px;">Open Bank Tracker &rarr;</a>
+  </td></tr></table>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+
+  return sendEmail(to, "You're approved — welcome to Bank Tracker 🏦", html);
+}
+
 /* ── Community note broadcast ── */
 export async function sendCommunityNoteEmail(
   to: string,

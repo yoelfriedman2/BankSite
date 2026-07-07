@@ -321,6 +321,9 @@ function createInitialStore(): DemoStore {
     is_fdic_admin: true,
     banks_seeded: true,
     onboarded: true,
+    access_status: "approved",
+    access_requested_at: null,
+    last_seen_at: new Date().toISOString(),
     created_at: new Date().toISOString(),
   };
 

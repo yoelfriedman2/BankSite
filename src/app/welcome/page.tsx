@@ -14,6 +14,18 @@ export default async function WelcomePage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Invite-only (migration 0036): an un-approved user shouldn't run onboarding —
+  // send them to the request-access screen instead. Queried defensively so a
+  // missing column (migration not run yet) just falls through to the old flow.
+  const { data: acc, error: accErr } = await supabase
+    .from("profiles")
+    .select("access_status")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (!accErr && acc?.access_status && acc.access_status !== "approved") {
+    redirect("/pending");
+  }
+
   const { data: profile } = await supabase
     .from("profiles")
     .select("display_name, onboarded")

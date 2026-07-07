@@ -3,6 +3,7 @@
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendAccessApprovedEmail } from "@/lib/email";
 
 /** Returns the current user only if they are the configured owner (ADMIN_EMAIL). */
 async function requireOwner(): Promise<User | null> {
@@ -15,17 +16,22 @@ async function requireOwner(): Promise<User | null> {
   return user.email?.toLowerCase() === adminEmail.toLowerCase() ? user : null;
 }
 
+export type AccessStatus = "pending" | "approved" | "denied";
+
 export interface AdminUser {
   id: string;
   email: string;
   display_name: string | null;
   created_at: string;
   last_sign_in_at: string | null;
+  last_seen_at: string | null;
   accounts: number;
   documents: number;
   notes: number;
   banks_with_status: number;
   is_fdic_admin: boolean;
+  access_status: AccessStatus;
+  access_requested_at: string | null;
 }
 
 function tally(
@@ -56,7 +62,7 @@ export async function listUsersWithStats(): Promise<{
   // fields — if that column isn't there yet, this page still shows names/stats
   // correctly (everyone just shows as not-FDIC-admin) instead of the whole
   // Promise.all failing on one unknown column.
-  const [{ data: profiles }, { data: accts }, { data: docs }, { data: notes }, { data: banks }, fdicAdminRes] =
+  const [{ data: profiles }, { data: accts }, { data: docs }, { data: notes }, { data: banks }, fdicAdminRes, accessRes] =
     await Promise.all([
       admin.from("profiles").select("id, display_name"),
       admin.from("accounts").select("user_id").is("deleted_at", null),
@@ -68,6 +74,10 @@ export async function listUsersWithStats(): Promise<{
         .is("deleted_at", null)
         .neq("status", "untracked"),
       admin.from("profiles").select("id, is_fdic_admin"),
+      // Queried separately (like is_fdic_admin) so that if migration 0036 hasn't
+      // been run yet, its missing columns can't blank out the whole user list —
+      // everyone just shows as approved with no "last seen" until it's applied.
+      admin.from("profiles").select("id, access_status, access_requested_at, last_seen_at"),
     ]);
 
   const nameById = new Map(
@@ -76,27 +86,85 @@ export async function listUsersWithStats(): Promise<{
   const fdicAdminById = new Map(
     (fdicAdminRes.data ?? []).map((p) => [p.id as string, !!p.is_fdic_admin]),
   );
+  const accessById = new Map(
+    (accessRes.data ?? []).map((p) => [
+      p.id as string,
+      {
+        status: ((p.access_status as AccessStatus | null) ?? "approved") as AccessStatus,
+        requestedAt: (p.access_requested_at as string | null) ?? null,
+        lastSeen: (p.last_seen_at as string | null) ?? null,
+      },
+    ]),
+  );
   const acctMap = tally(accts, "user_id");
   const docMap = tally(docs, "user_id");
   const noteMap = tally(notes, "author_id");
   const bankMap = tally(banks, "user_id");
 
   const users: AdminUser[] = authUsers
-    .map((u) => ({
-      id: u.id,
-      email: u.email ?? "",
-      display_name: nameById.get(u.id) ?? null,
-      created_at: u.created_at,
-      last_sign_in_at: u.last_sign_in_at ?? null,
-      accounts: acctMap.get(u.id) ?? 0,
-      documents: docMap.get(u.id) ?? 0,
-      notes: noteMap.get(u.id) ?? 0,
-      banks_with_status: bankMap.get(u.id) ?? 0,
-      is_fdic_admin: fdicAdminById.get(u.id) ?? false,
-    }))
+    .map((u) => {
+      const access = accessById.get(u.id);
+      return {
+        id: u.id,
+        email: u.email ?? "",
+        display_name: nameById.get(u.id) ?? null,
+        created_at: u.created_at,
+        last_sign_in_at: u.last_sign_in_at ?? null,
+        last_seen_at: access?.lastSeen ?? null,
+        accounts: acctMap.get(u.id) ?? 0,
+        documents: docMap.get(u.id) ?? 0,
+        notes: noteMap.get(u.id) ?? 0,
+        banks_with_status: bankMap.get(u.id) ?? 0,
+        is_fdic_admin: fdicAdminById.get(u.id) ?? false,
+        access_status: access?.status ?? "approved",
+        access_requested_at: access?.requestedAt ?? null,
+      };
+    })
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 
   return { users };
+}
+
+/** Approve, deny, or re-set a user's access to the app. Owner-only. On approval
+ *  the user is emailed so they know they can come in. */
+export async function setAccessStatus(
+  userId: string,
+  status: AccessStatus,
+): Promise<{ error?: string }> {
+  const owner = await requireOwner();
+  if (!owner) return { error: "Not authorized." };
+  if (userId === owner.id && status !== "approved") {
+    return { error: "You can't remove your own access." };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("profiles")
+    .update({ access_status: status })
+    .eq("id", userId);
+  if (error) {
+    if (/access_status|column/.test(error.message)) {
+      return { error: "One-time setup needed: run migration 0036 in the Supabase SQL editor, then try again." };
+    }
+    return { error: error.message };
+  }
+
+  if (status === "approved") {
+    try {
+      const [{ data: profile }, { data: authRes }] = await Promise.all([
+        admin.from("profiles").select("display_name").eq("id", userId).maybeSingle(),
+        admin.auth.admin.getUserById(userId),
+      ]);
+      const email = authRes?.user?.email;
+      if (email) {
+        await sendAccessApprovedEmail(email, (profile?.display_name as string | null) ?? "");
+      }
+    } catch (err) {
+      console.error("[setAccessStatus] approval email failed:", err);
+    }
+  }
+
+  return {};
 }
 
 /** Grants or revokes the FDIC-sync "apply changes" role for a user.

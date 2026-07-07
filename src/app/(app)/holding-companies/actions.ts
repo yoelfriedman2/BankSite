@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getApprovedUser } from "@/lib/access";
 import { getFdicPermissions } from "@/app/(app)/fdic-sync/actions";
 import {
   DEMO_MODE,
@@ -145,6 +146,11 @@ export async function getBankRssdCrosswalk(): Promise<{
     }
     return { banks: Array.from(byCert.values()) };
   }
+
+  // Real path reads every bank via the admin client (bypasses RLS) — require an
+  // approved user, matching the shared-data RLS gate.
+  const approved = await getApprovedUser();
+  if (!approved) return { banks: [], error: "Not authorized." };
 
   const admin = createAdminClient();
   const allBanks: {

@@ -139,6 +139,43 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-07 (invite-only access control — enforced, not just labeled)** — Came out of a security
+review the user asked for ("can people get in / get info out without being properly authenticated").
+The audit's one real finding: login is OAuth-only (Google/Microsoft) and nothing in the app or DB
+restricted *which* accounts could sign in — "invite-only" was only a label, enforced (if at all)
+solely by a Supabase dashboard setting. Private data (accounts/balances/credentials/documents) was
+always safe via RLS; the exposure was that any signed-in stranger could read the **shared** data
+(community notes, bank reference list, holding companies, branches, activity log). Built a real gate:
+
+- **Migration `0036_access_control.sql`** (must be run — see `TODO.md`): adds
+  `profiles.access_status` (`pending`/`approved`/`denied`, default `pending`), `access_requested_at`,
+  and `last_seen_at`. Approves the 11 current users by email; everyone else is `pending`. Adds a
+  `public.is_approved()` SQL helper and **re-scopes the shared-table RLS SELECT/INSERT/DELETE policies
+  (bank_comments, bank_relationships, holding_companies, bank_branches, audit_log) from "any
+  authenticated" → "any approved"** — so an un-approved user reads/writes nothing shared even via a
+  crafted request, not just a hidden UI. Private per-user tables are unchanged.
+- **The gate degrades OPEN**: every code path that reads `access_status` (the `(app)/layout.tsx`
+  redirect, `/welcome`, `seedBanks`, admin list) queries it defensively and treats a missing column
+  (migration not yet run) as approved — so shipping the code before the migration changes nothing.
+- **`/pending`** (new top-level page, outside `(app)` so the gate can't loop it): an un-approved user
+  lands here and taps "Request access" (`app/pending/actions.ts` → emails the owner, throttled 6h).
+  `PendingClient.tsx` handles pending / request-sent / denied states. `seedBanks` is now guarded so a
+  pending user can't self-populate the shared list via the admin-client path.
+- **Admin → Users**: new "Pending access requests" section (Approve/Deny) + an Access column
+  (approve/deny/revoke via `setAccessStatus`, owner can't remove their own). Approval emails the user
+  (`sendAccessApprovedEmail`). **Fixed "Last seen"**: it showed Supabase `last_sign_in_at`, which only
+  moves on a fresh sign-in (not on normal use), so it looked stale — now shows a real `last_seen_at`
+  stamped (throttled hourly) by the app layout, falling back to `last_sign_in_at`.
+- **Auth callback** no longer sends the "you're all set" welcome / "new user" emails on signup (a new
+  user is pending, not in) — welcome now fires on approval instead.
+- **Still owner's job outside the code**: verify the Supabase signup setting (disable open signups /
+  restrict providers) so the front door matches the DB gate — noted in `TODO.md`.
+- Skipped changelog/Guide on purpose (security + owner-only admin tooling, per the standing rule).
+  Verified: `npm run build` clean; both new screens screenshotted via a temporary preview harness
+  (DEMO_MODE disables `/pending` and `/admin` by design, so they can't be reached the normal way in
+  demo) — pending screen at 430px (no overflow) and the admin pending-section/Access-column/Last-seen
+  at desktop width.
+
 **2026-07-07 (Updates page cleanup)** — The changelog had drifted into logging minor/internal bug
 fixes and cosmetic tweaks alongside real features, and several sessions' unrelated features were
 getting merged into one bubble just because they shipped the same day. Rewrote `src/lib/
