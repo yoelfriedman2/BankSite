@@ -1,7 +1,17 @@
 // Curated, user-facing changelog shown on the Updates page ("What's New").
 // One UPDATE per entry (one feature = one bubble). A single feature can have a
-// couple of sub-points; separate features get separate entries. Add new ones at
-// the TOP. Plain English, big features only — skip internal/security fixes.
+// couple of sub-points describing that same feature; if a session shipped two
+// unrelated features (even on the same day), give each its own entry — don't
+// combine them into one bubble with unrelated sub-points. Add new ones at the
+// TOP.
+//
+// Big features and major, user-visible bug fixes ONLY. Do not add an entry for
+// every bug fixed this session — most bug fixes are invisible to users (a
+// regression from a prior refactor, an edge case in a form, a query limit) and
+// don't belong here. Only include a fix if a real user hit it, noticed it, and
+// would recognize "oh, that's fixed now" — e.g. a whole feature was silently
+// broken for everyone. When in doubt, leave it out. Always skip internal,
+// security-only, and owner-only-admin-tooling changes.
 
 export interface ChangelogEntry {
   date: string; // YYYY-MM-DD
@@ -10,15 +20,6 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
-  {
-    date: "2026-07-07",
-    title: "Banks page: sort by Accounts again, plus a header-casing fix",
-    items: [
-      "The Accounts column on the Banks page is sortable again (click it to sort by how many accounts you have there) — it never should have lost that when it lost its old filter.",
-      "Column headers on the Banks and Accounts pages were an inconsistent mix of Title Case and ALL CAPS depending on the column — now they all match.",
-      "Widened the Bank name column so more names fit on one line without wrapping.",
-    ],
-  },
   {
     date: "2026-07-07",
     title: "Fixed holding companies showing no total assets",
@@ -32,24 +33,34 @@ export const CHANGELOG: ChangelogEntry[] = [
     title: "See which banks share a holding company, and how big it really is",
     items: [
       "New Holding companies page: browse every holding company matched so far — its own total assets and every bank it owns, sortable by name or assets, with a search box — plus a \"Run sync\" button that walks you through downloading 3 free files from the Federal Reserve every few months to update it. No manual typing.",
-      "The Banks and Accounts pages both got the same cleanup: IPO status, Holder, and Type are now their own columns, and every filter (State, IPO status, Status, Holder, Type) lives as a small funnel icon right on that column's header instead of a separate row of buttons — click a column's name to sort it, click the funnel to filter it. On mobile, one \"Filters\" button opens all of them at once. Needs attention on the Accounts page works exactly as it always has.",
       "This is separate from the \"Holding company\" text field you can still type in yourself — the new version is verified against the Fed's own records, including the holding company's real consolidated assets (which can be bigger than any one bank's own number for a multi-bank holding company).",
     ],
   },
   {
-    date: "2026-07-06",
-    title: "Fixed a duplicate-bank import bug, and a bigger Full backup",
+    date: "2026-07-07",
+    title: "Banks and Accounts pages: filters moved onto the column headers",
     items: [
-      "Importing a spreadsheet with several accounts under one brand-new bank no longer splits them into duplicate bank entries — they now correctly land under a single bank.",
-      "Editing a bank's city, state, assets, or holding company now syncs to everyone else's copy of that bank, same as the other bank-info fields already did.",
+      "IPO status, Holder, and Type are now their own columns, and every filter (State, IPO status, Status, Holder, Type) lives as a small funnel icon right on that column's header instead of a separate row of buttons — click a column's name to sort it, click the funnel to filter it. On mobile, one \"Filters\" button opens all of them at once.",
+    ],
+  },
+  {
+    date: "2026-07-06",
+    title: "A bigger Full backup",
+    items: [
       "The \"Full backup\" download on Settings now also includes your saved logins, interest rates, monthly fees, activity log, money moves, printed checks, reminders, and address-change history — not just banks and accounts.",
     ],
   },
   {
     date: "2026-07-06",
-    title: "Filter banks by IPO status, plus a clearer partial-conversion stage",
+    title: "Filter banks by IPO status",
     items: [
       "New IPO status filter on the Banks page — check off Rumored, Filed, Subscription open, Converted, and/or Partial to narrow the list to just those.",
+    ],
+  },
+  {
+    date: "2026-07-06",
+    title: "A clearer partial-conversion stage",
+    items: [
       "\"2nd IPO possible\" is now \"Partial (2nd IPO possible)\" — it's specifically for banks that only sold a minority stake to the public (an MHC structure) rather than fully converting, which is what makes a future 2nd-step conversion possible.",
     ],
   },
@@ -79,12 +90,16 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: "2026-07-05",
-    title: "Address autocomplete, tighter exports, and a few fixes",
+    title: "Address autocomplete",
     items: [
       "The new-address field on Address change now suggests full addresses as you type.",
-      "Signing in with Microsoft now always asks which account to use instead of assuming.",
-      "Exporting your data (Banks page or Settings) now only includes your own accounts unless you're the account owner — the full bank list export is owner-only.",
-      "An account can now be excluded from the minimum-balance alert individually, from its editor.",
+    ],
+  },
+  {
+    date: "2026-07-05",
+    title: "Exclude an account from minimum-balance alerts",
+    items: [
+      "An account can now be excluded from the minimum-balance alert individually, from its editor — useful for one you keep intentionally low.",
     ],
   },
   {
@@ -99,7 +114,6 @@ export const CHANGELOG: ChangelogEntry[] = [
     title: "Needs attention now tells you why",
     items: [
       "Every account flagged as needing attention shows the reason right next to it now — low balance, no activity in months, a CD maturing soon — instead of just a colored dot.",
-      "Fixed a bug where the dashboard's \"Need attention\" count could disagree with the Accounts page's.",
     ],
   },
   {
@@ -111,26 +125,36 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: "2026-07-05",
-    title: "Address changes, activity logging, and an FDIC sync fix",
+    title: "Address changes are now per account holder",
     items: [
       "Address-change checklists now have one item per account holder at a bank, not one merged item — since holders usually have separate logins to update separately.",
-      "Logging today's activity from the Accounts list now lets you pick a type, same as the account editor.",
-      "FDIC sync no longer flags an asset update when the new figure would look identical to what's already shown.",
     ],
   },
   {
     date: "2026-07-05",
-    title: "Sort accounts, and tag what kind of activity",
+    title: "Sort accounts by balance, holder, or type",
     items: [
       "Accounts can now be sorted by balance (either direction), holder, or type — on top of the existing filters.",
+    ],
+  },
+  {
+    date: "2026-07-05",
+    title: "Tag what kind of activity you logged",
+    items: [
       "When you log activity on an account, you can optionally tag what it was — online login, transaction, check sent, letter sent, phone call. Never required.",
     ],
   },
   {
     date: "2026-07-05",
-    title: "Cleaner navigation & a lighter dashboard",
+    title: "Navigation grouped into sections",
     items: [
       "The sidebar is now grouped by what things are — Banks & accounts, Tools, and so on — instead of one long list.",
+    ],
+  },
+  {
+    date: "2026-07-05",
+    title: "A lighter dashboard",
+    items: [
       "Needs attention on the dashboard now shows your top 3, same as Up next, with a View all link — instead of listing every account right there.",
     ],
   },
@@ -151,10 +175,9 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: "2026-07-04",
-    title: "Import from Accounts too, and a crash fixed",
+    title: "Import from Accounts too",
     items: [
       "Import now works from the Accounts page as well as Banks — same wizard either way, since a row can carry bank info, account info, or both.",
-      "Fixed a bug where importing could fail with a database error when a spreadsheet row created a brand-new bank.",
     ],
   },
   {

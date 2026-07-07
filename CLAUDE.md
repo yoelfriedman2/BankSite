@@ -101,10 +101,16 @@ When you ship something a real user would notice, do **all** of these, not just
 the code:
 
 1. **`src/lib/changelog.ts`** (powers the in-app Updates / "What's New" page) —
-   add an entry at the top. One feature = one bubble (a few sub-points are fine).
-   Per that file's own header comment: **big features and major bug fixes only**
-   — skip internal/security-only changes and skip owner-only admin tooling
-   (nobody else can use it, so don't advertise it in the family-facing log).
+   add an entry at the top. One feature = one bubble — a few sub-points are fine
+   *only* if they describe that same feature; if a session shipped two unrelated
+   features (even same-day), give each its own entry rather than merging them.
+   Per that file's own header comment: **big features and major, user-visible
+   bug fixes only** — most bug fixes are invisible to users and don't belong
+   here; only log a fix if a real user would notice and recognize "that's fixed
+   now" (e.g. a whole feature was silently broken for everyone). When in doubt,
+   leave it out. Always skip internal/security-only changes and owner-only admin
+   tooling (nobody else can use it, so don't advertise it in the family-facing
+   log).
 2. **`src/components/GuideClient.tsx`** ("How it works" walkthrough) — if the
    feature is something an end user would want explained, add or update a topic.
    Same exclusion: admin-only tooling doesn't belong here either (there's no
@@ -132,6 +138,20 @@ the code:
    verification.
 
 ## Current state (update this — most recent first)
+
+**2026-07-07 (Updates page cleanup)** — The changelog had drifted into logging minor/internal bug
+fixes and cosmetic tweaks alongside real features, and several sessions' unrelated features were
+getting merged into one bubble just because they shipped the same day. Rewrote `src/lib/
+changelog.ts`'s header comment to be explicit about both: features and major user-visible bug
+fixes only (drop anything invisible to users — regressions, edge cases, internal refactors), and
+one feature per bubble even when several ship on the same date — don't combine unrelated work into
+one entry with unrelated sub-points. Applied that policy retroactively to the existing list: removed
+several pure bug-fix/cosmetic entries (header-casing fix, duplicate-bank-import fix, FDIC-sync
+asset-comparison fix, a dashboard count-mismatch fix, an import crash fix, a Microsoft-login
+account-picker tweak, an export-scoping fix) and split apart bundled multi-feature entries (e.g.
+the holding-companies page vs. the Banks/Accounts column-header filter redesign; IPO-status filter
+vs. the partial-conversion-stage rename; sort-accounts vs. tag-activity-type; nav grouping vs.
+dashboard trimming) so each now has its own bubble. No code/behavior change — copy and content only.
 
 **2026-07-07 (holding companies — new shared table + sync wizard)** — Built the holding-company
 feature discussed in chat: a bank's holding company is no longer just the free-text
