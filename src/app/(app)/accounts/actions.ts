@@ -184,6 +184,14 @@ export async function upsertAccount(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
+  // Ownership check: RLS returns a row only if this bank is the caller's own.
+  const { data: ownedBank } = await supabase
+    .from("banks")
+    .select("id")
+    .eq("id", values.bank_id)
+    .maybeSingle();
+  if (!ownedBank) return { error: "Bank not found." };
+
   const today = new Date().toISOString().slice(0, 10);
   const now = new Date();
   if (values.id) {

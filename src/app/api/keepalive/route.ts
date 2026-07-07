@@ -5,14 +5,11 @@ import { createClient } from "@supabase/supabase-js";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  // If CRON_SECRET is set in the environment, require it (Vercel sends it
-  // automatically as a Bearer token on cron invocations).
+  // Require CRON_SECRET the same way /api/cron/reminders does — fail closed
+  // if it isn't configured, rather than leaving the endpoint open.
   const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = request.headers.get("authorization");
-    if (auth !== `Bearer ${secret}`) {
-      return new Response("Unauthorized", { status: 401 });
-    }
+  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
+    return new Response("Unauthorized", { status: 401 });
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

@@ -81,6 +81,10 @@ export async function uploadDocument(formData: FormData): Promise<AccountDocumen
   const accountId = formData.get("accountId") as string | null;
   if (!file || !accountId) throw new Error("Missing file or account");
 
+  // Ownership check: RLS returns a row only if this account is the caller's own.
+  const { data: owned } = await supabase.from("accounts").select("id").eq("id", accountId).maybeSingle();
+  if (!owned) throw new Error("Account not found");
+
   const ext = file.name.includes(".") ? file.name.split(".").pop() : "";
   const storagePath = `${user.id}/${accountId}/${crypto.randomUUID()}${ext ? `.${ext}` : ""}`;
 
