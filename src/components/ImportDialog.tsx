@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { X, Loader2, UploadCloud, FileSpreadsheet, Download, ArrowRight, Check, AlertTriangle, Plus } from "lucide-react";
 import { importBanks } from "@/app/(app)/banks/actions";
 import { downloadImportTemplate } from "@/lib/export";
@@ -359,6 +359,13 @@ function matchScore(a: string, b: string): number {
 }
 
 type ExistingBank = { id: string; name: string; cert: number | null };
+export type ExistingAccountRef = {
+  id: string;
+  bank_id: string;
+  holder: string | null;
+  account_type: string | null;
+  account_number: string | null;
+};
 
 type Confidence = "exact" | "fuzzy" | "none";
 
@@ -435,6 +442,62 @@ function buildReview(rows: ImportRow[], existing: ExistingBank[]): ReviewEntry[]
   return entries;
 }
 
+/* ─── Duplicate account detection ───
+ * A row's account is treated as a duplicate of an existing one at the same
+ * bank when either the account numbers match, or — when at least one side
+ * has no account number on file — the holder + account type both match.
+ * (Two accounts with different account numbers are never a duplicate, even
+ * if the holder/type happen to match — that's a genuinely separate account.)
+ */
+function normLower(s: string | null | undefined): string {
+  return (s ?? "").trim().toLowerCase();
+}
+function normAcctNum(s: string | null | undefined): string {
+  return (s ?? "").replace(/[\s-]/g, "").toLowerCase();
+}
+
+function findAccountMatch(
+  bankId: string,
+  row: ImportRow,
+  existing: ExistingAccountRef[],
+): ExistingAccountRef | null {
+  const candidates = existing.filter((a) => a.bank_id === bankId);
+  if (!candidates.length) return null;
+  const rowNum = normAcctNum(row.account_number);
+  if (rowNum) {
+    const byNum = candidates.find((a) => normAcctNum(a.account_number) === rowNum);
+    if (byNum) return byNum;
+  }
+  const rowHolder = normLower(row.holder);
+  if (rowHolder && row.account_type) {
+    const byHolderType = candidates.find((a) => {
+      const aNum = normAcctNum(a.account_number);
+      if (rowNum && aNum && rowNum !== aNum) return false;
+      return normLower(a.holder) === rowHolder && a.account_type === row.account_type;
+    });
+    if (byHolderType) return byHolderType;
+  }
+  return null;
+}
+
+function maskAcctNum(n: string | null): string {
+  if (!n) return "";
+  const digits = n.replace(/\D/g, "");
+  return digits.length > 4 ? `••${digits.slice(-4)}` : n;
+}
+
+function rowHasAccountData(r: ImportRow): boolean {
+  return !!(r.holder || r.account_type || r.account_number || r.balance != null || r.online_url || r.username);
+}
+
+const ACCT_TYPE_LABELS: Record<string, string> = {
+  checking: "Checking",
+  savings: "Savings",
+  cd: "CD",
+  money_market: "Money market",
+  other: "Other",
+};
+
 const CONF_COLORS: Record<Confidence, string> = {
   exact: "#10b981",
   fuzzy: "#f59e0b",
@@ -448,10 +511,12 @@ const CONF_LABELS: Record<Confidence, string> = {
 
 export function ImportDialog({
   existingBanks = [],
+  existingAccounts = [],
   onClose,
   onImported,
 }: {
   existingBanks?: ExistingBank[];
+  existingAccounts?: ExistingAccountRef[];
   onClose: () => void;
   onImported: () => void;
 }) {
@@ -462,8 +527,30 @@ export function ImportDialog({
   const [fileName, setFileName] = useState<string | null>(null);
   const [parsedRows, setParsedRows] = useState<ImportRow[]>([]);
   const [review, setReview] = useState<ReviewEntry[]>([]);
-  const [result, setResult] = useState<{ banks: number; accounts: number; notes: number } | null>(null);
+  const [acctDecisions, setAcctDecisions] = useState<Record<number, "skip" | "update" | "add_new">>({});
+  const [result, setResult] = useState<{
+    banks: number;
+    accounts: number;
+    accountsUpdated: number;
+    accountsSkipped: number;
+    notes: number;
+  } | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // Which rows' accounts look like duplicates of one already on file, keyed
+  // by index into parsedRows — recomputed whenever a bank match changes,
+  // since the duplicate check is scoped to whichever bank the row resolves to.
+  const accountMatches = useMemo(() => {
+    const m = new Map<number, ExistingAccountRef>();
+    parsedRows.forEach((row, i) => {
+      if (!rowHasAccountData(row)) return;
+      const entry = review.find((e) => e.rowIndices.includes(i));
+      if (!entry || entry.selectedId === CREATE_NEW) return;
+      const match = findAccountMatch(entry.selectedId, row, existingAccounts);
+      if (match) m.set(i, match);
+    });
+    return m;
+  }, [parsedRows, review, existingAccounts]);
 
   async function handleFile(file: File) {
     setError(null);
@@ -482,6 +569,7 @@ export function ImportDialog({
     }
     setParsedRows(rows);
     setReview(buildReview(rows, existingBanks));
+    setAcctDecisions({});
     setStage("review");
   }
 
@@ -499,10 +587,17 @@ export function ImportDialog({
   }
 
   function handleImport() {
-    // Stamp each row with the user-approved matched_bank_id
+    // Stamp each row with the user-approved matched_bank_id, and — for rows
+    // whose account looked like a duplicate — the reviewed decision.
     const stampedRows: ImportRow[] = parsedRows.map((row, rowIdx) => {
       const entry = review.find((e) => e.rowIndices.includes(rowIdx));
-      return { ...row, matched_bank_id: entry?.selectedId ?? null };
+      const match = accountMatches.get(rowIdx);
+      return {
+        ...row,
+        matched_bank_id: entry?.selectedId ?? null,
+        matched_account_id: match?.id ?? null,
+        account_decision: match ? (acctDecisions[rowIdx] ?? "skip") : undefined,
+      };
     });
 
     startTransition(async () => {
@@ -511,7 +606,13 @@ export function ImportDialog({
         setError(res.error);
         return;
       }
-      setResult({ banks: res.banks ?? 0, accounts: res.accounts ?? 0, notes: res.notes ?? 0 });
+      setResult({
+        banks: res.banks ?? 0,
+        accounts: res.accounts ?? 0,
+        accountsUpdated: res.accountsUpdated ?? 0,
+        accountsSkipped: res.accountsSkipped ?? 0,
+        notes: res.notes ?? 0,
+      });
       setStage("done");
       onImported();
     });
@@ -691,6 +792,48 @@ export function ImportDialog({
                               ))}
                             </div>
                           )}
+
+                          {/* Possible duplicate accounts */}
+                          {entry.rowIndices
+                            .filter((i) => accountMatches.has(i))
+                            .map((i) => {
+                              const row = parsedRows[i];
+                              const match = accountMatches.get(i)!;
+                              const decision = acctDecisions[i] ?? "skip";
+                              return (
+                                <div
+                                  key={i}
+                                  className="mt-2 rounded-lg border border-amber-200 bg-amber-50/60 p-2"
+                                >
+                                  <p className="flex items-center gap-1 text-[11px] font-medium text-amber-800">
+                                    <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+                                    Possible duplicate account
+                                  </p>
+                                  <p className="mt-0.5 text-[11px] text-amber-700">
+                                    {row.holder || "(no holder)"}
+                                    {row.account_type ? ` · ${ACCT_TYPE_LABELS[row.account_type] ?? row.account_type}` : ""}
+                                    {row.account_number ? ` · ${maskAcctNum(row.account_number)}` : ""}
+                                    {" "}matches an account already on file
+                                    {match.holder ? ` for ${match.holder}` : ""}
+                                    {match.account_number ? ` (${maskAcctNum(match.account_number)})` : ""}.
+                                  </p>
+                                  <select
+                                    value={decision}
+                                    onChange={(e) =>
+                                      setAcctDecisions((prev) => ({
+                                        ...prev,
+                                        [i]: e.target.value as "skip" | "update" | "add_new",
+                                      }))
+                                    }
+                                    className="mt-1.5 w-full rounded-md border border-amber-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-amber-500"
+                                  >
+                                    <option value="skip">Skip — it&apos;s the same account, leave it as-is</option>
+                                    <option value="update">Update the existing account with this file&apos;s values</option>
+                                    <option value="add_new">Add as a separate account anyway</option>
+                                  </select>
+                                </div>
+                              );
+                            })}
                         </div>
                       </div>
                     </div>
@@ -707,6 +850,12 @@ export function ImportDialog({
               <p className="mt-1">
                 {result.banks} bank{result.banks === 1 ? "" : "s"} updated
                 {result.accounts > 0 && ` · ${result.accounts} account${result.accounts === 1 ? "" : "s"} added`}
+                {result.accountsUpdated > 0
+                  ? ` · ${result.accountsUpdated} account${result.accountsUpdated === 1 ? "" : "s"} updated`
+                  : ""}
+                {result.accountsSkipped > 0
+                  ? ` · ${result.accountsSkipped} duplicate${result.accountsSkipped === 1 ? "" : "s"} skipped`
+                  : ""}
                 {result.notes > 0 ? ` · ${result.notes} note${result.notes === 1 ? "" : "s"} posted` : ""}
               </p>
             </div>

@@ -80,6 +80,7 @@ const TOPICS: Topic[] = [
       "When you edit shared info, everyone sees exactly what you changed.",
       "Add a brand-new bank and it's added to everyone's list automatically.",
       "Import works the same from Banks or Accounts — a spreadsheet row can carry bank info, account info, or both.",
+      "If a row's account matches one you already have (same account number, or same holder + type), you'll be asked whether to skip it, update the existing one, or add it as a separate account — nothing is duplicated silently.",
     ],
   },
   {
