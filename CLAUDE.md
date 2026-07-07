@@ -199,6 +199,37 @@ Both re-verified the same way: `npm run build` (temp `xlsx` swap, restored after
 full Playwright pass in DEMO_MODE covering the new browse view, the column-header filters/sort, the
 mobile filter sheet, and no mobile overflow — all passing before push.
 
+**Second same-day follow-up, after the user ran the real sync against production data**: the
+column-header rework above had a real layout bug I hadn't caught — my own screenshot verification
+only captured a *filtered* (2-row) table, never the default 426-row view, so I missed that the
+extra columns pushed the table past table-auto's comfortable width and the browser was silently
+shrinking every column (bank names wrapping to 3-4 lines) rather than actually scrolling. Also, per
+explicit feedback: the new "Holding co." column/filter was **removed entirely** from `/banks` (it's
+redundant now that `/holding-companies` is the real home for that view), and the Status filter
+dropdown no longer shows a count next to each option (simplified to plain labels). Fixed the
+layout properly — the table now uses `table-fixed` with an explicit `<colgroup>` (percentage
+widths, tuned so Bank gets the most room) instead of relying on auto-layout guessing, which is the
+actual robust fix (not just removing a column and hoping it fits again next time one gets added).
+Also added a search box to `/holding-companies`'s browse view (by holding company or member bank
+name) — the wizard already had search-like filtering everywhere else in the app, this page didn't.
+
+**Lesson for next time**: when verifying a table-layout change, screenshot the *unfiltered* default
+state at the normal row count, not just a narrowed one — a filtered view can hide exactly this kind
+of width/wrapping problem.
+
+**Open question, not yet resolved**: the user's real sync run matched several banks to holding
+companies correctly (names, groupings) but every holding company showed **no total assets** — the
+one piece of data this feature was specifically built to surface. Two live theories, not yet
+distinguished: (1) `nicParse.ts`'s column-detection guessed wrong on the real Financial Data file
+(the risk flagged since this was built — see `TODO.md`), or (2) many of these are small mutual
+holding companies that may be genuinely exempt from filing FR Y-9C/Y-9SP with the Fed at all (per
+the Small BHC Policy Statement), so their RSSD simply never appears in that file — not a bug, a
+real data-availability gap for this specific population of banks. Whichever it is, re-running "Run
+sync" (same 3 files, no need to re-download) will pick up a fix automatically via the
+upsert-by-`nic_rssd_id` logic once/if the parsing is corrected. Needs the user's input (e.g. one
+matched holding company that's definitely large enough to file, still showing blank, would confirm
+it's theory 1) before a fix can be attempted — see `TODO.md`.
+
 Verified via `npm run build` (temporarily pointed `xlsx` at a plain npm-registry version to install
 in this sandbox, then restored `package.json`/`package-lock.json` to their committed state
 afterward — same workaround as the 2026-07-06 entry below) and a full interactive pass in

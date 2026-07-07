@@ -14,8 +14,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-07-07",
     title: "See which banks share a holding company, and how big it really is",
     items: [
-      "New Holding companies page: browse every holding company matched so far — its own total assets and every bank it owns — with a \"Run sync\" button that walks you through downloading 3 free files from the Federal Reserve every few months to update it. No manual typing.",
-      "The Banks page table got a cleanup to make room: IPO status and Holding co. are now their own columns, and every filter (State, IPO status, Holding co., Status) now lives as a small funnel icon right on that column's header instead of a separate row of buttons — click a column's name to sort it, click the funnel to filter it. On mobile, one \"Filters\" button opens all of them at once.",
+      "New Holding companies page: browse every holding company matched so far — its own total assets and every bank it owns, with a search box — plus a \"Run sync\" button that walks you through downloading 3 free files from the Federal Reserve every few months to update it. No manual typing.",
+      "The Banks page table got a cleanup: IPO status is now its own column, and its filter (plus State and Status) now lives as a small funnel icon right on that column's header instead of a separate row of buttons — click a column's name to sort it, click the funnel to filter it. On mobile, one \"Filters\" button opens all of them at once. (Holding company info lives on its own page now, not duplicated in this table.)",
       "This is separate from the \"Holding company\" text field you can still type in yourself — the new version is verified against the Fed's own records, including the holding company's real consolidated assets (which can be bigger than any one bank's own number for a multi-bank holding company).",
     ],
   },

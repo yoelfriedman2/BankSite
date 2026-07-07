@@ -4,11 +4,16 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 
 ## One-time setup pending
 
-- Run migration **0035_holding_companies.sql** in the Supabase SQL editor. Adds the shared
-  `holding_companies` table and `banks.holding_company_id`, needed for the new Holding companies
-  page (`/holding-companies`) to work at all — until run, the page's DB writes will error (the
-  Banks page's "Holding co." filter and the bank drawer's holding-company section both degrade
-  gracefully to showing nothing in the meantime).
+- ~~Run migration **0035_holding_companies.sql**~~ — confirmed run (2026-07-07).
+- **Holding company assets are showing blank after a real sync run — needs the user's input to
+  diagnose.** Banks matched correctly (names, groupings), but every holding company's total assets
+  came back empty. Two live theories: (1) `nicParse.ts` guessed the wrong column in the real
+  Financial Data file (always a real risk — see below), or (2) some of these are small mutual
+  holding companies genuinely exempt from filing FR Y-9C/Y-9SP with the Fed at all, so they never
+  appear in that file (not a bug, a real data gap). To tell which: check whether even one matched
+  holding company that's definitely large enough to file (not a tiny single-branch MHC) still shows
+  blank — if so, it's theory 1 and the column detection needs a fix. Once fixed, re-running "Run
+  sync" with the same 3 files (no re-download needed) will correct it automatically.
 - **`/holding-companies`'s NIC file parsing is unverified against a real downloaded file.** The
   column-name matching in `src/lib/nicParse.ts` is a best-effort guess at NIC's file format (I
   couldn't fetch a real sample — NIC's site CAPTCHA-blocks automated access, confirmed by testing

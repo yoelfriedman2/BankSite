@@ -28,14 +28,13 @@ import {
   type Bank,
   type BankStatus,
   type ConversionStage,
-  type HoldingCompany,
 } from "@/lib/types";
 import {
   getActivityLevel,
   isCdMaturingSoon,
   type ActivityLevel,
 } from "@/lib/dormancy";
-import { formatCurrency, formatAssets, titleCase } from "@/lib/format";
+import { formatCurrency, formatAssets } from "@/lib/format";
 import {
   ActivityDot,
   PriorityBadge,
@@ -225,11 +224,9 @@ function FilterMenu({
 function StatusFilterOptions({
   value,
   onChange,
-  counts,
 }: {
   value: BankStatus | "all";
   onChange: (v: BankStatus | "all") => void;
-  counts: Record<BankStatus | "all", number>;
 }) {
   const options: Array<{ key: BankStatus | "all"; label: string }> = [
     { key: "all", label: "All" },
@@ -242,12 +239,11 @@ function StatusFilterOptions({
           key={o.key}
           type="button"
           onClick={() => onChange(o.key)}
-          className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-sm hover:bg-slate-50 ${
+          className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50 ${
             value === o.key ? "font-semibold text-amber-700" : "text-slate-700"
           }`}
         >
-          <span>{o.label}</span>
-          <span className="text-xs text-slate-400">{counts[o.key]}</span>
+          {o.label}
         </button>
       ))}
     </>
@@ -333,60 +329,11 @@ function StageFilterOptions({
   );
 }
 
-/** Checkbox list for filtering by (verified) holding company (multi-select). */
-function HoldingCompanyFilterOptions({
-  options,
-  value,
-  onChange,
-}: {
-  options: { id: string; label: string }[];
-  value: Set<string>;
-  onChange: (next: Set<string>) => void;
-}) {
-  function toggle(id: string) {
-    const next = new Set(value);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    onChange(next);
-  }
-  if (options.length === 0) {
-    return <p className="px-3 py-2 text-xs text-slate-400">No holding companies matched yet.</p>;
-  }
-  return (
-    <>
-      {options.map((o) => (
-        <label
-          key={o.id}
-          className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-        >
-          <input
-            type="checkbox"
-            checked={value.has(o.id)}
-            onChange={() => toggle(o.id)}
-            className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-amber-500 focus:ring-amber-400"
-          />
-          <span className="truncate">{o.label}</span>
-        </label>
-      ))}
-      {value.size > 0 && (
-        <button
-          type="button"
-          onClick={() => onChange(new Set())}
-          className="mt-1 block w-full border-t border-slate-100 px-3 py-1.5 text-left text-sm text-slate-500 hover:bg-slate-50"
-        >
-          Clear
-        </button>
-      )}
-    </>
-  );
-}
-
 export function BanksClient({
   banks,
   accounts,
   defaultDormancyMonths,
   knownHolders,
-  holdingCompanies,
   userDisplayName,
   currentUserId,
   unreadCerts,
@@ -400,7 +347,6 @@ export function BanksClient({
   accounts: Account[];
   defaultDormancyMonths: number;
   knownHolders: string[];
-  holdingCompanies: HoldingCompany[];
   userDisplayName: string;
   currentUserId: string | null;
   unreadCerts: number[];
@@ -421,7 +367,6 @@ export function BanksClient({
   );
   const [stateFilter, setStateFilter] = useState<string>("all");
   const [stageFilter, setStageFilter] = useState<Set<ConversionStage>>(new Set());
-  const [hcFilter, setHcFilter] = useState<Set<string>>(new Set());
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [query, setQuery] = useState(initialQuery ?? "");
   const [sort, setSort] = useState<SortKey>("name");
@@ -467,28 +412,11 @@ export function BanksClient({
     return Array.from(set).sort();
   }, [banks]);
 
-  const hcNameById = useMemo(
-    () => new Map(holdingCompanies.map((h) => [h.id, h.name])),
-    [holdingCompanies],
-  );
-  const hcAssetsById = useMemo(
-    () => new Map(holdingCompanies.map((h) => [h.id, h.assets])),
-    [holdingCompanies],
-  );
-  const holdingCompanyOptions = useMemo(() => {
-    const ids = new Set<string>();
-    for (const b of banks) if (b.holding_company_id) ids.add(b.holding_company_id);
-    return Array.from(ids)
-      .map((id) => ({ id, label: hcNameById.get(id) ?? "Unknown" }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [banks, hcNameById]);
-
   const filtered = useMemo(() => {
     let list = banks;
     if (statusFilter !== "all") list = list.filter((b) => b.status === statusFilter);
     if (stateFilter !== "all") list = list.filter((b) => b.state === stateFilter);
     if (stageFilter.size > 0) list = list.filter((b) => stageFilter.has(b.conversion_stage));
-    if (hcFilter.size > 0) list = list.filter((b) => b.holding_company_id && hcFilter.has(b.holding_company_id));
     const q = query.trim().toLowerCase();
     if (q) {
       list = list.filter((b) => {
@@ -508,7 +436,6 @@ export function BanksClient({
     statusFilter,
     stateFilter,
     stageFilter,
-    hcFilter,
     query,
     sort,
     sortDir,
@@ -673,10 +600,7 @@ export function BanksClient({
   }
 
   const activeFilterCount =
-    (statusFilter !== "all" ? 1 : 0) +
-    (stateFilter !== "all" ? 1 : 0) +
-    stageFilter.size +
-    hcFilter.size;
+    (statusFilter !== "all" ? 1 : 0) + (stateFilter !== "all" ? 1 : 0) + stageFilter.size;
 
   return (
     <div>
@@ -763,7 +687,7 @@ export function BanksClient({
               <div>
                 <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Status</p>
                 <div className="overflow-hidden rounded-lg border border-slate-200">
-                  <StatusFilterOptions value={statusFilter} onChange={setStatusFilter} counts={counts} />
+                  <StatusFilterOptions value={statusFilter} onChange={setStatusFilter} />
                 </div>
               </div>
               <div>
@@ -776,16 +700,6 @@ export function BanksClient({
                 <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">IPO status</p>
                 <div className="rounded-lg border border-slate-200 py-1">
                   <StageFilterOptions value={stageFilter} onChange={setStageFilter} />
-                </div>
-              </div>
-              <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Holding co.</p>
-                <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-200 py-1">
-                  <HoldingCompanyFilterOptions
-                    options={holdingCompanyOptions}
-                    value={hcFilter}
-                    onChange={setHcFilter}
-                  />
                 </div>
               </div>
               <div>
@@ -880,18 +794,6 @@ export function BanksClient({
                       ? `${b.state ? " · " : ""}${accts.length} acct${accts.length === 1 ? "" : "s"} · ${formatCurrency(total)}`
                       : ""}
                   </div>
-                  {b.holding_company_id && hcNameById.has(b.holding_company_id) ? (
-                    <div className="truncate text-xs text-slate-400">
-                      {hcNameById.get(b.holding_company_id)}
-                      {hcAssetsById.get(b.holding_company_id) != null && (
-                        <> · {formatAssets(hcAssetsById.get(b.holding_company_id) ?? null)}</>
-                      )}
-                    </div>
-                  ) : (
-                    b.holding_company && (
-                      <div className="truncate text-xs text-slate-400">{titleCase(b.holding_company)}</div>
-                    )
-                  )}
                   <RelatedChips cert={b.cert} />
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
@@ -920,7 +822,19 @@ export function BanksClient({
 
       {/* Table (md and up) */}
       <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white md:block">
-        <table className="min-w-full text-sm">
+        <table className="w-full min-w-[880px] table-fixed text-sm">
+          <colgroup>
+            <col className="w-[24%]" />
+            <col className="w-[7%]" />
+            <col className="w-[9%]" />
+            <col className="w-[12%]" />
+            <col className="w-[11%]" />
+            <col className="w-[8%]" />
+            <col className="w-[8%]" />
+            <col className="w-[9%]" />
+            <col className="w-[7%]" />
+            <col className="w-[5%]" />
+          </colgroup>
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
               <Th label="Bank" sortKey="name" />
@@ -941,24 +855,11 @@ export function BanksClient({
                 }}
               />
               <Th
-                label="Holding co."
-                filter={{
-                  active: hcFilter.size > 0,
-                  content: (
-                    <HoldingCompanyFilterOptions
-                      options={holdingCompanyOptions}
-                      value={hcFilter}
-                      onChange={setHcFilter}
-                    />
-                  ),
-                }}
-              />
-              <Th
                 label="Status"
                 sortKey="status"
                 filter={{
                   active: statusFilter !== "all",
-                  content: <StatusFilterOptions value={statusFilter} onChange={setStatusFilter} counts={counts} />,
+                  content: <StatusFilterOptions value={statusFilter} onChange={setStatusFilter} />,
                 }}
               />
               <Th label="Priority" sortKey="priority" />
@@ -971,7 +872,7 @@ export function BanksClient({
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={11} className="px-4 py-12 text-center text-slate-400">
+                <td colSpan={10} className="px-4 py-12 text-center text-slate-400">
                   No banks match your filters.
                 </td>
               </tr>
@@ -1023,22 +924,6 @@ export function BanksClient({
                     </td>
                     <td className="px-3 py-3">
                       <ConversionBadge stage={b.conversion_stage} />
-                    </td>
-                    <td className="px-3 py-3 text-slate-600">
-                      {b.holding_company_id && hcNameById.has(b.holding_company_id) ? (
-                        <div>
-                          <div className="max-w-[11rem] truncate">{hcNameById.get(b.holding_company_id)}</div>
-                          {hcAssetsById.get(b.holding_company_id) != null && (
-                            <div className="text-xs text-slate-400">
-                              {formatAssets(hcAssetsById.get(b.holding_company_id) ?? null)}
-                            </div>
-                          )}
-                        </div>
-                      ) : b.holding_company ? (
-                        <div className="max-w-[11rem] truncate text-slate-400">{titleCase(b.holding_company)}</div>
-                      ) : (
-                        <span className="text-slate-300">—</span>
-                      )}
                     </td>
                     <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-2">

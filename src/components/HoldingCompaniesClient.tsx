@@ -13,6 +13,7 @@ import {
   Lock,
   ExternalLink,
   RefreshCw,
+  Search,
 } from "lucide-react";
 import {
   getBankRssdCrosswalk,
@@ -187,6 +188,17 @@ export function HoldingCompaniesClient({
   const [mode, setMode] = useState<"browse" | "wizard">("browse");
   const [overview, setOverview] = useState<HoldingCompanyOverviewRow[] | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
+  const [browseQuery, setBrowseQuery] = useState("");
+
+  const filteredOverview = useMemo(() => {
+    if (!overview) return overview;
+    const q = browseQuery.trim().toLowerCase();
+    if (!q) return overview;
+    return overview.filter(
+      (hc) =>
+        hc.name.toLowerCase().includes(q) || hc.banks.some((b) => b.name.toLowerCase().includes(q)),
+    );
+  }, [overview, browseQuery]);
 
   function loadOverview() {
     setOverviewLoading(true);
@@ -413,8 +425,25 @@ export function HoldingCompaniesClient({
         )}
 
         {!overviewLoading && overview && overview.length > 0 && (
-          <div className="space-y-2">
-            {overview.map((hc) => (
+          <>
+            <div className="relative mb-4">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={browseQuery}
+                onChange={(e) => setBrowseQuery(e.target.value)}
+                placeholder="Search holding companies or banks…"
+                className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+              />
+            </div>
+
+            {filteredOverview && filteredOverview.length === 0 && (
+              <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-400">
+                No holding companies or banks match &quot;{browseQuery}&quot;.
+              </p>
+            )}
+
+            <div className="space-y-2">
+            {(filteredOverview ?? []).map((hc) => (
               <div key={hc.id} className="rounded-xl border border-slate-200 bg-white p-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                   <span className="font-medium text-slate-800">{hc.name}</span>
@@ -440,7 +469,8 @@ export function HoldingCompaniesClient({
                 </div>
               </div>
             ))}
-          </div>
+            </div>
+          </>
         )}
       </div>
     );
