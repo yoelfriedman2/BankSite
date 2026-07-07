@@ -1326,6 +1326,8 @@ export async function getRelatedByCert(): Promise<Record<number, RelatedRef[]>> 
 /** Returns all banks linked to the given cert (from this user's perspective).
  *  Includes both explicit bank_relationships rows and banks sharing the same holding company. */
 export async function getRelatedBanks(cert: number): Promise<RelatedBank[]> {
+  if (!Number.isInteger(cert)) return [];
+
   const supabase = await createClient();
   const {
     data: { user },
