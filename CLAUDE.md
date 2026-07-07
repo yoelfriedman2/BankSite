@@ -173,6 +173,32 @@ and linked to every bank it owns, instead of retyping a number per bank.
   "Load sample data" button in the wizard (demo-mode only) that skips real file uploads so the
   whole flow — review, apply, drawer, filter — can be click-tested without real NIC files.
 
+**Same-day follow-up, after the user actually ran it live**: two real UX complaints came back once
+real data was on screen, both addressed same session —
+1. **`/holding-companies` needed a browse view, not just the sync wizard.** The bank drawer's
+   "verified via Fed data" section was too buried to satisfy "let me see a holding company and
+   every bank it owns, with its own assets, in one place." The page now opens on a browse list by
+   default (`getHoldingCompaniesOverview()` in `holding-companies/actions.ts` — cheap, RLS-scoped,
+   no live FDIC call) showing every matched holding company, its own total assets, and its member
+   banks as clickable chips to `/banks?cert=X`. "Run sync" is now a button that drops into the
+   existing wizard flow; the wizard's own "done" screen returns to this browse view (re-fetching)
+   instead of just linking to `/banks`.
+2. **The Banks page's filter/sort controls were reworked into the column headers.** Per explicit
+   feedback: a separate "Sort: X" dropdown was redundant with the already-existing click-to-sort
+   column headers (removed); the big status-tab-button row and the standalone State/IPO
+   status/Holding co. filter buttons were replaced with small funnel icons living directly on their
+   column's header (click the label to sort, click the funnel to filter — the `Th` component in
+   `BanksClient.tsx`, replacing the old `SortTh`). IPO status and Holding co. are now their own
+   table columns (previously an inline badge and gray subtext under the bank name, respectively) —
+   the Holding co. column shows the verified name + the holding company's own assets when linked,
+   falling back to the old free-text field otherwise. Mobile has no header row (card-based), so it
+   gets a single "Filters" button opening a bottom sheet with the same controls plus a sort-by
+   section (there's no column to click there).
+
+Both re-verified the same way: `npm run build` (temp `xlsx` swap, restored after) plus a second
+full Playwright pass in DEMO_MODE covering the new browse view, the column-header filters/sort, the
+mobile filter sheet, and no mobile overflow — all passing before push.
+
 Verified via `npm run build` (temporarily pointed `xlsx` at a plain npm-registry version to install
 in this sandbox, then restored `package.json`/`package-lock.json` to their committed state
 afterward — same workaround as the 2026-07-06 entry below) and a full interactive pass in

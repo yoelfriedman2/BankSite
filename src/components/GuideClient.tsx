@@ -268,12 +268,12 @@ const TOPICS: Topic[] = [
     title: "Holding companies",
     blurb: "Find which banks share a parent holding company, and how big it really is.",
     points: [
-      "Cross-references the Fed's own data (not just the free-text \"holding company\" field on a bank) to link sibling banks and show the holding company's own total assets",
-      "Requires downloading 3 files from the Fed's site by hand every few months — the wizard walks you through exactly where to click",
+      "The page opens on a browse view: every holding company matched so far, its own total assets, and every bank it owns — click a bank to jump to it",
+      "\"Run sync\" cross-references the Fed's own data (not just the free-text \"holding company\" field on a bank) by walking you through downloading 3 files from the Fed's site by hand every few months",
       "Anyone can run the wizard and see the proposed matches; only the owner or an FDIC admin can apply them",
     ],
     tips: [
-      "The Banks page has a \"Holding co.\" filter once any banks are matched, and a matched bank's page shows its holding company's assets plus every sibling bank it owns.",
+      "The Banks page's \"Holding co.\" column (with its own filter, on the column header) shows the same info inline once a bank is matched, alongside the holding company's own assets — separate from that bank's own assets number.",
       "The Fed's site blocks automated downloads (it shows a CAPTCHA), which is why this can't run on its own like FDIC sync does — a person has to download the files.",
     ],
   },

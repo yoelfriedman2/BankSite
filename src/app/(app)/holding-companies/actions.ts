@@ -1,14 +1,75 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getFdicPermissions } from "@/app/(app)/fdic-sync/actions";
 import {
   DEMO_MODE,
   getDemoBanks,
   getDemoProfile,
+  getDemoHoldingCompanies,
   applyDemoHoldingCompanyChanges,
 } from "@/lib/demo";
+
+export type HoldingCompanyOverviewRow = {
+  id: string;
+  name: string;
+  assets: number | null;
+  assetsAsOf: string | null;
+  banks: { cert: number; name: string; bankId: string }[];
+};
+
+/** Every holding company on file, with the current user's own banks linked to
+ *  it — the default "browse" view on /holding-companies, cheap to load (no
+ *  live FDIC call, unlike the sync wizard's crosswalk lookup). */
+export async function getHoldingCompaniesOverview(): Promise<HoldingCompanyOverviewRow[]> {
+  if (DEMO_MODE) {
+    const hcs = getDemoHoldingCompanies();
+    const banks = getDemoBanks();
+    return hcs
+      .map((hc) => ({
+        id: hc.id,
+        name: hc.name,
+        assets: hc.assets,
+        assetsAsOf: hc.assets_as_of,
+        banks: banks
+          .filter((b) => b.holding_company_id === hc.id)
+          .map((b) => ({ cert: b.cert as number, name: b.name, bankId: b.id })),
+      }))
+      .filter((hc) => hc.banks.length > 0)
+      .sort((a, b) => (b.assets ?? 0) - (a.assets ?? 0));
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data: banks } = await supabase
+    .from("banks")
+    .select("id, cert, name, holding_company_id")
+    .not("holding_company_id", "is", null)
+    .is("deleted_at", null);
+  if (!banks || banks.length === 0) return [];
+
+  const hcIds = [...new Set(banks.map((b) => b.holding_company_id as string))];
+  const { data: hcs } = await supabase.from("holding_companies").select("*").in("id", hcIds);
+  if (!hcs) return [];
+
+  return hcs
+    .map((hc) => ({
+      id: hc.id as string,
+      name: hc.name as string,
+      assets: hc.assets as number | null,
+      assetsAsOf: hc.assets_as_of as string | null,
+      banks: banks
+        .filter((b) => b.holding_company_id === hc.id)
+        .map((b) => ({ cert: b.cert as number, name: b.name as string, bankId: b.id as string })),
+    }))
+    .sort((a, b) => (b.assets ?? 0) - (a.assets ?? 0));
+}
 
 /** Same role check as /fdic-sync (owner or profiles.is_fdic_admin) — this
  *  wizard writes the same class of shared reference data, so it rides the

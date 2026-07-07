@@ -14,8 +14,9 @@ import {
   ChevronsUpDown,
   Link2,
   ListPlus,
-  TrendingUp,
-  Building2,
+  Filter as FilterIcon,
+  SlidersHorizontal,
+  X,
 } from "lucide-react";
 import {
   STATUS_LABELS,
@@ -169,13 +170,18 @@ function sortBanks(
   return arr;
 }
 
-/** Multi-select popover for filtering by IPO/conversion stage. */
-function IpoStageFilterButton({
-  value,
-  onChange,
+/** Small popover trigger (funnel icon) for a column-header filter — used both
+ *  attached to a desktop column header and standalone in the mobile filter sheet. */
+function FilterMenu({
+  active,
+  label,
+  align = "left",
+  children,
 }: {
-  value: Set<ConversionStage>;
-  onChange: (next: Set<ConversionStage>) => void;
+  active: boolean;
+  label: string;
+  align?: "left" | "right";
+  children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -189,61 +195,146 @@ function IpoStageFilterButton({
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
 
-  function toggle(stage: ConversionStage) {
-    const next = new Set(value);
-    if (next.has(stage)) next.delete(stage);
-    else next.add(stage);
-    onChange(next);
-  }
-
   return (
-    <div ref={ref} className="relative flex-1 sm:flex-none">
+    <div ref={ref} className="relative inline-flex">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={`flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm outline-none focus:border-amber-500 sm:w-auto ${
-          value.size > 0
-            ? "border-amber-300 bg-amber-50 text-amber-800"
-            : "border-slate-300 text-slate-700"
-        }`}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        title={`Filter by ${label}`}
+        aria-label={`Filter by ${label}`}
+        className={`rounded p-0.5 ${active ? "text-amber-600" : "text-slate-300 hover:text-slate-500"}`}
       >
-        <TrendingUp className="h-4 w-4" />
-        IPO status{value.size > 0 ? ` (${value.size})` : ""}
-        <ChevronDown className="h-3 w-3" />
+        <FilterIcon className="h-3.5 w-3.5" />
       </button>
       {open && (
-        <div className="absolute left-0 z-20 mt-1 w-56 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
-          {CONVERSION_STAGE_ORDER.map((s) => (
-            <label
-              key={s}
-              className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-            >
-              <input
-                type="checkbox"
-                checked={value.has(s)}
-                onChange={() => toggle(s)}
-                className="h-3.5 w-3.5 rounded border-slate-300 text-amber-500 focus:ring-amber-400"
-              />
-              {CONVERSION_STAGE_LABELS[s]}
-            </label>
-          ))}
-          {value.size > 0 && (
-            <button
-              type="button"
-              onClick={() => onChange(new Set())}
-              className="mt-1 block w-full border-t border-slate-100 px-3 py-1.5 text-left text-sm text-slate-500 hover:bg-slate-50"
-            >
-              Clear
-            </button>
-          )}
+        <div
+          className={`absolute z-20 mt-1 max-h-72 w-56 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 text-left text-xs font-normal normal-case tracking-normal text-slate-700 shadow-lg ${
+            align === "right" ? "right-0" : "left-0"
+          }`}
+        >
+          {children}
         </div>
       )}
     </div>
   );
 }
 
-/** Multi-select popover for filtering by (verified) holding company. */
-function HoldingCompanyFilterButton({
+function StatusFilterOptions({
+  value,
+  onChange,
+  counts,
+}: {
+  value: BankStatus | "all";
+  onChange: (v: BankStatus | "all") => void;
+  counts: Record<BankStatus | "all", number>;
+}) {
+  const options: Array<{ key: BankStatus | "all"; label: string }> = [
+    { key: "all", label: "All" },
+    ...STATUS_ORDER.map((s) => ({ key: s, label: STATUS_LABELS[s] })),
+  ];
+  return (
+    <>
+      {options.map((o) => (
+        <button
+          key={o.key}
+          type="button"
+          onClick={() => onChange(o.key)}
+          className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-sm hover:bg-slate-50 ${
+            value === o.key ? "font-semibold text-amber-700" : "text-slate-700"
+          }`}
+        >
+          <span>{o.label}</span>
+          <span className="text-xs text-slate-400">{counts[o.key]}</span>
+        </button>
+      ))}
+    </>
+  );
+}
+
+function StateFilterOptions({
+  value,
+  onChange,
+  states,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  states: string[];
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => onChange("all")}
+        className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50 ${
+          value === "all" ? "font-semibold text-amber-700" : "text-slate-700"
+        }`}
+      >
+        All states
+      </button>
+      {states.map((s) => (
+        <button
+          key={s}
+          type="button"
+          onClick={() => onChange(s)}
+          className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50 ${
+            value === s ? "font-semibold text-amber-700" : "text-slate-700"
+          }`}
+        >
+          {s}
+        </button>
+      ))}
+    </>
+  );
+}
+
+/** Checkbox list for filtering by IPO/conversion stage (multi-select). */
+function StageFilterOptions({
+  value,
+  onChange,
+}: {
+  value: Set<ConversionStage>;
+  onChange: (next: Set<ConversionStage>) => void;
+}) {
+  function toggle(stage: ConversionStage) {
+    const next = new Set(value);
+    if (next.has(stage)) next.delete(stage);
+    else next.add(stage);
+    onChange(next);
+  }
+  return (
+    <>
+      {CONVERSION_STAGE_ORDER.map((s) => (
+        <label
+          key={s}
+          className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+        >
+          <input
+            type="checkbox"
+            checked={value.has(s)}
+            onChange={() => toggle(s)}
+            className="h-3.5 w-3.5 rounded border-slate-300 text-amber-500 focus:ring-amber-400"
+          />
+          {CONVERSION_STAGE_LABELS[s]}
+        </label>
+      ))}
+      {value.size > 0 && (
+        <button
+          type="button"
+          onClick={() => onChange(new Set())}
+          className="mt-1 block w-full border-t border-slate-100 px-3 py-1.5 text-left text-sm text-slate-500 hover:bg-slate-50"
+        >
+          Clear
+        </button>
+      )}
+    </>
+  );
+}
+
+/** Checkbox list for filtering by (verified) holding company (multi-select). */
+function HoldingCompanyFilterOptions({
   options,
   value,
   onChange,
@@ -252,70 +343,41 @@ function HoldingCompanyFilterButton({
   value: Set<string>;
   onChange: (next: Set<string>) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onDown(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
-
   function toggle(id: string) {
     const next = new Set(value);
     if (next.has(id)) next.delete(id);
     else next.add(id);
     onChange(next);
   }
-
-  if (options.length === 0) return null;
-
+  if (options.length === 0) {
+    return <p className="px-3 py-2 text-xs text-slate-400">No holding companies matched yet.</p>;
+  }
   return (
-    <div ref={ref} className="relative flex-1 sm:flex-none">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={`flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm outline-none focus:border-amber-500 sm:w-auto ${
-          value.size > 0
-            ? "border-amber-300 bg-amber-50 text-amber-800"
-            : "border-slate-300 text-slate-700"
-        }`}
-      >
-        <Building2 className="h-4 w-4" />
-        Holding co.{value.size > 0 ? ` (${value.size})` : ""}
-        <ChevronDown className="h-3 w-3" />
-      </button>
-      {open && (
-        <div className="absolute left-0 z-20 mt-1 max-h-72 w-64 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
-          {options.map((o) => (
-            <label
-              key={o.id}
-              className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-            >
-              <input
-                type="checkbox"
-                checked={value.has(o.id)}
-                onChange={() => toggle(o.id)}
-                className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-amber-500 focus:ring-amber-400"
-              />
-              <span className="truncate">{o.label}</span>
-            </label>
-          ))}
-          {value.size > 0 && (
-            <button
-              type="button"
-              onClick={() => onChange(new Set())}
-              className="mt-1 block w-full border-t border-slate-100 px-3 py-1.5 text-left text-sm text-slate-500 hover:bg-slate-50"
-            >
-              Clear
-            </button>
-          )}
-        </div>
+    <>
+      {options.map((o) => (
+        <label
+          key={o.id}
+          className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+        >
+          <input
+            type="checkbox"
+            checked={value.has(o.id)}
+            onChange={() => toggle(o.id)}
+            className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-amber-500 focus:ring-amber-400"
+          />
+          <span className="truncate">{o.label}</span>
+        </label>
+      ))}
+      {value.size > 0 && (
+        <button
+          type="button"
+          onClick={() => onChange(new Set())}
+          className="mt-1 block w-full border-t border-slate-100 px-3 py-1.5 text-left text-sm text-slate-500 hover:bg-slate-50"
+        >
+          Clear
+        </button>
       )}
-    </div>
+    </>
   );
 }
 
@@ -360,6 +422,7 @@ export function BanksClient({
   const [stateFilter, setStateFilter] = useState<string>("all");
   const [stageFilter, setStageFilter] = useState<Set<ConversionStage>>(new Set());
   const [hcFilter, setHcFilter] = useState<Set<string>>(new Set());
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [query, setQuery] = useState(initialQuery ?? "");
   const [sort, setSort] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -406,6 +469,10 @@ export function BanksClient({
 
   const hcNameById = useMemo(
     () => new Map(holdingCompanies.map((h) => [h.id, h.name])),
+    [holdingCompanies],
+  );
+  const hcAssetsById = useMemo(
+    () => new Map(holdingCompanies.map((h) => [h.id, h.assets])),
     [holdingCompanies],
   );
   const holdingCompanyOptions = useMemo(() => {
@@ -458,17 +525,21 @@ export function BanksClient({
     }
   }
 
-  /** A clickable column header that sorts the table by `sortKey`. */
-  function SortTh({
+  /** A column header: click the label to sort by `sortKey` (if given), click the
+   *  funnel icon to open a filter popover (if `filter` is given). Combines what
+   *  used to be a separate sort dropdown + row of filter buttons above the table. */
+  function Th({
     label,
     sortKey,
     align = "left",
+    filter,
   }: {
     label: string;
-    sortKey: SortKey;
+    sortKey?: SortKey;
     align?: "left" | "right" | "center";
+    filter?: { active: boolean; content: React.ReactNode };
   }) {
-    const active = sort === sortKey;
+    const active = sortKey != null && sort === sortKey;
     const justify =
       align === "right"
         ? "justify-end"
@@ -486,24 +557,35 @@ export function BanksClient({
             : "none"
         }
       >
-        <button
-          type="button"
-          onClick={() => toggleSort(sortKey)}
-          className={`group inline-flex w-full items-center gap-1 ${justify} ${
-            active ? "text-slate-700" : "hover:text-slate-700"
-          }`}
-        >
-          <span>{label}</span>
-          {active ? (
-            sortDir === "asc" ? (
-              <ChevronUp className="h-3 w-3" />
-            ) : (
-              <ChevronDown className="h-3 w-3" />
-            )
+        <div className={`flex items-center gap-1 ${justify}`}>
+          {sortKey ? (
+            <button
+              type="button"
+              onClick={() => toggleSort(sortKey)}
+              className={`group inline-flex items-center gap-1 ${
+                active ? "text-slate-700" : "hover:text-slate-700"
+              }`}
+            >
+              <span>{label}</span>
+              {active ? (
+                sortDir === "asc" ? (
+                  <ChevronUp className="h-3 w-3" />
+                ) : (
+                  <ChevronDown className="h-3 w-3" />
+                )
+              ) : (
+                <ChevronsUpDown className="h-3 w-3 text-slate-300 group-hover:text-slate-400" />
+              )}
+            </button>
           ) : (
-            <ChevronsUpDown className="h-3 w-3 text-slate-300 group-hover:text-slate-400" />
+            <span>{label}</span>
           )}
-        </button>
+          {filter && (
+            <FilterMenu active={filter.active} label={label} align={align === "right" ? "right" : "left"}>
+              {filter.content}
+            </FilterMenu>
+          )}
+        </div>
       </th>
     );
   }
@@ -590,15 +672,11 @@ export function BanksClient({
     });
   }
 
-  const tabs: Array<{ key: BankStatus | "all"; label: string; count: number }> =
-    [
-      { key: "all", label: "All", count: counts.all },
-      ...STATUS_ORDER.map((s) => ({
-        key: s,
-        label: STATUS_LABELS[s],
-        count: counts[s],
-      })),
-    ];
+  const activeFilterCount =
+    (statusFilter !== "all" ? 1 : 0) +
+    (stateFilter !== "all" ? 1 : 0) +
+    stageFilter.size +
+    hcFilter.size;
 
   return (
     <div>
@@ -645,101 +723,111 @@ export function BanksClient({
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="mb-4 space-y-2">
-        {/* Status tabs — horizontally scrollable on mobile */}
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setStatusFilter(t.key)}
-              className={`flex-shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                statusFilter === t.key
-                  ? "bg-amber-500 text-white"
-                  : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              {t.label}{" "}
-              <span
-                className={`${
-                  statusFilter === t.key ? "text-amber-100" : "text-slate-400"
-                }`}
-              >
-                {t.count}
-              </span>
-            </button>
-          ))}
+      {/* Search — filters + sorting live on the table's own column headers now
+          (desktop); mobile gets a single Filters button since cards have no
+          header row to attach them to. */}
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search banks or holders…"
+            className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+          />
         </div>
+        <button
+          type="button"
+          onClick={() => setMobileFiltersOpen(true)}
+          className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium md:hidden ${
+            activeFilterCount > 0
+              ? "border-amber-300 bg-amber-50 text-amber-800"
+              : "border-slate-300 text-slate-700"
+          }`}
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+          Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+        </button>
+      </div>
 
-        {/* Search + sort — stack on mobile, row on desktop */}
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search banks or holders…"
-              className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex">
-            <select
-              value={stateFilter}
-              onChange={(e) => setStateFilter(e.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500"
-            >
-              <option value="all">All states</option>
-              {states.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-
-            <IpoStageFilterButton value={stageFilter} onChange={setStageFilter} />
-
-            <HoldingCompanyFilterButton
-              options={holdingCompanyOptions}
-              value={hcFilter}
-              onChange={setHcFilter}
-            />
-
-            <div className="col-span-2 flex gap-2 sm:contents">
-              <select
-                value={sort}
-                onChange={(e) => {
-                  const k = e.target.value as SortKey;
-                  setSort(k);
-                  setSortDir(DEFAULT_DIR[k]);
-                }}
-                aria-label="Sort banks by"
-                className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500 sm:flex-none"
-              >
-                {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
-                  <option key={k} value={k}>
-                    Sort: {SORT_LABELS[k]}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-                title={sortDir === "asc" ? "Ascending" : "Descending"}
-                aria-label={`Sort direction: ${
-                  sortDir === "asc" ? "ascending" : "descending"
-                }`}
-                className="flex shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-white px-2.5 text-slate-600 hover:bg-slate-50"
-              >
-                {sortDir === "asc" ? (
-                  <ChevronUp className="h-4 w-4" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
-                )}
+      {mobileFiltersOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 md:hidden">
+          <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-slate-900">Filters &amp; sort</h2>
+              <button type="button" onClick={() => setMobileFiltersOpen(false)} className="p-1 text-slate-400">
+                <X className="h-5 w-5" />
               </button>
             </div>
+            <div className="space-y-4">
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Status</p>
+                <div className="overflow-hidden rounded-lg border border-slate-200">
+                  <StatusFilterOptions value={statusFilter} onChange={setStatusFilter} counts={counts} />
+                </div>
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">State</p>
+                <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-200">
+                  <StateFilterOptions value={stateFilter} onChange={setStateFilter} states={states} />
+                </div>
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">IPO status</p>
+                <div className="rounded-lg border border-slate-200 py-1">
+                  <StageFilterOptions value={stageFilter} onChange={setStageFilter} />
+                </div>
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Holding co.</p>
+                <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-200 py-1">
+                  <HoldingCompanyFilterOptions
+                    options={holdingCompanyOptions}
+                    value={hcFilter}
+                    onChange={setHcFilter}
+                  />
+                </div>
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Sort by</p>
+                <div className="flex gap-2">
+                  <select
+                    value={sort}
+                    onChange={(e) => {
+                      const k = e.target.value as SortKey;
+                      setSort(k);
+                      setSortDir(DEFAULT_DIR[k]);
+                    }}
+                    aria-label="Sort banks by"
+                    className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500"
+                  >
+                    {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+                      <option key={k} value={k}>
+                        {SORT_LABELS[k]}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+                    aria-label={`Sort direction: ${sortDir === "asc" ? "ascending" : "descending"}`}
+                    className="flex shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-white px-2.5 text-slate-600"
+                  >
+                    {sortDir === "asc" ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMobileFiltersOpen(false)}
+              className="mt-5 w-full rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
+            >
+              Show {filtered.length} {filtered.length === 1 ? "bank" : "banks"}
+            </button>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Mobile cards */}
       <div className="space-y-2 md:hidden">
@@ -792,6 +880,18 @@ export function BanksClient({
                       ? `${b.state ? " · " : ""}${accts.length} acct${accts.length === 1 ? "" : "s"} · ${formatCurrency(total)}`
                       : ""}
                   </div>
+                  {b.holding_company_id && hcNameById.has(b.holding_company_id) ? (
+                    <div className="truncate text-xs text-slate-400">
+                      {hcNameById.get(b.holding_company_id)}
+                      {hcAssetsById.get(b.holding_company_id) != null && (
+                        <> · {formatAssets(hcAssetsById.get(b.holding_company_id) ?? null)}</>
+                      )}
+                    </div>
+                  ) : (
+                    b.holding_company && (
+                      <div className="truncate text-xs text-slate-400">{titleCase(b.holding_company)}</div>
+                    )
+                  )}
                   <RelatedChips cert={b.cert} />
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
@@ -823,21 +923,55 @@ export function BanksClient({
         <table className="min-w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-              <SortTh label="Bank" sortKey="name" />
-              <SortTh label="State" sortKey="state" />
-              <SortTh label="Assets" sortKey="assets" align="right" />
-              <SortTh label="Status" sortKey="status" />
-              <SortTh label="Priority" sortKey="priority" />
-              <SortTh label="Accounts" sortKey="accounts" />
-              <SortTh label="Balance" sortKey="balance" align="right" />
-              <SortTh label="Health" sortKey="health" align="center" />
+              <Th label="Bank" sortKey="name" />
+              <Th
+                label="State"
+                sortKey="state"
+                filter={{
+                  active: stateFilter !== "all",
+                  content: <StateFilterOptions value={stateFilter} onChange={setStateFilter} states={states} />,
+                }}
+              />
+              <Th label="Assets" sortKey="assets" align="right" />
+              <Th
+                label="IPO status"
+                filter={{
+                  active: stageFilter.size > 0,
+                  content: <StageFilterOptions value={stageFilter} onChange={setStageFilter} />,
+                }}
+              />
+              <Th
+                label="Holding co."
+                filter={{
+                  active: hcFilter.size > 0,
+                  content: (
+                    <HoldingCompanyFilterOptions
+                      options={holdingCompanyOptions}
+                      value={hcFilter}
+                      onChange={setHcFilter}
+                    />
+                  ),
+                }}
+              />
+              <Th
+                label="Status"
+                sortKey="status"
+                filter={{
+                  active: statusFilter !== "all",
+                  content: <StatusFilterOptions value={statusFilter} onChange={setStatusFilter} counts={counts} />,
+                }}
+              />
+              <Th label="Priority" sortKey="priority" />
+              <Th label="Accounts" sortKey="accounts" />
+              <Th label="Balance" sortKey="balance" align="right" />
+              <Th label="Health" sortKey="health" align="center" />
               <th className="px-3 py-3 text-right font-medium"></th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
+                <td colSpan={11} className="px-4 py-12 text-center text-slate-400">
                   No banks match your filters.
                 </td>
               </tr>
@@ -874,13 +1008,7 @@ export function BanksClient({
                             title="Unread update"
                           />
                         )}
-                        <ConversionBadge stage={b.conversion_stage} />
                       </div>
-                      {b.holding_company && (
-                        <div className="max-w-[11rem] truncate text-xs text-slate-400">
-                          {titleCase(b.holding_company)}
-                        </div>
-                      )}
                       <RelatedChips cert={b.cert} />
                     </td>
                     <td className="px-3 py-3 text-slate-600">
@@ -892,6 +1020,25 @@ export function BanksClient({
                     </td>
                     <td className="px-3 py-3 text-right tabular-nums text-slate-600">
                       {formatAssets(b.assets)}
+                    </td>
+                    <td className="px-3 py-3">
+                      <ConversionBadge stage={b.conversion_stage} />
+                    </td>
+                    <td className="px-3 py-3 text-slate-600">
+                      {b.holding_company_id && hcNameById.has(b.holding_company_id) ? (
+                        <div>
+                          <div className="max-w-[11rem] truncate">{hcNameById.get(b.holding_company_id)}</div>
+                          {hcAssetsById.get(b.holding_company_id) != null && (
+                            <div className="text-xs text-slate-400">
+                              {formatAssets(hcAssetsById.get(b.holding_company_id) ?? null)}
+                            </div>
+                          )}
+                        </div>
+                      ) : b.holding_company ? (
+                        <div className="max-w-[11rem] truncate text-slate-400">{titleCase(b.holding_company)}</div>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-2">
