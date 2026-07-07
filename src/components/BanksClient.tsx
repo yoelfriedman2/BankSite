@@ -1059,6 +1059,13 @@ export function BanksClient({
       {importOpen && (
         <ImportDialog
           existingBanks={banks.map((b) => ({ id: b.id, name: b.name, cert: b.cert ?? null }))}
+          existingAccounts={accounts.map((a) => ({
+            id: a.id,
+            bank_id: a.bank_id,
+            holder: a.holder,
+            account_type: a.account_type,
+            account_number: a.account_number,
+          }))}
           onClose={() => setImportOpen(false)}
           onImported={() => router.refresh()}
         />

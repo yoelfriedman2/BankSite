@@ -44,6 +44,32 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 - ~~Run migration **0026_fdic_admin_role.sql**~~ — confirmed run (2026-07-07). The owner can now
   grant the FDIC-admin role toggle on Admin → Users.
 
+## Review before relying on it: manual backup + single-user restore (2026-07-07)
+
+New Admin → Users "Backups" panel: "Back up now" (builds a fresh full-DB snapshot, saves it to the
+same private storage bucket the weekly automated backup uses, and downloads it to your computer
+immediately — meant to be clicked right before deleting a user or doing anything else hard to
+undo), a list of the last 8 stored backups with per-file download, and "Restore a user…" which
+re-attaches one user's banks/accounts/balances/reminders/checks/address campaigns/road trips from
+a chosen backup onto their *current* account (they have to have signed back in once first, so a
+fresh login exists to attach the data to — this doesn't recreate the login itself). Community notes
+were never lost on deletion already (they survive via `ON DELETE SET NULL`, see the 2026-07-03
+incident writeup below), and uploaded document *files* were never part of the backup (only the
+metadata row) — the restore panel says both of these explicitly.
+
+**Not click-tested against a real deletion + restore cycle** — this sandbox has no real Supabase
+credentials, and (separately) this session's attempt to temporarily bypass the owner-only auth
+check on `/admin` for visual verification was correctly blocked by the environment's own
+safety classifier, since that page includes user deletion and this new restore tool. Verified only
+via a clean `npm run build` (full type-check) and careful reasoning through the restore logic
+(banks are matched onto the freshly-seeded row by cert rather than inserted fresh, since every new
+signup auto-seeds the whole shared bank list via `seedBanks` and would otherwise collide with the
+`unique(user_id, cert)` constraint — everything downstream of banks is remapped through that same
+cert-based id swap). **Before trusting this for a real accidental deletion**: do a low-stakes dry
+run — back up now, note a test user's data, delete that test user, re-invite them, sign them back
+in, then restore from the backup taken before the deletion, and confirm their banks/accounts came
+back correctly.
+
 ## Live: data-consistency fixes (2026-07-06, from a code review pass)
 
 Five real bugs/gaps found and fixed:

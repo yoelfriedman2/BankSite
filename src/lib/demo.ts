@@ -63,6 +63,13 @@ export type ImportRow = {
   account_notes: string | null;
   // set by the client-side import review step; "CREATE_NEW" forces a new bank
   matched_bank_id?: string | null;
+  // set by the client-side import review step when this row's account looks
+  // like a duplicate of one already on file (same bank + account number, or
+  // same bank + holder + type) — "skip" leaves the existing account alone,
+  // "update" overwrites it with this row's values, "add_new" imports it as a
+  // separate account anyway. Absent/undefined when no duplicate was found.
+  account_decision?: "skip" | "update" | "add_new";
+  matched_account_id?: string | null;
 };
 
 function monthsAgo(n: number): string {
@@ -642,9 +649,13 @@ function rowHasAccount(row: ImportRow): boolean {
 export function importDemoRows(rows: ImportRow[]): {
   banks: number;
   accounts: number;
+  accountsUpdated: number;
+  accountsSkipped: number;
 } {
   let banksTouched = 0;
   let accountsAdded = 0;
+  let accountsUpdated = 0;
+  let accountsSkipped = 0;
 
   for (const row of rows) {
     const existing = store().banks.find((b) =>
@@ -712,33 +723,53 @@ export function importDemoRows(rows: ImportRow[]): {
     banksTouched++;
 
     if (hasAccount) {
-      addDemoAccount(bankId, {
-        holder: row.holder,
-        account_type: row.account_type,
-        account_number: row.account_number,
-        routing_number: row.routing_number,
-        balance: row.balance,
-        last_activity_date: row.last_activity_date,
-        dormancy_months_override: null,
-        cd_maturity_date: row.cd_maturity_date,
-        date_opened: null,
-        notes: row.account_notes,
-        online_url: row.online_url,
-        username: row.username,
-        password: row.password,
-        access_notes: null,
-        activity_log: [],
-        last_check_number: null,
-        monthly_fee: null,
-        monthly_fee_day: null,
-        monthly_fee_last_charged_on: null,
-        interest_rate: null,
-        exclude_min_balance: false,
-        deleted_at: null,
-      });
-      accountsAdded++;
+      const decision = row.account_decision ?? "add_new";
+      if (decision === "skip") {
+        accountsSkipped++;
+      } else if (decision === "update" && row.matched_account_id) {
+        const patch: Partial<AccountFields> = {};
+        if (row.holder != null) patch.holder = row.holder;
+        if (row.account_type != null) patch.account_type = row.account_type;
+        if (row.account_number != null) patch.account_number = row.account_number;
+        if (row.routing_number != null) patch.routing_number = row.routing_number;
+        if (row.balance != null) patch.balance = row.balance;
+        if (row.last_activity_date != null) patch.last_activity_date = row.last_activity_date;
+        if (row.cd_maturity_date != null) patch.cd_maturity_date = row.cd_maturity_date;
+        if (row.account_notes != null) patch.notes = row.account_notes;
+        if (row.online_url != null) patch.online_url = row.online_url;
+        if (row.username != null) patch.username = row.username;
+        if (row.password != null) patch.password = row.password;
+        updateDemoAccount(row.matched_account_id, patch);
+        accountsUpdated++;
+      } else {
+        addDemoAccount(bankId, {
+          holder: row.holder,
+          account_type: row.account_type,
+          account_number: row.account_number,
+          routing_number: row.routing_number,
+          balance: row.balance,
+          last_activity_date: row.last_activity_date,
+          dormancy_months_override: null,
+          cd_maturity_date: row.cd_maturity_date,
+          date_opened: null,
+          notes: row.account_notes,
+          online_url: row.online_url,
+          username: row.username,
+          password: row.password,
+          access_notes: null,
+          activity_log: [],
+          last_check_number: null,
+          monthly_fee: null,
+          monthly_fee_day: null,
+          monthly_fee_last_charged_on: null,
+          interest_rate: null,
+          exclude_min_balance: false,
+          deleted_at: null,
+        });
+        accountsAdded++;
+      }
     }
   }
 
-  return { banks: banksTouched, accounts: accountsAdded };
+  return { banks: banksTouched, accounts: accountsAdded, accountsUpdated, accountsSkipped };
 }

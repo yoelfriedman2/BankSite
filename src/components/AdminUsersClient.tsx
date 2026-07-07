@@ -9,6 +9,7 @@ import {
   type AdminUser,
   type AccessStatus,
 } from "@/app/(app)/admin/actions";
+import { AdminBackupsPanel } from "@/components/AdminBackupsPanel";
 
 function fmtDate(iso: string | null) {
   if (!iso) return "—";
@@ -113,6 +114,8 @@ export function AdminUsersClient({
           stay, credited to their name.
         </p>
       </div>
+
+      <AdminBackupsPanel />
 
       {loadError && (
         <p className="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{loadError}</p>
@@ -277,7 +280,8 @@ export function AdminUsersClient({
               Permanently deletes <span className="font-medium text-slate-700">{target.email}</span>{" "}
               and all their private data ({target.accounts} accounts, {target.documents} documents).
               Their {target.notes} community note{target.notes === 1 ? "" : "s"} stay, still credited
-              to their name. This cannot be undone.
+              to their name. This cannot be undone directly, but a backup taken beforehand (see
+              Backups above) can restore their data if they're re-added later.
             </p>
 
             <label className="mt-4 block text-xs font-medium text-slate-500">

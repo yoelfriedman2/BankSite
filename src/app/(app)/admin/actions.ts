@@ -4,6 +4,15 @@ import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendAccessApprovedEmail } from "@/lib/email";
+import {
+  buildBackupZip,
+  saveBackupToStorage,
+  listBackups,
+  downloadBackupZip,
+  getBackupUsers,
+  restoreUserFromBackup,
+  type BackupFile,
+} from "@/lib/backup";
 
 /** Returns the current user only if they are the configured owner (ADMIN_EMAIL). */
 async function requireOwner(): Promise<User | null> {
@@ -214,4 +223,64 @@ export async function deleteUserById(userId: string): Promise<{ error?: string }
   const { error } = await admin.auth.admin.deleteUser(userId);
   if (error) return { error: error.message };
   return {};
+}
+
+/** Builds a fresh backup right now (same content as the weekly automated one),
+ *  stores it in the private bucket, and hands the zip back as base64 so the
+ *  owner can save a local copy immediately too — e.g. right before deleting a
+ *  user or making some other hard-to-undo change. */
+export async function createManualBackup(): Promise<{
+  path?: string;
+  zipBase64?: string;
+  tableCounts?: Record<string, number>;
+  warnings?: string[];
+  error?: string;
+}> {
+  const owner = await requireOwner();
+  if (!owner) return { error: "Not authorized." };
+
+  const { zip, tableCounts, warnings } = await buildBackupZip();
+  const stored = await saveBackupToStorage(zip);
+  if (stored.error) return { error: stored.error };
+  return { path: stored.path, zipBase64: zip.toString("base64"), tableCounts, warnings };
+}
+
+export async function listBackupsAction(): Promise<{ backups?: BackupFile[]; error?: string }> {
+  const owner = await requireOwner();
+  if (!owner) return { error: "Not authorized." };
+  return listBackups();
+}
+
+/** Hands back a previously-stored backup's bytes as base64 for the browser to
+ *  save — same shape as createManualBackup's download, just for an older file. */
+export async function downloadBackupAction(
+  path: string,
+): Promise<{ zipBase64?: string; error?: string }> {
+  const owner = await requireOwner();
+  if (!owner) return { error: "Not authorized." };
+  const { zip, error } = await downloadBackupZip(path);
+  if (error || !zip) return { error };
+  return { zipBase64: zip.toString("base64") };
+}
+
+export async function getBackupUsersAction(
+  path: string,
+): Promise<{ users?: { id: string; email: string; display_name: string | null }[]; error?: string }> {
+  const owner = await requireOwner();
+  if (!owner) return { error: "Not authorized." };
+  return getBackupUsers(path);
+}
+
+/** Restores one user's private data (banks/accounts/etc.) from a backup into
+ *  their current account — for after an accidental deletion + re-invite.
+ *  See lib/backup.ts's restoreUserFromBackup for exactly what is and isn't
+ *  recoverable (community notes were never lost; uploaded document files
+ *  were never backed up). */
+export async function restoreUserFromBackupAction(
+  path: string,
+  email: string,
+): Promise<{ counts?: Record<string, number>; warnings?: string[]; error?: string }> {
+  const owner = await requireOwner();
+  if (!owner) return { error: "Not authorized." };
+  return restoreUserFromBackup(path, email);
 }

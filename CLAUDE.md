@@ -139,6 +139,48 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-07 (manual backup + single-user restore; import duplicate-account detection)** — Two
+requests from chat, shipped together:
+
+- **Admin → Users gained a "Backups" panel** (`AdminBackupsPanel.tsx`, new owner-gated actions in
+  `admin/actions.ts`, new functions in `lib/backup.ts`): "Back up now" builds a fresh full-DB
+  snapshot (same content the weekly automated backup already builds), saves it into the same
+  private `backups` storage bucket, and downloads it straight to the browser — meant to be clicked
+  right before deleting a user or making any other hard-to-undo change. The panel also lists the
+  last 8 stored backups (download any of them) and a **"Restore a user…"** flow: pick a backup,
+  pick a user found inside its embedded `auth_users` snapshot, and their
+  banks/accounts/balances/sweeps/printed checks/reminders/document metadata/address campaigns/road
+  trips are re-attached onto their *current* account — they must already have signed back in once
+  (this fills old data back into a fresh login, it doesn't recreate the login). Banks are matched
+  onto the user's freshly-`seedBanks`-seeded row by cert rather than inserted fresh, specifically to
+  avoid colliding with the `unique(user_id, cert)` constraint every new signup already fills; every
+  other table's `bank_id`/`user_id` is remapped through that same id swap. Community notes were
+  never actually at risk (they already survive user deletion via `ON DELETE SET NULL`, see the
+  2026-07-03 incident below) and document *files* were never in the backup to begin with (only the
+  metadata row) — both called out explicitly in the restore modal's copy so the owner isn't
+  surprised. **Not click-tested against a real delete+restore cycle** — see `TODO.md`, which also
+  has the recommended low-stakes dry-run to do before trusting this on a real accident. Skipped
+  changelog/Guide on purpose (owner-only admin tooling, per the standing rule).
+- **Import no longer silently duplicates accounts on a repeat/overlapping upload**
+  (`ImportDialog.tsx`, `banks/actions.ts`'s `importBanks`, `lib/demo.ts`'s `importDemoRows`): each
+  account row being imported is now checked against the user's existing accounts at the resolved
+  bank — a match on account number is a duplicate; absent a number on one side, a match on holder +
+  account type is (two accounts with *different* recorded numbers are never treated as the same
+  account, even if holder/type match). A detected duplicate shows inline on the review screen with
+  three choices — skip (leave the existing account untouched), update it with the file's values, or
+  add it anyway as a genuinely separate account — defaulting to skip. `importBanks` gained
+  `accountsUpdated`/`accountsSkipped` return counts alongside the existing `accounts` (added) count,
+  surfaced on the done screen. Verified end-to-end in DEMO_MODE (not just build) via a headless
+  Playwright pass: uploaded a 3-row file against the seeded demo accounts (one exact account-number
+  duplicate, one holder+type-only duplicate with no number in the file, one genuinely new account),
+  confirmed both duplicates were flagged with the right existing-match summary, switched one
+  decision to "update" and left the other on the "skip" default, imported, and confirmed on the
+  Accounts page afterward that the skipped account's balance was untouched, the updated one changed
+  to the file's value, and the new one was added — no duplicate rows anywhere. Also confirmed no
+  mobile overflow (375px) on the import dialog's new duplicate-review UI. Added a changelog entry
+  and a Guide tip under Banks (import is documented there, shared with Accounts) since this is a
+  user-facing behavior change everyone importing will notice.
+
 **2026-07-07 (invite-only access control — enforced, not just labeled)** — Came out of a security
 review the user asked for ("can people get in / get info out without being properly authenticated").
 The audit's one real finding: login is OAuth-only (Google/Microsoft) and nothing in the app or DB

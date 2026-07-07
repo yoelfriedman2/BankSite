@@ -22,6 +22,14 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-07-07",
+    title: "Importing a spreadsheet no longer creates duplicate accounts",
+    items: [
+      "If a row you're importing matches an account you already have (same account number, or same holder + account type at the same bank), you'll now see it flagged during review with a choice: skip it (it's the same account), update the existing one with the file's values, or add it anyway as a separate account.",
+      "Previously every account row in the file was added as new, so re-importing the same spreadsheet (or one with overlapping accounts) silently created duplicates.",
+    ],
+  },
+  {
+    date: "2026-07-07",
     title: "Fixed holding companies showing no total assets",
     items: [
       "Holding companies were matching to the right banks but every single one showed blank total assets — the Federal Reserve's Financial Data file turned out to use a different format than the other 2 files, which broke the numbers silently. Re-run \"Run sync\" (same 3 files, no need to re-download) to pick up real figures.",
