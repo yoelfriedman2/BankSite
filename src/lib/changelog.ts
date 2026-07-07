@@ -12,6 +12,14 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-07-07",
+    title: "Fixed holding companies showing no total assets",
+    items: [
+      "Holding companies were matching to the right banks but every single one showed blank total assets — the Federal Reserve's Financial Data file turned out to use a different format than the other 2 files, which broke the numbers silently. Re-run \"Run sync\" (same 3 files, no need to re-download) to pick up real figures.",
+      "Note: a small holding company can still legitimately show no assets after this — the Fed only requires the larger ones to report consolidated financials at all, separate from this bug.",
+    ],
+  },
+  {
+    date: "2026-07-07",
     title: "See which banks share a holding company, and how big it really is",
     items: [
       "New Holding companies page: browse every holding company matched so far — its own total assets and every bank it owns, sortable by name or assets, with a search box — plus a \"Run sync\" button that walks you through downloading 3 free files from the Federal Reserve every few months to update it. No manual typing.",

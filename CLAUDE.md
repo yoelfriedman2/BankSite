@@ -290,6 +290,52 @@ Accounts header filters/sort actually filtering and sorting, both pages' unfilte
 1280px *and* 375px with no overflow (including the fresh mobile 3-element squish, caught and fixed
 in this same round), and the Holding Companies browse view's sort buttons.
 
+**Fourth same-day follow-up — the assets bug, confirmed and fixed against the user's real files
+(not guessed this time)**: the user uploaded their actual 3 downloaded NIC files after seeing the
+"What we matched" diagnostic show a garbled "Total assets" column name and saying "does not look
+like it's picking up the assets." Rather than guess again, I unzipped and directly inspected all 3
+real files. Found three concrete bugs in `nicParse.ts`, all now fixed and verified against the real
+data (not just built without erroring):
+1. **The real root cause**: the Financial Data Download (`BHCF20260331.txt`) is **caret (`^`)
+   delimited, not comma** — confirmed, its header line has ~2200 carets and zero commas.
+   `parseCsvTable` only ever handled comma CSV (via SheetJS), so the whole header row was read as one
+   field and every row of the file silently failed to parse — this alone explains "100% of holding
+   companies, not just some" showing no assets, and matches the garbled column name in the user's
+   screenshot exactly. Fixed by sniffing the delimiter (comma vs. caret count on the first line)
+   before parsing.
+2. Total assets isn't one column — it's split across 5 schedule-specific codes depending on which
+   report a given holding company files (`BHCK2170` for large consolidated Y-9C filers, `BHCT2170`,
+   `BHSP2170` for the small-BHC simplified Y-9SP, `BHCA2170`, `BHCP2170` for parent-only/non-
+   consolidated). A single global column index could never work across filer types. Now checks all 5
+   in priority order per row.
+3. The Relationships file's `D_DT_END` field is **never blank** — confirmed by sampling real rows —
+   it's either a genuine historical end date or a `12/31/9999` sentinel meaning "still ongoing." The
+   old code's blank-check assumed a blank meant "current," so it silently kept whichever relationship
+   row happened to appear first in file order, not the actual current owner. Rewrote to recognize the
+   9999 sentinel and prefer the open-ended relationship, tie-breaking on the most recently started one
+   using real chronological date parsing (the raw `MM/DD/YYYY` strings don't sort correctly as text
+   across years).
+   **How this was actually verified** (a real methodological step up from "best-effort, unverified"):
+   wrote a standalone Node script mirroring the new parsing logic and ran it directly against the
+   user's real extracted files. Results: all 460 institutions in the real Financial Data file now
+   parse with sane dollar figures (spot-checked several against real public names — Wells Fargo ≈
+   $2.2T, Huntington Bancshares ≈ $285B, State Street ≈ $392B — all correct order of magnitude), and
+   cross-referencing against the real Relationships/Attributes files by RSSD confirms 448 holding
+   companies get both a real name and a real assets figure. **One caveat surfaced by this real data,
+   not a bug**: only 453 of the ~49,000 distinct parent RSSDs across the whole Relationships file have
+   any assets row in the Financial Data file at all — most holding companies, especially small ones,
+   are below the Fed's Small BHC Policy Statement threshold and simply aren't required to file
+   FR Y-9C/Y-9SP, so a small mutual holding company can still legitimately come back with no assets
+   after this fix — that's real data-unavailability, not the bug. The two theories from earlier
+   (parsing bug vs. genuine filing exemption) turned out to both be true at once, not either/or.
+   Whether the user's own ~426 tracked banks' specific holding companies now show assets can only be
+   confirmed by re-running "Run sync" against the same 3 files (no re-download needed) — not testable
+   from this sandbox since it has no production DB credentials.
+
+Verified via `npm run build` (temp `xlsx` swap, restored after) plus the standalone real-file
+parsing test described above — no DEMO_MODE/Playwright pass needed for this one since nothing in the
+UI changed, only the parsing logic it depends on.
+
 **2026-07-06 (data-consistency fixes from a code review pass)** — Fixed five real bugs surfaced by
 reviewing the codebase for data-integrity risks (import correctness, money-tracking safety, backup
 completeness). See `TODO.md`'s "data-consistency fixes" entry for the full list and reasoning; the

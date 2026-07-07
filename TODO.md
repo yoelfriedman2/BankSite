@@ -5,23 +5,30 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 ## One-time setup pending
 
 - ~~Run migration **0035_holding_companies.sql**~~ — confirmed run (2026-07-07).
-- **Holding company assets showing blank — likely fix shipped, not yet confirmed against real data.**
-  Every matched holding company came back with zero assets (100%, not just some), which pointed at a
-  real parsing bug rather than the "small MHCs are exempt from filing" theory. Root cause: the
-  RSSD-id column detection in `nicParse.ts` was a single loose "contains rssd anywhere" match, and
-  real NIC/Call-Report files commonly have other columns (e.g. a report-date field) whose header also
-  contains "rssd" — if one of those sorted earlier, detection silently bound to the wrong column with
-  no thrown error. Hardened via anchored candidates (`RSSD_ID_CANDIDATES`) tried before the loose
-  fallback, plus a `ID_LIKE_EXCLUDE_TOKENS` check. **Still needs a real "Run sync" re-run to confirm**
-  — re-run with the same 3 files (no re-download needed); the review screen now has a "What we
-  matched" section (persists past the old 600ms flash) to check if it's still wrong.
-- **`/holding-companies`'s NIC file parsing is unverified against a real downloaded file.** The
-  column-name matching in `src/lib/nicParse.ts` is a best-effort guess at NIC's file format (I
-  couldn't fetch a real sample — NIC's site CAPTCHA-blocks automated access, confirmed by testing
-  from both this environment and a PowerShell session on a real machine). The wizard shows exactly
-  which columns it detected (or a clear error with the actual headers found) at each upload step —
-  expect the first real run to need a follow-up fix to `nicParse.ts` once we see the actual file
-  structure.
+- ~~Holding company assets showing blank~~ — **root cause confirmed and fixed against the user's real
+  downloaded files (2026-07-07).** The user uploaded their actual 3 NIC files; direct inspection found
+  the real bug: the Financial Data Download (`BHCF<date>.txt`) is **caret (`^`) delimited, not comma**
+  — `parseCsvTable` only handled comma CSV, so the entire header row was read as one giant field and
+  every row silently failed to parse (matches the garbled "Total assets" column name the user
+  screenshotted). Fixed with delimiter sniffing (comma vs. caret count on the header line). Two more
+  real issues found and fixed the same way: (1) total assets is split across 5 different
+  schedule-specific columns depending on which report a holding company files
+  (`BHCK2170`/`BHCT2170`/`BHSP2170`/`BHCA2170`/`BHCP2170`) — a single global column can never work, now
+  checks all 5 per row in priority order; (2) the Relationships file's end-date field is *never*
+  blank — it's either a real end date or a `12/31/9999` "still ongoing" sentinel — the old blank-check
+  logic effectively kept whichever row came first in file order instead of the actual current
+  ownership, now fixed with proper open-ended detection + chronological tiebreaking.
+  **Verified directly against the real files** (not demo data): re-ran the new parsing logic
+  standalone against the user's actual `CSV_RELATIONSHIPS.CSV`/`CSV_ATTRIBUTES_ACTIVE.CSV`/
+  `BHCF20260331.txt` — all 460 institutions in the real Financial Data file now parse with sane
+  dollar values (e.g. Wells Fargo ≈ $2.2T, Huntington Bancshares ≈ $285B), cross-referenced correctly
+  by name. **One caveat that's real data, not a bug**: only 453 of the ~49,000 distinct parent RSSDs
+  in the Relationships file have any assets row in the Financial Data file at all — most holding
+  companies (especially small ones) are below the threshold that requires filing FR Y-9C/Y-9SP with
+  the Fed at all, so a small mutual holding company can still legitimately show no assets after this
+  fix, same as before — that's the "some MHCs are exempt" theory from before, now confirmed to
+  co-exist with the parsing bug rather than replace it as the explanation. Re-run "Run sync" (same 3
+  files, no re-download needed) to see the corrected results live.
 - Run migration **0031_interest_rate_and_min_balance_exclusion.sql** in the Supabase SQL editor.
   Adds `accounts.interest_rate` (used by the new Fees & interest page's CD projections) and
   `accounts.exclude_min_balance` (the new per-account "don't flag for minimum balance" checkbox).
