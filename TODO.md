@@ -48,8 +48,9 @@ Five real bugs/gaps found and fixed:
    rows — one per account — instead of one bank with 3 accounts, because every row in a "create
    new" review group got stamped the same generic `CREATE_NEW` marker and each one triggered its own
    insert. Fixed in `banks/actions.ts`'s `importBanks` — rows now reuse the bank already created
-   earlier in the same import for the same cert/name. Only affects future imports; any duplicates
-   already created by a past import need manual merging (ask if you want a cleanup script for that).
+   earlier in the same import for the same cert/name. Only affects future imports; a one-time check
+   found exactly one pre-existing duplicate ("RSI Bank NJ"), which the owner merged manually via the
+   UI (2026-07-06) — no cleanup script needed in the end.
 2. **Money sweep/return race**: now atomic via two new Postgres functions, migration
    **0034_sweep_transactions.sql** (confirmed run 2026-07-06).
 3. **FDIC branch refresh wipe-on-failure**: `refreshBranchLocations()` deleted every bank's branches
