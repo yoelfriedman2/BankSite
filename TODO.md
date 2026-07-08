@@ -2,6 +2,16 @@
 
 Running list of things to review and decide. (Feature ideas live in IDEAS.md — this is for open work items.)
 
+## Before removing `target_balance` from the Banks drawer redesign (not yet built)
+
+Planning the Banks drawer redesign (dropping the "Target balance" quick field from `/banks` — the
+idea is people can just put a target amount in their notes instead). **Before actually removing the
+field/column from the UI or dropping it from `banks`, check whether any user currently has a
+non-null `target_balance` saved** — a quick read-only query (`select id, user_id, target_balance
+from banks where target_balance is not null`) — so a real saved value isn't silently deleted/hidden
+for someone. If anyone has data there, migrate it into their notes (or otherwise preserve it) before
+the field disappears from the form.
+
 ## Minor bug noticed in passing (2026-07-08, not yet fixed)
 
 - **`AccountDocuments`/`getAccountDocuments` isn't DEMO_MODE-aware.** Opening the Documents section
