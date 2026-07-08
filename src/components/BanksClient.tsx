@@ -1065,6 +1065,8 @@ export function BanksClient({
             holder: a.holder,
             account_type: a.account_type,
             account_number: a.account_number,
+            online_url: a.online_url,
+            username: a.username,
           }))}
           onClose={() => setImportOpen(false)}
           onImported={() => router.refresh()}
