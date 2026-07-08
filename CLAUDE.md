@@ -176,6 +176,21 @@ always safe via RLS; the exposure was that any signed-in stranger could read the
   demo) — pending screen at 430px (no overflow) and the admin pending-section/Access-column/Last-seen
   at desktop width.
 
+**Same-day follow-up (2026-07-08), after the access gate was live and confirmed working** — a broader
+security pass over the rest of the app (all remaining server actions, file upload, money logic,
+dependencies, HTTP headers). No serious findings — everything follows the same getUser + RLS pattern,
+money math is correct, uploads verify ownership, pdfjs is patched. Two small hardening items shipped:
+1. **Security headers** (`next.config.ts` `headers()`): `X-Frame-Options: SAMEORIGIN`,
+   `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin` on every
+   route. Deliberately no full CSP (Next's inline scripts need a nonce-based CSP — bigger change);
+   HSTS left to Vercel. Code-only, deploys immediately.
+2. **Migration `0037_road_trips_approved_only.sql`** (see `TODO.md`): 0036 missed the `road_trips`
+   table — its public-trip SELECT was still "any authenticated" not "any approved". Re-scoped SELECT
+   (public trips need `is_approved()`) and INSERT (approved only). RLS-only, no app code depends on
+   it, so it's independent of the code deploy. Lower-severity items left as noted in chat (no rate
+   limit on the feedback email; raw DB error strings surfaced to the client; a transitive postcss
+   advisory that isn't exploitable here — do NOT run `npm audit fix --force`, it downgrades Next).
+
 **2026-07-07 (Updates page cleanup)** — The changelog had drifted into logging minor/internal bug
 fixes and cosmetic tweaks alongside real features, and several sessions' unrelated features were
 getting merged into one bubble just because they shipped the same day. Rewrote `src/lib/

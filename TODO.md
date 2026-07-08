@@ -4,16 +4,15 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 
 ## One-time setup pending
 
-- **Run migration `0036_access_control.sql`** — REQUIRED to turn on the invite-only
-  access gate (and the accurate "last seen" on Admin → Users). Until it's run, the app
-  fails **open**: everything behaves exactly as before (every signed-in user is treated
-  as approved), so there's no rush-or-break — but the security gate isn't active until
-  you run it. The migration approves the 11 current users by email automatically; anyone
-  else becomes `pending` and has to request access. **Also verify (separately, in the
-  Supabase dashboard): Authentication → Providers/Settings — ideally disable open signups
-  or restrict Google/Microsoft, so the DB gate has a matching front-door setting.** After
-  running it, sanity-check Admin → Users shows everyone as "Approved" and nobody real got
-  locked out.
+- **Run migration `0037_road_trips_approved_only.sql`** — small security follow-up to 0036:
+  extends the "must be approved" RLS rule to the `road_trips` table (a shared/public trip was
+  still readable by a signed-in-but-not-approved user). Purely an RLS policy change, no app code
+  depends on it, so there's no rush — run it whenever. Requires 0032 and 0036 to already be run.
+- ~~Run migration **0036_access_control.sql**~~ — confirmed run (2026-07-08). Invite-only access
+  gate is live: the 11 current users approved, new sign-ins land on `/pending` and request access,
+  owner approves from Admin → Users. Verified live with a real new-user sign-in. Front-door setting
+  also handled: the owner disabled the unused Email auth provider (Google/Microsoft only), signups
+  left ON on purpose so the in-app request-access flow works.
 - ~~Run migration **0035_holding_companies.sql**~~ — confirmed run (2026-07-07).
 - ~~Holding company assets showing blank~~ — **root cause confirmed and fixed against the user's real
   downloaded files (2026-07-07).** The user uploaded their actual 3 NIC files; direct inspection found
