@@ -47,12 +47,7 @@ export function AccountViewModal({
         className="my-8 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
       >
         <div className="mb-1 flex items-start justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">
-              {account.holder || "Account"}
-            </h2>
-            <p className="text-sm text-slate-500">{bankName}</p>
-          </div>
+          <h2 className="text-lg font-semibold text-slate-900">{bankName}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -63,6 +58,7 @@ export function AccountViewModal({
         </div>
 
         <div className="mt-4 divide-y divide-slate-100 rounded-xl border border-slate-100 bg-slate-50/50 px-4">
+          <Row label="Account holder" value={account.holder} />
           <Row
             label="Account type"
             value={account.account_type ? ACCOUNT_TYPE_LABELS[account.account_type] : null}

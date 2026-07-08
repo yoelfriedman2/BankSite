@@ -677,7 +677,8 @@ export function AccountsClient({
             return (
               <div
                 key={r.id}
-                className="rounded-xl border border-slate-200 bg-white p-3"
+                onClick={() => setViewing(r)}
+                className="cursor-pointer rounded-xl border border-slate-200 bg-white p-3 hover:bg-slate-50 active:bg-slate-100"
               >
                 <div className="flex items-center gap-2">
                   {level !== "none" ? (
@@ -685,13 +686,9 @@ export function AccountsClient({
                   ) : (
                     <span className="h-2.5 w-2.5 shrink-0" />
                   )}
-                  <button
-                    type="button"
-                    onClick={() => setViewing(r)}
-                    className="min-w-0 flex-1 truncate text-left font-medium text-slate-900 hover:text-amber-700 hover:underline"
-                  >
+                  <span className="min-w-0 flex-1 truncate font-medium text-slate-900">
                     {r.bankName}
-                  </button>
+                  </span>
                   {r.account_type && ACTIVITY_TYPES.includes(r.account_type) && (
                     <QuickLogButton
                       pending={logPendingId === r.id}
@@ -699,7 +696,10 @@ export function AccountsClient({
                     />
                   )}
                   <button
-                    onClick={() => setEditing(r)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditing(r);
+                    }}
                     className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                     title="Edit"
                   >
@@ -784,16 +784,11 @@ export function AccountsClient({
                 return (
                   <tr
                     key={r.id}
-                    className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70"
+                    onClick={() => setViewing(r)}
+                    className="cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50/70"
                   >
                     <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => setViewing(r)}
-                        className="font-medium text-slate-900 hover:text-amber-700 hover:underline"
-                      >
-                        {r.bankName}
-                      </button>
+                      <div className="font-medium text-slate-900">{r.bankName}</div>
                       {r.bankState && (
                         <div className="text-xs text-slate-400">{r.bankState}</div>
                       )}
@@ -859,7 +854,10 @@ export function AccountsClient({
                             />
                           )}
                         <button
-                          onClick={() => setEditing(r)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditing(r);
+                          }}
                           className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                           title="Edit"
                         >
