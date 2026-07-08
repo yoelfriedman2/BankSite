@@ -168,6 +168,26 @@ shipped together:
   Supabase call and 500s — every other demo-mode data path in the app is guarded, this one was
   missed; flagged in `TODO.md`.
 
+**2026-07-08 (duplicate-account detection widened after a real-world test)** — The user re-imported
+a large real spreadsheet twice as a test and found most rows still came in as fresh duplicates —
+only a handful got flagged. Root cause: the original matching (`ImportDialog.tsx`'s
+`findAccountMatch`) required either an account-number match, or holder **and** account type
+*both* present and matching — real spreadsheets frequently leave one of those columns blank on
+many rows (e.g. no explicit "account type" column), so most rows had nothing to match on and
+silently created new accounts every time. Rewrote it into a per-field scoring match: account
+number, holder, account type, login URL, and username are each compared when present on *both*
+sides; a mismatch on account number, holder, or account type (the three fields that genuinely
+identify a specific account) disqualifies the candidate outright, but agreement on any *single*
+field among all five — even just holder alone, or just account type alone, or just the login URL —
+is now enough to flag it, since the review step already lets the user reject a wrong guess by
+picking "add as a separate account." The duplicate-review UI now says which field(s) matched (e.g.
+"— same holder", "— same account number") so the user can judge each flag. Re-verified in
+DEMO_MODE: a synthetic re-import case with account-number-only, holder-only, and type-only partial
+matches was properly flagged, while two genuinely different accounts (same holder+type at a
+different bank, but a differing account type or account number) correctly stayed unflagged and were
+added as new — confirmed via the accounts list after import that untouched dup rows really stayed
+untouched and the two real new ones were added separately. No mobile overflow regression at 375px.
+
 **2026-07-07 (manual backup + single-user restore; import duplicate-account detection)** — Two
 requests from chat, shipped together:
 

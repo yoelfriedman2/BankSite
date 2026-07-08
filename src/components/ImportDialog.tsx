@@ -365,6 +365,8 @@ export type ExistingAccountRef = {
   holder: string | null;
   account_type: string | null;
   account_number: string | null;
+  online_url: string | null;
+  username: string | null;
 };
 
 type Confidence = "exact" | "fuzzy" | "none";
@@ -443,11 +445,17 @@ function buildReview(rows: ImportRow[], existing: ExistingBank[]): ReviewEntry[]
 }
 
 /* ─── Duplicate account detection ───
- * A row's account is treated as a duplicate of an existing one at the same
- * bank when either the account numbers match, or — when at least one side
- * has no account number on file — the holder + account type both match.
- * (Two accounts with different account numbers are never a duplicate, even
- * if the holder/type happen to match — that's a genuinely separate account.)
+ * A row's account is treated as a possible duplicate of an existing one at
+ * the same bank based on how many identifying fields agree, tolerating
+ * fields that are simply missing from one side (most real spreadsheets don't
+ * fill in every column on every row). Any field that's present on BOTH sides
+ * and DISAGREES rules the candidate out entirely — an account number,
+ * holder, or account type that actually differs means it's a genuinely
+ * separate account, no matter how much else lines up. Among candidates that
+ * survive that check, agreement on any single field (an account number
+ * match, or just a matching holder, or just a matching login URL) is enough
+ * to flag it — better to ask the user to confirm a few extra "possible"
+ * matches than to silently let a real duplicate back in.
  */
 function normLower(s: string | null | undefined): string {
   return (s ?? "").trim().toLowerCase();
@@ -456,28 +464,53 @@ function normAcctNum(s: string | null | undefined): string {
   return (s ?? "").replace(/[\s-]/g, "").toLowerCase();
 }
 
+type AccountMatch = { account: ExistingAccountRef; matchedOn: string[] };
+
+/** Fields checked pairwise: [label, row-value getter, existing-value getter, isConflictSignal]. */
+const MATCH_FIELDS: {
+  label: string;
+  rowVal: (r: ImportRow) => string;
+  exVal: (a: ExistingAccountRef) => string;
+}[] = [
+  { label: "account number", rowVal: (r) => normAcctNum(r.account_number), exVal: (a) => normAcctNum(a.account_number) },
+  { label: "holder", rowVal: (r) => normLower(r.holder), exVal: (a) => normLower(a.holder) },
+  { label: "account type", rowVal: (r) => r.account_type ?? "", exVal: (a) => a.account_type ?? "" },
+  { label: "login URL", rowVal: (r) => normLower(r.online_url), exVal: (a) => normLower(a.online_url) },
+  { label: "username", rowVal: (r) => normLower(r.username), exVal: (a) => normLower(a.username) },
+];
+// Fields whose disagreement (when both sides have a value) rules a candidate
+// out entirely — these genuinely identify a specific, distinct account.
+const CONFLICT_FIELDS = new Set(["account number", "holder", "account type"]);
+
 function findAccountMatch(
   bankId: string,
   row: ImportRow,
   existing: ExistingAccountRef[],
-): ExistingAccountRef | null {
+): AccountMatch | null {
   const candidates = existing.filter((a) => a.bank_id === bankId);
   if (!candidates.length) return null;
-  const rowNum = normAcctNum(row.account_number);
-  if (rowNum) {
-    const byNum = candidates.find((a) => normAcctNum(a.account_number) === rowNum);
-    if (byNum) return byNum;
+
+  let best: AccountMatch | null = null;
+  for (const a of candidates) {
+    const matchedOn: string[] = [];
+    let conflict = false;
+    for (const f of MATCH_FIELDS) {
+      const rv = f.rowVal(row);
+      const av = f.exVal(a);
+      if (!rv || !av) continue; // missing on one side — neither agrees nor conflicts
+      if (rv === av) {
+        matchedOn.push(f.label);
+      } else if (CONFLICT_FIELDS.has(f.label)) {
+        conflict = true;
+        break;
+      }
+    }
+    if (conflict || matchedOn.length === 0) continue;
+    if (!best || matchedOn.length > best.matchedOn.length) {
+      best = { account: a, matchedOn };
+    }
   }
-  const rowHolder = normLower(row.holder);
-  if (rowHolder && row.account_type) {
-    const byHolderType = candidates.find((a) => {
-      const aNum = normAcctNum(a.account_number);
-      if (rowNum && aNum && rowNum !== aNum) return false;
-      return normLower(a.holder) === rowHolder && a.account_type === row.account_type;
-    });
-    if (byHolderType) return byHolderType;
-  }
-  return null;
+  return best;
 }
 
 function maskAcctNum(n: string | null): string {
@@ -541,7 +574,7 @@ export function ImportDialog({
   // by index into parsedRows — recomputed whenever a bank match changes,
   // since the duplicate check is scoped to whichever bank the row resolves to.
   const accountMatches = useMemo(() => {
-    const m = new Map<number, ExistingAccountRef>();
+    const m = new Map<number, AccountMatch>();
     parsedRows.forEach((row, i) => {
       if (!rowHasAccountData(row)) return;
       const entry = review.find((e) => e.rowIndices.includes(i));
@@ -595,7 +628,7 @@ export function ImportDialog({
       return {
         ...row,
         matched_bank_id: entry?.selectedId ?? null,
-        matched_account_id: match?.id ?? null,
+        matched_account_id: match?.account.id ?? null,
         account_decision: match ? (acctDecisions[rowIdx] ?? "skip") : undefined,
       };
     });
@@ -814,8 +847,9 @@ export function ImportDialog({
                                     {row.account_type ? ` · ${ACCT_TYPE_LABELS[row.account_type] ?? row.account_type}` : ""}
                                     {row.account_number ? ` · ${maskAcctNum(row.account_number)}` : ""}
                                     {" "}matches an account already on file
-                                    {match.holder ? ` for ${match.holder}` : ""}
-                                    {match.account_number ? ` (${maskAcctNum(match.account_number)})` : ""}.
+                                    {match.account.holder ? ` for ${match.account.holder}` : ""}
+                                    {match.account.account_number ? ` (${maskAcctNum(match.account.account_number)})` : ""}
+                                    {" "}— same {match.matchedOn.join(", ")}.
                                   </p>
                                   <select
                                     value={decision}

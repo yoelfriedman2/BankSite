@@ -909,6 +909,8 @@ export function AccountsClient({
             holder: r.holder,
             account_type: r.account_type,
             account_number: r.account_number,
+            online_url: r.online_url,
+            username: r.username,
           }))}
           onClose={() => setImportOpen(false)}
           onImported={() => router.refresh()}

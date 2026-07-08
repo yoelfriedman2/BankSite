@@ -39,7 +39,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-07-07",
     title: "Importing a spreadsheet no longer creates duplicate accounts",
     items: [
-      "If a row you're importing matches an account you already have (same account number, or same holder + account type at the same bank), you'll now see it flagged during review with a choice: skip it (it's the same account), update the existing one with the file's values, or add it anyway as a separate account.",
+      "If a row you're importing looks like an account you already have at the same bank — matching on account number, holder, account type, login URL, or username, even if only one of those lines up — you'll now see it flagged during review with a choice: skip it (it's the same account), update the existing one with the file's values, or add it anyway as a separate account.",
       "Previously every account row in the file was added as new, so re-importing the same spreadsheet (or one with overlapping accounts) silently created duplicates.",
     ],
   },
