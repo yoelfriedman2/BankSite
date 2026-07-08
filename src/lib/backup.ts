@@ -142,6 +142,202 @@ export async function buildBackupZip(): Promise<{
 const BACKUP_BUCKET = "backups";
 const KEEP_BACKUPS = 8;
 
+export type BackupFile = { path: string; size: number; createdAt: string };
+
+/** Lists stored backups, newest first. */
+export async function listBackups(): Promise<{ backups?: BackupFile[]; error?: string }> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.storage.from(BACKUP_BUCKET).list("", { limit: 100 });
+  if (error) return { error: error.message };
+  const backups = (data ?? [])
+    .filter((f) => f.name.startsWith("bank-tracker-backup-"))
+    .map((f) => ({
+      path: f.name,
+      size: (f.metadata?.size as number | undefined) ?? 0,
+      createdAt: f.created_at ?? f.updated_at ?? "",
+    }))
+    .sort((a, b) => (a.path < b.path ? 1 : -1));
+  return { backups };
+}
+
+/** Downloads a stored backup zip's raw bytes. */
+export async function downloadBackupZip(path: string): Promise<{ zip?: Buffer; error?: string }> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.storage.from(BACKUP_BUCKET).download(path);
+  if (error || !data) return { error: error?.message ?? "Backup not found." };
+  return { zip: Buffer.from(await data.arrayBuffer()) };
+}
+
+/** Every table that carries a private per-user `user_id` column, in the order
+ *  they must be restored (parents before children, matching the FK graph). */
+const USER_TABLES = [
+  "banks",
+  "accounts",
+  "account_balance_history",
+  "account_sweeps",
+  "printed_checks",
+  "reminders",
+  "account_documents",
+  "address_campaigns",
+  "address_campaign_items",
+  "road_trips",
+] as const;
+
+const PROFILE_RESTORE_FIELDS = [
+  "display_name",
+  "notify_email",
+  "activity_reminder_months",
+  "notify_new_comments",
+  "notify_product_updates",
+  "alert_no_activity",
+  "alert_low_balance",
+  "alert_cd_maturity",
+  "min_balance",
+  "is_fdic_admin",
+  "banks_seeded",
+  "onboarded",
+] as const;
+
+/** Finds a user by email in a backup's embedded auth_users snapshot. */
+export async function getBackupUsers(
+  path: string,
+): Promise<{ users?: { id: string; email: string; display_name: string | null }[]; error?: string }> {
+  const { zip, error } = await downloadBackupZip(path);
+  if (error || !zip) return { error };
+  const JSZip = (await import("jszip")).default;
+  const parsed = await JSZip.loadAsync(zip);
+  const dataFile = parsed.file("data.json");
+  if (!dataFile) return { error: "This backup file is missing data.json." };
+  const dump = JSON.parse(await dataFile.async("string")) as Record<string, Row[]>;
+  const authUsers = (dump.auth_users ?? []) as { id: string; email: string }[];
+  const nameById = new Map(
+    (dump.profiles ?? []).map((p) => [p.id as string, (p.display_name as string | null) ?? null]),
+  );
+  return {
+    users: authUsers
+      .map((u) => ({ id: u.id, email: u.email, display_name: nameById.get(u.id) ?? null }))
+      .sort((a, b) => a.email.localeCompare(b.email)),
+  };
+}
+
+/** Restores one user's private data (banks, accounts, and everything under
+ *  them) from a stored backup into their CURRENT account. The user must
+ *  already exist (re-signed-up) under the same email — this fills their data
+ *  back in, it does not recreate the login itself.
+ *
+ *  Banks are matched onto the user's current bank list by cert (since a
+ *  fresh signup auto-seeds the whole shared bank reference list via
+ *  seedBanks — inserting the backup's banks fresh would collide with that
+ *  unique(user_id, cert) constraint), updating the seeded row in place rather
+ *  than inserting a duplicate. Every other table is a plain re-insert keyed
+ *  off the bank-id remap built while restoring banks. Uploaded documents
+ *  themselves are never in the backup (only their metadata rows) — restoring
+ *  those rows only relinks the record, not the file. */
+export async function restoreUserFromBackup(
+  path: string,
+  email: string,
+): Promise<{ counts?: Record<string, number>; warnings?: string[]; error?: string }> {
+  const { zip, error } = await downloadBackupZip(path);
+  if (error || !zip) return { error };
+
+  const JSZip = (await import("jszip")).default;
+  const parsed = await JSZip.loadAsync(zip);
+  const dataFile = parsed.file("data.json");
+  if (!dataFile) return { error: "This backup file is missing data.json." };
+  const dump = JSON.parse(await dataFile.async("string")) as Record<string, Row[]>;
+
+  const normEmail = email.trim().toLowerCase();
+  const oldUser = ((dump.auth_users ?? []) as { id: string; email: string }[]).find(
+    (u) => u.email?.toLowerCase() === normEmail,
+  );
+  if (!oldUser) return { error: "No user with that email was found in this backup." };
+  const oldUserId = oldUser.id;
+
+  const admin = createAdminClient();
+  const { data: authData, error: authErr } = await admin.auth.admin.listUsers({ perPage: 1000 });
+  if (authErr) return { error: authErr.message };
+  const newUser = (authData?.users ?? []).find((u) => u.email?.toLowerCase() === normEmail);
+  if (!newUser) {
+    return {
+      error:
+        "No current account with that email. Have the person sign in once to re-create their login, then retry the restore.",
+    };
+  }
+  const newUserId = newUser.id;
+
+  const counts: Record<string, number> = {};
+  const warnings: string[] = [];
+
+  // 1. Profile preferences (the row itself already exists via the signup trigger).
+  const oldProfile = (dump.profiles ?? []).find((p) => p.id === oldUserId);
+  if (oldProfile) {
+    const patch: Row = { access_status: "approved" };
+    for (const f of PROFILE_RESTORE_FIELDS) {
+      if (f in oldProfile) patch[f] = oldProfile[f];
+    }
+    const { error: profErr } = await admin.from("profiles").update(patch).eq("id", newUserId);
+    if (profErr) warnings.push(`profiles: ${profErr.message}`);
+  }
+
+  // 2. Banks — update the matching seeded row (by cert) in place so we don't
+  // collide with the unique(user_id, cert) constraint; insert fresh only for
+  // certs the current seed doesn't have. Track old id -> current id so every
+  // other table's bank_id/account references can be remapped below.
+  const bankIdMap = new Map<string, string>();
+  const oldBanks = (dump.banks ?? []).filter((b) => b.user_id === oldUserId);
+  if (oldBanks.length) {
+    const { data: existing } = await admin.from("banks").select("id, cert").eq("user_id", newUserId);
+    const existingByCert = new Map(
+      (existing ?? []).filter((b) => b.cert != null).map((b) => [b.cert as number, b.id as string]),
+    );
+    const toWrite: Row[] = [];
+    for (const b of oldBanks) {
+      const oldId = b.id as string;
+      const cert = b.cert as number | null;
+      const curId = cert != null ? existingByCert.get(cert) : undefined;
+      const targetId = curId ?? oldId;
+      bankIdMap.set(oldId, targetId);
+      const { user_id: _u, ...rest } = b;
+      toWrite.push({ ...rest, id: targetId, user_id: newUserId });
+    }
+    const { error: bankErr } = await admin.from("banks").upsert(toWrite, { onConflict: "id" });
+    if (bankErr) warnings.push(`banks: ${bankErr.message}`);
+    counts.banks = toWrite.length;
+  }
+
+  // 3. Everything else — plain re-insert with user_id (and bank_id, where the
+  // table has one) remapped through bankIdMap.
+  for (const table of USER_TABLES) {
+    if (table === "banks") continue;
+    const rows = (dump[table] ?? []).filter((r) => r.user_id === oldUserId);
+    if (!rows.length) continue;
+    const toWrite = rows.map((r) => {
+      const row: Row = { ...r, user_id: newUserId };
+      if ("bank_id" in row && typeof row.bank_id === "string") {
+        row.bank_id = bankIdMap.get(row.bank_id) ?? row.bank_id;
+      }
+      return row;
+    });
+    for (let i = 0; i < toWrite.length; i += 500) {
+      const chunk = toWrite.slice(i, i + 500);
+      const { error: writeErr } = await admin.from(table).upsert(chunk, { onConflict: "id" });
+      if (writeErr) {
+        warnings.push(`${table}: ${writeErr.message}`);
+        break;
+      }
+    }
+    counts[table] = toWrite.length;
+  }
+
+  if (counts.account_documents) {
+    warnings.push(
+      `${counts.account_documents} document record(s) restored, but the files themselves are not part of the backup and cannot be recovered — the records will show a broken download link.`,
+    );
+  }
+
+  return { counts, warnings };
+}
+
 /** Saves the backup zip to a private storage bucket (service-role only — the
  *  bucket has no RLS policies, so app users can't touch it) and prunes old
  *  copies beyond the last KEEP_BACKUPS. */

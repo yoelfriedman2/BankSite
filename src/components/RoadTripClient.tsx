@@ -85,11 +85,13 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
 
   const [branchStatus, setBranchStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [branchMessage, setBranchMessage] = useState<string | null>(null);
+  const [branchSampleRow, setBranchSampleRow] = useState<string | null>(null);
   const [, startBranchTransition] = useTransition();
 
   function runBranchRefresh() {
     setBranchStatus("running");
     setBranchMessage(null);
+    setBranchSampleRow(null);
     startBranchTransition(async () => {
       const res = await refreshBranchLocations();
       if (res.error) {
@@ -98,7 +100,17 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
         return;
       }
       setBranchStatus("done");
-      setBranchMessage(`${res.count ?? 0} office locations saved. Reload the page to pick up the new data.`);
+      const count = res.count ?? 0;
+      const diagnostic =
+        count === 0
+          ? res.certsChecked === 0
+            ? " (no tracked banks with a cert found — nothing to sync)"
+            : res.rawRows === 0
+              ? ` (checked ${res.certsChecked} bank${res.certsChecked === 1 ? "" : "s"}, but the FDIC returned no office data for them — try again shortly in case this was a temporary FDIC API issue)`
+              : ` (checked ${res.certsChecked} bank${res.certsChecked === 1 ? "" : "s"}, FDIC returned ${res.rawRows} office row${res.rawRows === 1 ? "" : "s"} but none had usable coordinates)`
+          : "";
+      setBranchMessage(`${count} office locations saved.${diagnostic} Reload the page to pick up the new data.`);
+      setBranchSampleRow(res.sampleRow ?? null);
     });
   }
 
@@ -299,6 +311,16 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
           <p className={`mt-1 text-xs ${branchStatus === "error" ? "text-rose-600" : "text-emerald-600"}`}>
             {branchMessage}
           </p>
+        )}
+        {branchSampleRow && (
+          <details className="mt-1">
+            <summary className="cursor-pointer text-xs font-medium text-slate-500 hover:text-slate-700">
+              Show one raw FDIC office record (for debugging)
+            </summary>
+            <pre className="mt-1 max-w-full overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-slate-50 p-2 text-[11px] text-slate-600">
+              {branchSampleRow}
+            </pre>
+          </details>
         )}
       </div>
       <button

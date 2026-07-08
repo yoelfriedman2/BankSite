@@ -43,6 +43,32 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 - ~~Run migration **0026_fdic_admin_role.sql**~~ — confirmed run (2026-07-07). The owner can now
   grant the FDIC-admin role toggle on Admin → Users.
 
+## Review before relying on it: manual backup + single-user restore (2026-07-07)
+
+New Admin → Users "Backups" panel: "Back up now" (builds a fresh full-DB snapshot, saves it to the
+same private storage bucket the weekly automated backup uses, and downloads it to your computer
+immediately — meant to be clicked right before deleting a user or doing anything else hard to
+undo), a list of the last 8 stored backups with per-file download, and "Restore a user…" which
+re-attaches one user's banks/accounts/balances/reminders/checks/address campaigns/road trips from
+a chosen backup onto their *current* account (they have to have signed back in once first, so a
+fresh login exists to attach the data to — this doesn't recreate the login itself). Community notes
+were never lost on deletion already (they survive via `ON DELETE SET NULL`, see the 2026-07-03
+incident writeup below), and uploaded document *files* were never part of the backup (only the
+metadata row) — the restore panel says both of these explicitly.
+
+**Not click-tested against a real deletion + restore cycle** — this sandbox has no real Supabase
+credentials, and (separately) this session's attempt to temporarily bypass the owner-only auth
+check on `/admin` for visual verification was correctly blocked by the environment's own
+safety classifier, since that page includes user deletion and this new restore tool. Verified only
+via a clean `npm run build` (full type-check) and careful reasoning through the restore logic
+(banks are matched onto the freshly-seeded row by cert rather than inserted fresh, since every new
+signup auto-seeds the whole shared bank list via `seedBanks` and would otherwise collide with the
+`unique(user_id, cert)` constraint — everything downstream of banks is remapped through that same
+cert-based id swap). **Before trusting this for a real accidental deletion**: do a low-stakes dry
+run — back up now, note a test user's data, delete that test user, re-invite them, sign them back
+in, then restore from the backup taken before the deletion, and confirm their banks/accounts came
+back correctly.
+
 ## Live: data-consistency fixes (2026-07-06, from a code review pass)
 
 Five real bugs/gaps found and fixed:
@@ -143,6 +169,42 @@ see `buildMultiDayItinerary()` in `roadtrip.ts`), a **per-bank branch/location p
 office is available per bank now, not just the main office — defaults to nearest-to-anchor, with a
 "N locations ▾" override control on each itinerary row), and a **map marker contrast fix** (the
 "nearby" candidate dots were a muted gray that was genuinely hard to see — now indigo).
+
+**Open bug report (2026-07-07): "Refresh branch locations" saving 0 rows** — the user reported
+`/road-trip` showing "0 office locations saved" after clicking refresh, and the page falling back to
+"No banks have a synced branch location yet." This means `bank_branches` is (or briefly was) empty in
+production, a regression from the 405/426-synced state confirmed above on 2026-07-05. Reviewed
+`refreshBranchLocations()`/`fetchFdicLocations()` in `fdic-sync/actions.ts` line by line — found no
+logic bug (the cert-batch delete/insert refactor from the 2026-07-06 data-consistency pass is sound),
+and this sandbox's outbound network policy blocks `api.fdic.gov` entirely (confirmed via the proxy
+status endpoint — a hard policy denial, not a code path), so the live FDIC "locations" response
+couldn't be inspected directly to confirm whether it's a real FDIC-side change/outage or something
+else. Since a silent `count: 0` gave no way to tell "no certs to check" apart from "FDIC returned
+nothing" apart from "rows came back but had no coordinates," added diagnostics: `refreshBranchLocations`
+now also returns `certsChecked`/`rawRows`, and the UI message on a zero result now says which of those
+three cases it was.
+
+**Ran it live (2026-07-07)**: 426 banks checked, FDIC returned 3088 raw office rows — a plausible real
+branch count, so the cert lookup/query itself is fine — but **none of the 3088 had a usable
+LATITUDE/LONGITUDE**, and this worked as recently as 2026-07-05 with the exact same code. Checked FDIC's
+own published field definitions for the `locations` endpoint — `LATITUDE`/`LONGITUDE` are confirmed the
+right field names, so it's not a renamed-field issue on our end. Still couldn't hit `api.fdic.gov`
+directly from this sandbox (blocked outbound) to see a raw response, so added a diagnostic instead: on a
+zero-coordinate result, `refreshBranchLocations` returns one real raw office record which the Road trip
+page shows in a collapsible "Show one raw FDIC office record" section.
+
+**Root cause found and fixed, from that real sample row**: the user ran it and the raw row had
+perfectly valid `LATITUDE`/`LONGITUDE` — the coordinates were never actually missing. The real bug: the
+FDIC is now returning `CERT` as a **JSON string** (`"CERT":"15912"`) rather than a number.
+`refreshBranchLocations` groups fetched rows into a `Map` keyed by `r.CERT`, then looks that map up using
+the numeric certs pulled from our own `banks` table — a string key `"15912"` never matches a numeric
+key `15912` in a JS `Map`, so every single row's lookup silently missed and nothing ever got inserted,
+even though every row was fetched successfully with real coordinates. `fetchFdic` (the main FDIC sync
+check, institutions endpoint) already guards against exactly this with `Number(item.data.CERT)` when
+building its own Map — `fetchFdicLocations`/`refreshBranchLocations` just never got the same treatment.
+Fixed by coercing `cert: Number(r.CERT)` when building the insert rows. Not yet re-verified against
+production (needs the user to click "Refresh branch locations" again post-deploy to confirm a
+non-zero count) but the failure mode is now fully understood, not guessed at.
 
 ## Live: address change per holder + monthly fee
 

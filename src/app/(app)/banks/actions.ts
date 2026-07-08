@@ -555,7 +555,14 @@ function rowHasAccount(r: ImportRow): boolean {
 
 export async function importBanks(
   rows: ImportRow[],
-): Promise<{ banks?: number; accounts?: number; notes?: number; error?: string }> {
+): Promise<{
+  banks?: number;
+  accounts?: number;
+  accountsUpdated?: number;
+  accountsSkipped?: number;
+  notes?: number;
+  error?: string;
+}> {
   if (!rows || rows.length === 0) {
     return { error: "No bank rows were found in that file." };
   }
@@ -598,6 +605,8 @@ export async function importBanks(
   const accountInserts: Record<string, unknown>[] = [];
   const noteInserts: { cert: number; body: string }[] = [];
   let banksTouched = 0;
+  let accountsUpdated = 0;
+  let accountsSkipped = 0;
   // Rows the review UI grouped under the same "create new bank" entry (same
   // cert, or same name when no cert) all get stamped matched_bank_id ===
   // "CREATE_NEW" — reuse the bank created for the first row in that group
@@ -696,21 +705,53 @@ export async function importBanks(
     }
 
     if (acct) {
-      accountInserts.push({
-        user_id: user.id,
-        bank_id: bankId,
-        holder: row.holder,
-        account_type: row.account_type,
-        account_number: row.account_number,
-        routing_number: row.routing_number,
-        balance: row.balance,
-        last_activity_date: row.last_activity_date,
-        cd_maturity_date: row.cd_maturity_date,
-        notes: row.account_notes,
-        online_url: row.online_url,
-        username: row.username,
-        password: row.password,
-      });
+      const decision = row.account_decision ?? "add_new";
+      if (decision === "skip") {
+        accountsSkipped++;
+      } else if (decision === "update" && row.matched_account_id) {
+        // Only overwrite fields this row actually carries a value for — same
+        // "don't blank out what wasn't in the file" rule as the bank update above.
+        const upd: Record<string, unknown> = {};
+        if (row.holder != null) upd.holder = row.holder;
+        if (row.account_type != null) upd.account_type = row.account_type;
+        if (row.account_number != null) upd.account_number = row.account_number;
+        if (row.routing_number != null) upd.routing_number = row.routing_number;
+        if (row.balance != null) upd.balance = row.balance;
+        if (row.last_activity_date != null) upd.last_activity_date = row.last_activity_date;
+        if (row.cd_maturity_date != null) upd.cd_maturity_date = row.cd_maturity_date;
+        if (row.account_notes != null) upd.notes = row.account_notes;
+        if (row.online_url != null) upd.online_url = row.online_url;
+        if (row.username != null) upd.username = row.username;
+        if (row.password != null) upd.password = row.password;
+        if (Object.keys(upd).length > 0) {
+          // bank_id scoped defensively — the matched account must actually
+          // belong to the bank this row resolved to, in case the user changed
+          // the bank match after duplicates were detected client-side.
+          const { error } = await supabase
+            .from("accounts")
+            .update(upd)
+            .eq("id", row.matched_account_id)
+            .eq("bank_id", bankId);
+          if (error) return { error: error.message };
+        }
+        accountsUpdated++;
+      } else {
+        accountInserts.push({
+          user_id: user.id,
+          bank_id: bankId,
+          holder: row.holder,
+          account_type: row.account_type,
+          account_number: row.account_number,
+          routing_number: row.routing_number,
+          balance: row.balance,
+          last_activity_date: row.last_activity_date,
+          cd_maturity_date: row.cd_maturity_date,
+          notes: row.account_notes,
+          online_url: row.online_url,
+          username: row.username,
+          password: row.password,
+        });
+      }
     }
   }
 
@@ -747,7 +788,13 @@ export async function importBanks(
   }
 
   revalidate();
-  return { banks: banksTouched, accounts: accountInserts.length, notes: notesPosted };
+  return {
+    banks: banksTouched,
+    accounts: accountInserts.length,
+    accountsUpdated,
+    accountsSkipped,
+    notes: notesPosted,
+  };
 }
 
 /**

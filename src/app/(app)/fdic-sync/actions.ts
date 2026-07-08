@@ -328,7 +328,7 @@ export async function deleteClosedBank(
 }
 
 type FdicLocationRow = {
-  CERT: number; UNINUM: number; MAINOFF: number | string; OFFNAME: string | null;
+  CERT: number | string; UNINUM: number; MAINOFF: number | string; OFFNAME: string | null;
   ADDRESS: string | null; CITY: string | null; STALP: string | null; ZIP: string | number | null;
   LATITUDE: number | string | null; LONGITUDE: number | string | null;
 };
@@ -366,7 +366,13 @@ async function fetchFdicLocations(certs: number[]): Promise<FdicLocationRow[]> {
  * so a partial failure just leaves the previous refresh's rows in place for
  * certs it didn't reach.
  */
-export async function refreshBranchLocations(): Promise<{ count?: number; error?: string }> {
+export async function refreshBranchLocations(): Promise<{
+  count?: number;
+  error?: string;
+  certsChecked?: number;
+  rawRows?: number;
+  sampleRow?: string;
+}> {
   const user = await currentUser();
   if (!(await canApplyFdicChanges(user))) return { error: "Not authorized." };
 
@@ -383,18 +389,31 @@ export async function refreshBranchLocations(): Promise<{ count?: number; error?
     for (const row of data ?? []) certs.add(row.cert as number);
     if (!data || data.length < 1000) break;
   }
+  const certsChecked = certs.size;
+  if (certsChecked === 0) return { count: 0, certsChecked: 0, rawRows: 0 };
 
   let rows: FdicLocationRow[];
   try {
     rows = await fetchFdicLocations([...certs]);
   } catch (err) {
-    return { error: String(err) };
+    return { error: String(err), certsChecked };
   }
+  const rawRows = rows.length;
+  // If nothing survives the coordinate filter below, keep one raw row around
+  // (this is public branch-address data, nothing sensitive) so the "0 saved"
+  // message can show exactly what the FDIC actually sent back — the only way
+  // to see that, since this dev environment's egress policy blocks
+  // api.fdic.gov and can't inspect a live response directly.
+  const sampleRow = rows[0] ? JSON.stringify(rows[0]) : undefined;
 
   const toInsert = rows
     .filter((r) => r.LATITUDE != null && r.LONGITUDE != null)
     .map((r) => ({
-      cert: r.CERT,
+      // The FDIC has been observed returning CERT as a JSON string (e.g.
+      // "15912") rather than a number — coerce it the same way fetchFdic
+      // already does, since it's used as a Map key matched against the
+      // numeric certs pulled from our own banks table below.
+      cert: Number(r.CERT),
       uninum: r.UNINUM,
       main_office: String(r.MAINOFF) === "1",
       name: r.OFFNAME,
@@ -423,14 +442,14 @@ export async function refreshBranchLocations(): Promise<{ count?: number; error?
   for (let i = 0; i < certList.length; i += CERT_BATCH) {
     const certBatch = certList.slice(i, i + CERT_BATCH);
     const { error: delErr } = await admin.from("bank_branches").delete().in("cert", certBatch);
-    if (delErr) return { error: delErr.message, count };
+    if (delErr) return { error: delErr.message, count, certsChecked, rawRows, sampleRow };
 
     const rowsForBatch = certBatch.flatMap((cert) => byCert.get(cert) ?? []);
     if (rowsForBatch.length) {
       const { error: insErr } = await admin.from("bank_branches").insert(rowsForBatch);
-      if (insErr) return { error: insErr.message, count };
+      if (insErr) return { error: insErr.message, count, certsChecked, rawRows, sampleRow };
       count += rowsForBatch.length;
     }
   }
-  return { count };
+  return { count, certsChecked, rawRows, sampleRow: count === 0 ? sampleRow : undefined };
 }
