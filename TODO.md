@@ -2,6 +2,16 @@
 
 Running list of things to review and decide. (Feature ideas live in IDEAS.md — this is for open work items.)
 
+## Minor bug noticed in passing (2026-07-08, not yet fixed)
+
+- **`AccountDocuments`/`getAccountDocuments` isn't DEMO_MODE-aware.** Opening the Documents section
+  inside the account editor while `DEMO_MODE=true` calls the real Supabase server client and 500s
+  instead of returning demo data — every other page/action in the app guards on `DEMO_MODE` first,
+  this one was missed. Noticed while click-testing the new account view popup (below); didn't fix
+  since it's unrelated to that change and DEMO_MODE is dev-only. Fix pattern: mirror how
+  `getAllMyDocuments` in `accounts/documents.ts` or any other demo-aware action branches on
+  `DEMO_MODE` before touching Supabase.
+
 ## One-time setup pending
 
 - **Run migration `0037_road_trips_approved_only.sql`** — small security follow-up to 0036:

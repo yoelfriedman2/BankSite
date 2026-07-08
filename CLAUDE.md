@@ -139,6 +139,35 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-08 (calendar duplicate-entry fix; read-only account view)** — Two requests from chat,
+shipped together:
+
+- **Calendar was showing every logged activity twice (up to 4× for a bank with two accounts)**:
+  root cause is that `buildPatch` in `accounts/actions.ts` always derives `last_activity_date` to
+  equal the most recent `activity_log` entry's date once one exists, so the Calendar page
+  (`app/(app)/calendar/page.tsx`) was emitting both a "last activity" event and an "activity entry"
+  event for that same date — near-duplicates every time. Fixed by skipping the "last activity" event
+  whenever the account's `activity_log` already has an entry on that exact date. Verified in
+  DEMO_MODE: before the fix a seeded account with `last_activity_date` matching its newest
+  `activity_log` entry showed two badges on the same day; after the fix, only one.
+- **Accounts page: clicking a bank name now opens a read-only view popup** (new
+  `AccountViewModal.tsx`) instead of jumping straight to the editable form — holder, type, account #,
+  routing #, balance, dates, notes, laid out as plain text (not input boxes). From there, "View bank"
+  links to that bank's drawer on `/banks` (via the existing `/banks?cert=X` deep-link pattern already
+  used elsewhere — `BanksClient.tsx`'s `initialOpenCert` effect), and "Edit" swaps to the existing
+  `AccountModal` editable form. The pencil icon in the row/card still opens the editor directly, for
+  anyone who already knows they want to make a change — this is an additional read-only entry point,
+  not a replacement for the edit flow. Needed threading `bankCert` through `AccountRow`
+  (`accounts/page.tsx`) since the account rows previously only carried `bankName`/`bankState`.
+  Verified via `npm run build` (temp `xlsx` swap, restored after) and a headless Playwright pass in
+  DEMO_MODE: view modal → Edit → real editable form, "View bank" link resolves to the correct
+  `/banks?cert=` URL and the bank drawer opens showing the same account, and no mobile overflow
+  (375px) on either the accounts list or the new modal. One pre-existing, unrelated bug noticed along
+  the way and left alone (out of scope): `AccountDocuments`/`getAccountDocuments` isn't
+  DEMO_MODE-aware, so opening the account editor's Documents section in DEMO_MODE hits a real
+  Supabase call and 500s — every other demo-mode data path in the app is guarded, this one was
+  missed; flagged in `TODO.md`.
+
 **2026-07-07 (manual backup + single-user restore; import duplicate-account detection)** — Two
 requests from chat, shipped together:
 

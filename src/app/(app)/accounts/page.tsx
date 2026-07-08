@@ -75,6 +75,7 @@ export default async function AccountsPage({
     ...a,
     bankName: bankMap.get(a.bank_id)?.name ?? "—",
     bankState: bankMap.get(a.bank_id)?.state ?? null,
+    bankCert: bankMap.get(a.bank_id)?.cert ?? null,
   }));
 
   return (

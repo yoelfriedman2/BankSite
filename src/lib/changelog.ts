@@ -21,6 +21,21 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-07-08",
+    title: "Click a bank on the Accounts page for a read-only view",
+    items: [
+      "Clicking a bank name now opens a clean, view-only summary of that account (type, account number, routing number, balance, dates, notes) instead of jumping straight into the editable form — good for a quick look without any risk of accidentally changing something.",
+      "From there, \"View bank\" jumps to that bank's page, and \"Edit\" opens the same editable form as before. The pencil icon still opens the editor directly if you already know you want to make a change.",
+    ],
+  },
+  {
+    date: "2026-07-08",
+    title: "Fixed duplicate entries on the Calendar",
+    items: [
+      "Logging an account's activity always stamps both \"last activity\" and an activity-log entry with the same date, so every logged activity was showing up twice on the Calendar (and up to 4 times for a bank with two accounts). The redundant \"last activity\" entry is now hidden whenever an activity-log entry already covers that same date.",
+    ],
+  },
+  {
     date: "2026-07-07",
     title: "Importing a spreadsheet no longer creates duplicate accounts",
     items: [

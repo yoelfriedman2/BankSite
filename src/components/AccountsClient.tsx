@@ -37,6 +37,7 @@ import {
 import { formatCurrency, formatDateShort, maskAccountNumber } from "@/lib/format";
 import { ActivityDot } from "@/components/badges";
 import { AccountModal } from "@/components/AccountModal";
+import { AccountViewModal } from "@/components/AccountViewModal";
 import { ImportDialog } from "@/components/ImportDialog";
 import { logActivityToday } from "@/app/(app)/accounts/actions";
 
@@ -374,6 +375,7 @@ function CdMaturityCell({ account }: { account: AccountRow }) {
 export type AccountRow = Account & {
   bankName: string;
   bankState: string | null;
+  bankCert: number | null;
 };
 
 export function AccountsClient({
@@ -403,6 +405,7 @@ export function AccountsClient({
   const [importOpen, setImportOpen] = useState(false);
   const [attentionOnly, setAttentionOnly] = useState(initialAttention);
   const [editing, setEditing] = useState<AccountRow | null>(null);
+  const [viewing, setViewing] = useState<AccountRow | null>(null);
   const [logPendingId, setLogPendingId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
@@ -682,9 +685,13 @@ export function AccountsClient({
                   ) : (
                     <span className="h-2.5 w-2.5 shrink-0" />
                   )}
-                  <span className="min-w-0 flex-1 truncate font-medium text-slate-900">
+                  <button
+                    type="button"
+                    onClick={() => setViewing(r)}
+                    className="min-w-0 flex-1 truncate text-left font-medium text-slate-900 hover:text-amber-700 hover:underline"
+                  >
                     {r.bankName}
-                  </span>
+                  </button>
                   {r.account_type && ACTIVITY_TYPES.includes(r.account_type) && (
                     <QuickLogButton
                       pending={logPendingId === r.id}
@@ -780,7 +787,13 @@ export function AccountsClient({
                     className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70"
                   >
                     <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900">{r.bankName}</div>
+                      <button
+                        type="button"
+                        onClick={() => setViewing(r)}
+                        className="font-medium text-slate-900 hover:text-amber-700 hover:underline"
+                      >
+                        {r.bankName}
+                      </button>
                       {r.bankState && (
                         <div className="text-xs text-slate-400">{r.bankState}</div>
                       )}
@@ -862,6 +875,18 @@ export function AccountsClient({
         </table>
       </div>
 
+      {viewing && (
+        <AccountViewModal
+          account={viewing}
+          bankName={viewing.bankName}
+          bankCert={viewing.bankCert}
+          onClose={() => setViewing(null)}
+          onEdit={() => {
+            setEditing(viewing);
+            setViewing(null);
+          }}
+        />
+      )}
       {editing && (
         <AccountModal
           bankId={editing.bank_id}

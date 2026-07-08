@@ -77,8 +77,14 @@ export default async function CalendarPage() {
         href: "/accounts",
       });
 
-    // Last activity recorded
-    if (a.last_activity_date)
+    // Last activity recorded — skipped when an activity-log entry already
+    // exists on that same date, since last_activity_date is auto-derived to
+    // match the most recent log entry (buildPatch in accounts/actions.ts) and
+    // would otherwise show as a near-duplicate of that entry below.
+    const logDates = new Set(
+      Array.isArray(a.activity_log) ? a.activity_log.map((e) => e.date) : [],
+    );
+    if (a.last_activity_date && !logDates.has(a.last_activity_date))
       events.push({
         date: a.last_activity_date,
         type: "last_activity",
