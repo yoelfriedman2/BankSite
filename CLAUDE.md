@@ -219,6 +219,31 @@ and cron jobs that would all keep working unchanged. Did the code-side prep this
   purpose: the feature isn't real yet from an end user's perspective until the APK itself exists
   (see TODO.md) — add those entries once it's actually built and installed, not for this prep step.
 
+**Same-day follow-up — a real long-standing bug found via the user's own PWABuilder scan, plus a
+wrong-logo mistake caught before it shipped**: the user ran <https://www.pwabuilder.com>'s analyzer
+against the live site (still on `main`, this branch not yet merged) to sanity-check the plan. Two
+things came out of that:
+1. It confirmed the icon fix above hasn't deployed yet (expected — still on a branch), but its
+   `IconsAreFetchable` check failed on `https://banktracker.app/icon.svg` itself — a genuinely
+   broken production URL, not a manifest problem. Root cause: **`public/icon.svg` and
+   `src/app/icon.svg` both resolve to the same `/icon.svg` route** (a static public file colliding
+   with Next's app-router icon file convention) — almost certainly the exact cause of the
+   "pre-existing, unrelated `/icon.svg` 500" that several earlier session entries in this file
+   noted in passing and left alone as out of scope. Fixed for real this time: deleted
+   `public/icon.svg` and kept `src/app/icon.svg`, the one Next's own route convention serves
+   cleanly with no collision. Confirmed via a local `next start` + `curl` (not just a clean build)
+   that `/icon.svg`, `/manifest.webmanifest`, `/icon-192.png`, and `/.well-known/assetlinks.json`
+   all now return 200 with the right content-type.
+2. **The two icon.svg files were different logos** — `src/app/icon.svg` matches `Logo.tsx` (navy
+   background, three gold/white bars — the actual mark rendered everywhere in the app, including
+   the login screen); `public/icon.svg` was a stale, unused leftover from an earlier redesign
+   (indigo gradient, bank-building glyph). The PNG/maskable icons generated earlier in this same
+   session were built from the *wrong* (stale) one — regenerated from the correct `src/app/icon.svg`
+   source (maskable padding background corrected from the old logo's indigo `#4338CA` to this
+   logo's own navy `#0f172a` to match). Worth remembering: when two same-named assets exist in a
+   Next.js project, check whether they're actually identical before assuming one is just a build
+   artifact of the other.
+
 **2026-07-10 (bank-logo polish + a real status-color bug, from live feedback on the round above)** —
 The user saw the logo/total-balance/color-match work above live in production (screenshot
 confirmed logos actually rendering — the "not verified end-to-end in this sandbox" caveat from that
