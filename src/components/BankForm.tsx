@@ -22,7 +22,7 @@ import {
 } from "@/lib/types";
 import { getActivityLevel, type ActivityLevel } from "@/lib/dormancy";
 import { formatCurrency, formatDate, maskAccountNumber } from "@/lib/format";
-import { ActivityDot } from "@/components/badges";
+import { ActivityDot, STATUS_SELECT_STYLES } from "@/components/badges";
 import { BankLogo } from "@/components/BankLogo";
 import { AccountModal } from "@/components/AccountModal";
 import { CheckPrintModal } from "@/components/CheckPrintModal";
@@ -501,7 +501,7 @@ export function BankForm({
                   <select
                     value={values.status}
                     onChange={(e) => handleStatusClick(e.target.value as BankStatus)}
-                    className="flex-1 min-w-[150px] rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-sm font-medium text-violet-800 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                    className={`flex-1 min-w-[150px] rounded-lg border px-3 py-1.5 text-sm font-medium outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 ${STATUS_SELECT_STYLES[values.status]}`}
                   >
                     {ASSIGNABLE_STATUSES.map((s) => (
                       <option key={s} value={s}>{STATUS_LABELS[s]}</option>

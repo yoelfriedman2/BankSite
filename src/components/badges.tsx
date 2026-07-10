@@ -28,6 +28,20 @@ export function StatusBadge({ status }: { status: BankStatus }) {
   );
 }
 
+/** Border/background/text variant of the same status colors, for a
+ *  `<select>` or other bordered control — same color family as StatusBadge
+ *  so a bank's status reads the same color whether you're looking at the
+ *  list or editing it. */
+export const STATUS_SELECT_STYLES: Record<BankStatus, string> = {
+  untracked: "border-slate-300 bg-slate-100 text-slate-700",
+  open: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  open_add_account: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  open_add_funds: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  applied: "border-amber-200 bg-amber-50 text-amber-800",
+  want_to_open: "border-violet-200 bg-violet-50 text-violet-800",
+  cannot_open: "border-rose-200 bg-rose-50 text-rose-800",
+};
+
 const PRIORITY_STYLES: Record<Priority, string> = {
   low: "bg-slate-100 text-slate-600",
   med: "bg-amber-100 text-amber-800",

@@ -546,30 +546,33 @@ export function BanksClient({
     const refs = cert != null ? relatedByCert[cert] : undefined;
     if (!refs || refs.length === 0) return null;
     return (
-      <div className="mt-1 flex flex-wrap items-center gap-1">
-        <Link2 className="h-3 w-3 shrink-0 text-indigo-400" aria-hidden />
-        {refs.map((r) => {
-          const target = bankByCert.get(r.cert);
-          const cls =
-            "rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700 leading-tight";
-          return target ? (
-            <button
-              key={r.cert}
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                openBank(target);
-              }}
-              className={`${cls} hover:bg-indigo-100`}
-            >
-              {r.name}
-            </button>
-          ) : (
-            <span key={r.cert} className={`${cls} opacity-70`}>
-              {r.name}
-            </span>
-          );
-        })}
+      <div className="mt-1 flex items-start gap-1.5 rounded-md border border-indigo-100 bg-indigo-50/60 px-2 py-1">
+        <Link2 className="mt-0.5 h-3 w-3 shrink-0 text-indigo-400" aria-hidden />
+        <div className="flex flex-wrap items-baseline gap-x-1 gap-y-0.5 text-[11px] leading-tight">
+          {refs.map((r, i) => {
+            const target = bankByCert.get(r.cert);
+            const comma = i < refs.length - 1 ? "," : "";
+            return target ? (
+              <button
+                key={r.cert}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openBank(target);
+                }}
+                className="font-medium text-indigo-700 hover:underline"
+              >
+                {r.name}
+                {comma}
+              </button>
+            ) : (
+              <span key={r.cert} className="font-medium text-indigo-700/70">
+                {r.name}
+                {comma}
+              </span>
+            );
+          })}
+        </div>
       </div>
     );
   }
@@ -777,8 +780,8 @@ export function BanksClient({
                   <span className="mt-1 h-2.5 w-2.5 shrink-0" />
                 )}
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <BankLogo website={b.website} size={16} />
+                  <div className="flex items-center gap-1.5">
+                    <BankLogo website={b.website} size={15} />
                     <span className="truncate font-medium text-slate-900">
                       {b.name}
                     </span>
@@ -901,8 +904,8 @@ export function BanksClient({
                     className="cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400"
                   >
                     <td className="px-3 py-3">
-                      <div className="flex items-center gap-2">
-                        <BankLogo website={b.website} size={16} />
+                      <div className="flex items-center gap-1.5">
+                        <BankLogo website={b.website} size={15} />
                         <span className="font-medium text-slate-900">
                           {b.name}
                         </span>

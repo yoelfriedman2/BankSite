@@ -176,6 +176,40 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-10 (bank-logo polish + a real status-color bug, from live feedback on the round above)** —
+The user saw the logo/total-balance/color-match work above live in production (screenshot
+confirmed logos actually rendering — the "not verified end-to-end in this sandbox" caveat from that
+entry was this environment's limitation only, not a real problem) and sent three follow-ups:
+
+- **Logo spacing tightened**: `gap-2`/`size=16` → `gap-1.5`/`size=15` on both the Banks list's
+  desktop row and mobile card (`BanksClient.tsx`) — the user felt the bank name shifted noticeably
+  right once a logo was added.
+- **Related-bank chips redesigned into one grouped box**: previously each related bank was its own
+  separately-bordered pill, free-floating and wrapping onto its own line for a bank linked to
+  several others (report: "looks a little off" — confirmed via their screenshot, a 3-way holding-
+  company link stacked into 3 tall individual chips). Now one outer bordered/tinted container
+  (`border-indigo-100 bg-indigo-50/60`) holds all the names as comma-separated inline links —
+  reads as one grouped fact ("related to: X, Y, Z") instead of a pile of buttons. Same
+  `RelatedChips()` helper serves both desktop and mobile.
+- **Real bug fixed: the bank status `<select>` inside the drawer didn't color-match its own value.**
+  On the Banks list, each status (Untracked/Open/Applied/Want to open/Can't open) has its own color
+  via `StatusBadge`'s `STATUS_STYLES` — but the editable `<select>` in the bank drawer's "My status"
+  box was hardcoded to violet always, regardless of the actual status selected, so choosing "Open"
+  or "Can't open" in the editor didn't visually match the colored pill you'd see for that same bank
+  on the list. New `STATUS_SELECT_STYLES` in `badges.tsx` (border/bg/text variant of the same color
+  families, exported alongside `STATUS_STYLES`) wired into `BankForm.tsx`'s status select's
+  className, keyed off `values.status` live. This is a distinct bug from the account
+  activity-color fix earlier — that one was about accounts' dormancy dot, this one is about banks'
+  status pill — both now fixed, no third spot found with the same class of issue.
+
+Verified via `npm run build`/`tsc --noEmit` (temp `xlsx` swap, restored after) and a DEMO_MODE
+Playwright pass: the status select cycling through Untracked (slate) → Can't open (rose) → Open
+(emerald) with the correct color at each step (including with the "share as can't-open?" prompt
+open on top, confirming the select's own color state doesn't depend on that dialog), the related-
+chips box rendering as one clean container on both desktop and mobile (375px, no overflow) for a
+demo bank with two links, and no regression on the plain logo+name row. Skipped changelog/Guide —
+these are polish/bug-fix follow-ups to the same-day entries below, not new features on their own.
+
 **2026-07-10 (bank logos, drawer total balance, account color-match fix, mobile holder-totals fix)**
 — A round of small polish requests from chat, same day as the interest work above:
 
