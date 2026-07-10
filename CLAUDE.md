@@ -139,6 +139,37 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-10 (Account view/edit popups redesigned to match the new Banks look)** — Follow-up to the
+Banks drawer redesign below, same session: `AccountModal.tsx` (the add/edit popup) and
+`AccountViewModal.tsx` (the read-only popup) were the one remaining part of the app still using the
+pre-redesign flat-form look, so they got the same treatment. New shared `src/components/DetailBox.tsx`
+(`Box`/`BoxHeader`/`Frow`) holds the boxed-card building blocks — deliberately **not** shared with
+`BankForm.tsx` (which keeps its own local copies) to avoid touching the just-shipped Banks page at
+all while doing this. Sections: Account details, Balance & fees, Dates (conditional fields unchanged
+— checking/savings/money-market shows last-activity + dormancy override, CD shows maturity + interest
+rate), Notes, Online access (same checkbox-reveal mechanism as before, just boxed), Activity history
+(new `activityAdding` local-only toggle — "+ Log activity" link instead of a permanent add-row when
+there's nothing logged, mirroring the Banks reminders pattern), Balance history (read-only, only
+rendered when non-empty), Documents (unchanged `AccountDocuments` embed). Every field, handler, and
+server action is untouched — this was JSX/layout only, verified the same way as the Banks redesign.
+
+**Real pre-existing bug found and fixed along the way**: `getAccountDocuments` (`accounts/
+documents.ts`) wasn't DEMO_MODE-aware — already flagged in `TODO.md` from 2026-07-08, now confirmed
+firsthand (every account-editor save in DEMO_MODE was taking 5–15 seconds because the Documents box's
+own fetch was retrying against a fake Supabase URL before failing). Fixed with the same one-line
+`if (DEMO_MODE) return [];` guard `getAllMyDocuments` already uses — saves now complete in about a
+second in DEMO_MODE. Zero production impact (DEMO_MODE is always false there); confirmed this bug
+already existed identically in the pre-redesign `AccountModal.tsx` (same unconditional
+`<AccountDocuments>` call), so it wasn't introduced by this session.
+
+Verified in DEMO_MODE with headless Playwright at desktop and 375px mobile: view popup and edit popup
+both render real demo data correctly in every box, "+ Log activity" reveals/works, the account editor
+opened *from inside* the Banks drawer layers correctly (z-[60] over the drawer's z-50), "Add account"
+correctly omits the Documents/Balance-history boxes (no `initial.id` yet), and a full edit → Save →
+close → reopen round-trip confirmed the new balance persisted. No console errors beyond the
+pre-existing unrelated `/icon.svg` 500. `npm run build` clean (same temporary `xlsx` CDN→npm swap,
+restored after).
+
 **2026-07-10 (Banks drawer redesign — everything visible, two color-coded columns)** — The bank
 detail drawer (`BankForm.tsx`) was rebuilt from scratch after several rounds of chat-driven design
 exploration (four full mockup concepts compared side by side before picking a direction). The old

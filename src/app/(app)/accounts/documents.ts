@@ -18,6 +18,7 @@ export interface AccountDocument {
 }
 
 export async function getAccountDocuments(accountId: string): Promise<AccountDocument[]> {
+  if (DEMO_MODE) return [];
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("account_documents")

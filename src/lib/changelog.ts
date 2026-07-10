@@ -22,6 +22,14 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-07-10",
+    title: "Redesigned the account view and editor",
+    items: [
+      "Opening an account (from Accounts or from inside a bank) now shows the same clean boxed layout as the redesigned Banks page — Account details, Balance, Dates, Notes, Online access, Activity history, and Documents each in their own card instead of one long form.",
+      "Activity logging is now a \"+ Log activity\" link instead of a permanent input row when there's nothing logged yet, matching the same pattern already used for reminders on Banks.",
+    ],
+  },
+  {
+    date: "2026-07-10",
     title: "Redesigned the bank detail view",
     items: [
       "Opening a bank now shows everything at once in two clearly separated columns — \"Only you\" (your status, priority, target balance, notes, reminders, accounts) on the left, \"Shared\" (bank facts, shared notes, how to open, conversion/IPO) on the right — instead of one long stacked form.",
