@@ -536,19 +536,25 @@ export function AccountsClient({
         </button>
       </div>
 
-      {/* Totals by holder */}
+      {/* Totals by holder — a 2-column grid on mobile so several holders sit
+          side by side instead of stacking into a tall single-column pile;
+          each pill is two lines (name, then amount) so it stays legible in
+          a narrow column instead of wrapping mid-amount. Reverts to natural
+          flex-wrap sizing from sm+ where there's room to fit more per row. */}
       {byHolder.length > 0 && (
-        <div className="mb-4 flex flex-wrap gap-2">
+        <div className="mb-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           {byHolder.map(([name, v]) => (
             <div
               key={name}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+              className="min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm sm:w-auto"
             >
-              <span className="font-medium text-slate-700">{name}</span>{" "}
-              <span className="font-semibold text-slate-900">
-                {formatCurrency(v.total)}
-              </span>{" "}
-              <span className="text-slate-400">· {v.count}</span>
+              <p className="truncate font-medium text-slate-700">{name}</p>
+              <p className="truncate">
+                <span className="font-semibold text-slate-900">
+                  {formatCurrency(v.total)}
+                </span>{" "}
+                <span className="text-slate-400">· {v.count}</span>
+              </p>
             </div>
           ))}
         </div>
@@ -878,6 +884,7 @@ export function AccountsClient({
           account={viewing}
           bankName={viewing.bankName}
           bankCert={viewing.bankCert}
+          defaultDormancyMonths={defaultDormancyMonths}
           onClose={() => setViewing(null)}
           onEdit={() => {
             setEditing(viewing);

@@ -81,6 +81,7 @@ const TOPICS: Topic[] = [
       "Add a brand-new bank and it's added to everyone's list automatically.",
       "Import works the same from Banks or Accounts — a spreadsheet row can carry bank info, account info, or both.",
       "If a row's account looks like one you already have at that bank (matching on account number, holder, type, login URL, or username), you'll be asked whether to skip it, update the existing one, or add it as a separate account — nothing is duplicated silently.",
+      "A bank's logo (pulled from its website) shows next to its name on the list and at the top of its drawer, and the drawer header also totals every account you hold there.",
     ],
   },
   {

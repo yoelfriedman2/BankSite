@@ -13,6 +13,8 @@ import { getBalanceHistory, type BalancePoint } from "@/app/(app)/money/actions"
 import { AccountDocuments } from "@/components/AccountDocuments";
 import { useUnsavedChanges, confirmDiscard } from "@/components/useUnsavedChanges";
 import { Box, BoxHeader } from "@/components/DetailBox";
+import { getActivityLevel, daysUntil } from "@/lib/dormancy";
+import { ActivityDot } from "@/components/badges";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -152,6 +154,25 @@ export function AccountModal({
 
   const showActivity = DORMANCY_TYPES.includes(values.account_type);
   const showCd = values.account_type === "cd";
+  // Same green/orange/red signal shown on the Accounts list — recomputed
+  // live from the in-progress form values so it updates as you edit, not
+  // just what was last saved.
+  const liveActivityLevel = showActivity
+    ? getActivityLevel(
+        {
+          account_type: values.account_type as Account["account_type"],
+          last_activity_date: values.last_activity_date || null,
+          date_opened: values.date_opened || null,
+          dormancy_months_override: values.dormancy_months_override
+            ? Number(values.dormancy_months_override)
+            : null,
+        } as Account,
+        defaultDormancyMonths,
+      )
+    : "none";
+  const cdDays = values.cd_maturity_date ? daysUntil(values.cd_maturity_date) : null;
+  const cdColor =
+    cdDays == null ? "" : cdDays < 0 ? "text-slate-400" : cdDays <= 30 ? "text-rose-600" : cdDays <= 90 ? "text-amber-700" : "";
   const sortedLog = values.activity_log
     .map((e, i) => ({ e, i }))
     .sort((a, b) => b.e.date.localeCompare(a.e.date));
@@ -333,7 +354,10 @@ export function AccountModal({
               {showActivity && (
                 <>
                   <div>
-                    <label className={labelClass} htmlFor="last_activity_date">Last activity date</label>
+                    <label className={`${labelClass} flex items-center gap-1.5`} htmlFor="last_activity_date">
+                      Last activity date
+                      {liveActivityLevel !== "none" && <ActivityDot level={liveActivityLevel} />}
+                    </label>
                     <DateInput
                       id="last_activity_date"
                       className={inputClass}
@@ -360,7 +384,7 @@ export function AccountModal({
 
               {showCd && (
                 <div>
-                  <label className={labelClass} htmlFor="cd_maturity_date">CD maturity date</label>
+                  <label className={`${labelClass} ${cdColor}`} htmlFor="cd_maturity_date">CD maturity date</label>
                   <DateInput
                     id="cd_maturity_date"
                     className={inputClass}

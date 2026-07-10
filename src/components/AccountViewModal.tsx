@@ -5,6 +5,8 @@ import { Pencil, X, ArrowUpRight } from "lucide-react";
 import { ACCOUNT_TYPE_LABELS, type Account } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { Box, BoxHeader, Frow } from "@/components/DetailBox";
+import { getActivityLevel, daysUntil } from "@/lib/dormancy";
+import { ActivityDot } from "@/components/badges";
 
 /** Read-only "look but don't touch" view of an account — for family members who
  *  just want to check a balance/account number without risking an accidental
@@ -13,15 +15,21 @@ export function AccountViewModal({
   account,
   bankName,
   bankCert,
+  defaultDormancyMonths,
   onClose,
   onEdit,
 }: {
   account: Account;
   bankName: string;
   bankCert: number | null;
+  defaultDormancyMonths: number;
   onClose: () => void;
   onEdit: () => void;
 }) {
+  const activityLevel = getActivityLevel(account, defaultDormancyMonths);
+  const cdDays = account.cd_maturity_date ? daysUntil(account.cd_maturity_date) : null;
+  const cdColor =
+    cdDays == null ? "" : cdDays < 0 ? "text-slate-400" : cdDays <= 30 ? "text-rose-600" : cdDays <= 90 ? "text-amber-700" : "";
   return (
     <div
       className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4"
@@ -84,9 +92,26 @@ export function AccountViewModal({
             <BoxHeader title="Dates" />
             <Frow label="Date opened" value={formatDate(account.date_opened)} />
             {account.account_type === "cd" ? (
-              <Frow label="CD maturity" value={formatDate(account.cd_maturity_date)} />
+              <Frow
+                label="CD maturity"
+                value={
+                  account.cd_maturity_date ? (
+                    <span className={cdColor}>{formatDate(account.cd_maturity_date)}</span>
+                  ) : null
+                }
+              />
             ) : (
-              <Frow label="Last activity" value={formatDate(account.last_activity_date)} />
+              <Frow
+                label="Last activity"
+                value={
+                  account.last_activity_date ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      {activityLevel !== "none" && <ActivityDot level={activityLevel} />}
+                      {formatDate(account.last_activity_date)}
+                    </span>
+                  ) : null
+                }
+              />
             )}
           </Box>
 

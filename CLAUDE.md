@@ -176,6 +176,62 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-10 (bank logos, drawer total balance, account color-match fix, mobile holder-totals fix)**
+— A round of small polish requests from chat, same day as the interest work above:
+
+- **Bank logos**: new `lib/bankLogo.ts` (`bankFaviconUrl`) derives a favicon URL from a bank's
+  stored `website` field via Google's free, keyless `s2/favicons` endpoint — no API key or account,
+  per explicit preference to avoid setting up another service (logo.dev, the sharper alternative,
+  needs a free-tier API token). New `<BankLogo>` component (`components/BankLogo.tsx`) renders
+  nothing — no placeholder, no broken-image icon — when a bank has no website on file or the
+  favicon 404s (`onError` → hide), since this is decorative only. Wired into `BanksClient.tsx`
+  (desktop table row + mobile card, next to the bank name) and `BankForm.tsx`'s drawer header (next
+  to the bank name, `size={20}`). **Not verified end-to-end in this sandbox** — this environment's
+  own outbound network policy blocks arbitrary hosts including `google.com` (confirmed via a direct
+  curl 403 during an earlier, unrelated favicon-demo request in this same session), so a live demo
+  bank pointed at a real domain rendered no logo here — but the graceful-hide path was confirmed
+  working (no broken-image icon), and the identical favicon-URL approach was already confirmed
+  visually correct by the user in their own browser earlier this session. Low risk if the favicon
+  service ever changes shape — worst case is silently no logos, never a broken page.
+- **Bank drawer shows total balance**: `BankForm.tsx`'s header now sums `accounts` and shows
+  "$X total balance" alongside the existing city/state/assets/last-activity stats — same
+  never-shown-if-no-accounts precedent as the existing "Last activity" stat.
+- **Real bug fixed: account status colors didn't carry into the account popups.** The
+  green/orange/red activity dot and the CD-maturity urgency color were only ever shown on the
+  Accounts list row — opening an account (view or edit) showed the same date as plain text with no
+  color, which read as inconsistent. Fixed in both `AccountViewModal.tsx` (new required
+  `defaultDormancyMonths` prop, now threaded from `AccountsClient.tsx`) and `AccountModal.tsx`
+  (recomputed live from the in-progress form values via `getActivityLevel`/`daysUntil` from
+  `lib/dormancy.ts`, not just the last-saved value, so it updates as you edit dates before saving) —
+  both now show the same `ActivityDot` next to "Last activity" and the same rose/amber color on CD
+  maturity dates, matching the list exactly.
+- **Real bug fixed: mobile Accounts page holder-totals pile-up.** With several distinct account
+  holders, each "Totals by holder" pill was wide enough (name + full currency amount + count) that
+  `flex-wrap` alone put one per row on a 375px screen — technically correct wrapping, but it read as
+  a tall stack rather than a compact summary. Switched to `grid grid-cols-2 gap-2 sm:flex sm:flex-wrap`
+  (2-per-row on mobile regardless of content width, natural flex sizing back from `sm:`) and made
+  each pill two lines (name, then amount below) instead of one long line, so a pill stays legible in
+  a narrow half-width column instead of wrapping mid-amount. Reproduced and confirmed fixed with 5
+  synthetic long-named holders in DEMO_MODE (the real seed data only has 3, which happened not to
+  trigger the bug — a good reminder to test with more data than the default seed when a report
+  depends on *count*, not just presence).
+- **Investigated but not reproduced: "dashboard total accounts open" undercounting banks with
+  `open_add_account`/`open_add_funds` status.** Both the dashboard's "Open banks" tile
+  (`app/(app)/page.tsx`) and the Banks page's own header tally already OR all three open-family
+  statuses together — confirmed by reading the code *and* by a live DEMO_MODE test that flipped an
+  untracked bank to `open_add_funds` and watched the dashboard tile go 4 → 5 correctly. That exact
+  fix has been in `main` since **2026-07-05** (commit `8dfc4aa`), well before this session, so it's
+  very likely already live in production. Told the user this rather than guessing at a fix for a bug
+  that doesn't reproduce — asked them to hard-refresh and re-check, and to point to the specific
+  number/page if it's still wrong, since it isn't this one.
+
+Verified via `npm run build` (temp `xlsx` swap, restored after) and a DEMO_MODE Playwright pass
+covering: logo `<img>` present with correct `src` derived from a temporarily-patched demo bank's
+website (graceful-hide path confirmed, live-load path not — see above), drawer header total balance
+matching a bank's real account sum, the view/edit popups' color dots matching list colors for both a
+dormancy case (red) and a CD-maturity case (red), and no mobile overflow (375px) on dashboard,
+Banks, Accounts, the bank drawer, or either account popup.
+
 **2026-07-10 (automatic monthly interest, widened to every account type)** — Interest tracking was
 CD-only (a rate field only appeared on CD accounts), which is almost certainly why a chat report of
 "I entered an interest rate and don't see it on the Fees & interest page" turned out not to be a

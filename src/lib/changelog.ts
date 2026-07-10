@@ -22,6 +22,21 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-07-10",
+    title: "Bank logos",
+    items: [
+      "A small logo now shows next to a bank's name on the Banks list and at the top of its drawer, pulled automatically from the bank's own website — nothing to upload or configure.",
+      "A bank with no website on file, or whose site has no icon to pull, just shows no logo rather than a broken image.",
+    ],
+  },
+  {
+    date: "2026-07-10",
+    title: "See a bank's total balance at a glance",
+    items: [
+      "Opening a bank now shows the combined balance of every account you hold there, right at the top next to the bank's other stats.",
+    ],
+  },
+  {
+    date: "2026-07-10",
     title: "Automatic monthly interest",
     items: [
       "Interest rate (APY) can now be set on any account — checking, savings, and money market, not just CDs.",

@@ -23,6 +23,7 @@ import {
 import { getActivityLevel, type ActivityLevel } from "@/lib/dormancy";
 import { formatCurrency, formatDate, maskAccountNumber } from "@/lib/format";
 import { ActivityDot } from "@/components/badges";
+import { BankLogo } from "@/components/BankLogo";
 import { AccountModal } from "@/components/AccountModal";
 import { CheckPrintModal } from "@/components/CheckPrintModal";
 import { DateInput } from "@/components/DateInput";
@@ -435,6 +436,7 @@ export function BankForm({
     },
     null,
   );
+  const totalBalance = accounts.reduce((s, a) => s + (a.balance ?? 0), 0);
 
   return (
     <div
@@ -448,8 +450,9 @@ export function BankForm({
       >
         <header className="flex items-start justify-between gap-3 border-b border-slate-200 px-6 py-4">
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-lg font-semibold text-slate-900">
-              {initial ? initial.name : "Add bank"}
+            <h2 className="flex items-center gap-2 truncate text-lg font-semibold text-slate-900">
+              {initial && <BankLogo website={initial.website} size={20} />}
+              <span className="truncate">{initial ? initial.name : "Add bank"}</span>
             </h2>
             {initial && (
               <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-slate-400">
@@ -459,6 +462,9 @@ export function BankForm({
                 {initial.cert != null && <span>· FDIC #{initial.cert}</span>}
                 {initial.assets != null && (
                   <span>· ${(initial.assets / 1000).toFixed(0)}M assets</span>
+                )}
+                {accounts.length > 0 && (
+                  <span>· {formatCurrency(totalBalance)} total balance</span>
                 )}
                 {bestActivity && (
                   <span className="inline-flex items-center gap-1">

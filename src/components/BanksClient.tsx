@@ -42,6 +42,7 @@ import {
   StatusBadge,
 } from "@/components/badges";
 import { BankForm } from "@/components/BankForm";
+import { BankLogo } from "@/components/BankLogo";
 import { ImportDialog } from "@/components/ImportDialog";
 import { exportToExcel, exportCommentsToExcel } from "@/lib/export";
 import { setBankStatus, deleteBank, getAllBankComments, type RelatedRef } from "@/app/(app)/banks/actions";
@@ -777,6 +778,7 @@ export function BanksClient({
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
+                    <BankLogo website={b.website} size={16} />
                     <span className="truncate font-medium text-slate-900">
                       {b.name}
                     </span>
@@ -900,6 +902,7 @@ export function BanksClient({
                   >
                     <td className="px-3 py-3">
                       <div className="flex items-center gap-2">
+                        <BankLogo website={b.website} size={16} />
                         <span className="font-medium text-slate-900">
                           {b.name}
                         </span>
