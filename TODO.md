@@ -2,6 +2,21 @@
 
 Running list of things to review and decide. (Feature ideas live in IDEAS.md — this is for open work items.)
 
+## Pending review
+
+- **Full site redesign, on branch `claude/full-site-redesign`, NOT merged to main** (2026-07-10) —
+  per explicit request, every page in the app got the same boxed-card visual treatment already
+  shipped on the Banks drawer/Account popups: new shared `src/components/ui/Card.tsx`
+  (`Card`/`CardHeader`/`CardLink`/`EmptyState`/`StatTile`/`PageHeader`), applied everywhere in place
+  of one-off header/card markup, plus a refreshed SideNav/TopNav active-state accent and avatar
+  chip. Visual/CSS/JSX only — zero server actions, schema, or data logic touched; every page still
+  calls the exact same actions/hooks as before. Verified via `npm run build` (clean) and a headless
+  Playwright pass across all 19 in-app routes in DEMO_MODE at 1280px and 375px (zero new console
+  errors beyond the pre-existing unrelated `/icon.svg` 500, zero horizontal overflow anywhere).
+  **Do not merge to main until the user has reviewed it live and explicitly approves** — this was
+  deliberately built and pushed to its own branch only, per instruction, so it can be looked over
+  page-by-page first.
+
 ## One-time setup pending
 
 - **Run migration `0037_road_trips_approved_only.sql`** — small security follow-up to 0036:
