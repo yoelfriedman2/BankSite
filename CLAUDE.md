@@ -139,6 +139,56 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-10 (Banks drawer redesign — everything visible, two color-coded columns)** — The bank
+detail drawer (`BankForm.tsx`) was rebuilt from scratch after several rounds of chat-driven design
+exploration (four full mockup concepts compared side by side before picking a direction). The old
+layout was one long form with seven always-open, always-editable sections stacked vertically. The
+new layout:
+
+- **Two columns, tinted by ownership**: left is **"Only you"** (amber wash) — My status
+  (status dropdown + priority pills + target balance, all in one row), My notes, Reminders, My
+  accounts. Right is **"Shared"** (emerald wash) — Bank facts, Shared notes (renamed from
+  "Community notes"), How to open, Conversion / IPO — in that order, per explicit feedback that
+  bank facts and shared notes should be near the top and IPO details at the bottom. On mobile the
+  columns stack, "Only you" first.
+- **Pencil-to-edit per shared box**: Bank facts / How to open / Conversion-IPO each render as
+  read-only fact rows by default, with a small pencil that swaps in the existing input fields
+  (same fields, same state, same `values` object as before) — this is the same expand/collapse
+  pattern the old "Bank info" section already used (`infoExpanded`), now extended to the other two
+  sections too (`openInfoExpanded`, `ipoExpanded`, new `useState` toggles — presentation only, no
+  new data flow). **There is still only one real save path**: every box's fields belong to the same
+  `values` state submitted by the one footer "Save bank" button, exactly as before — the pencils
+  only toggle a local view/edit UI state, they don't add new server actions or partial-save
+  semantics. Reminders, community/shared notes, related-bank links, and accounts keep their own
+  pre-existing independent server actions, unchanged.
+- **Notes and reminders collapse to one line when empty**: no note yet → a small "🔒 Private note"
+  link right in the section header (no reserved empty box); no reminders → "+ Add reminder" in the
+  header. This was explicitly requested so "My accounts" appears immediately after the status row
+  for a bank with nothing else recorded yet, instead of scrolling past empty sections.
+- **Target balance kept** (never actually removed from the schema/`BankFormValues` — only from
+  intermediate mockups) — now shown as a small inline input right next to the priority pills in the
+  "My status" box, per explicit feedback.
+- **A truthful, derived header stat**: "Last activity" + a colored dot next to the bank name, computed
+  from whichever of the bank's own accounts has the most recent `last_activity_date`, using the same
+  `getActivityLevel()` every account row already uses — omitted entirely if there are no accounts.
+  Nothing new was invented here; it's the same per-account dormancy signal, just surfaced once at
+  the bank level.
+- **Status is a real `<select>` dropdown again** (was a row of pill buttons) per explicit request —
+  same `ASSIGNABLE_STATUSES`/`STATUS_LABELS`, same `handleStatusClick` (still triggers the
+  "share as can't-open?" prompt). Priority became three compact pill buttons instead of a `<select>`.
+- Verified end-to-end in DEMO_MODE with a headless Playwright pass (this environment has no visual
+  preview tool) at both desktop and 375px mobile widths, against both an empty bank and a fully
+  populated one (accounts, notes, reminders, shared notes, verified holding company, related banks):
+  confirmed no mobile overflow, confirmed every pencil expands/collapses correctly with real data,
+  confirmed Save → drawer closes → reopen shows the persisted values (target balance and priority
+  round-tripped correctly through `upsertBank`), and confirmed zero new console errors (the only
+  console error seen — a `/icon.svg` 500 — is a pre-existing, unrelated Next.js public-file/page-file
+  naming conflict, not something this change introduced). `npm run build` also passes clean (temp
+  `xlsx` CDN→npm-registry swap for the sandbox install, `package.json`/`package-lock.json` restored
+  to their committed state immediately after both the build check and the dev-server check).
+  **Purely a view/UI change** — no migration, no new columns, no changed server actions; every
+  field save through the exact same `upsertBank`/`addReminder`/`addBankComment`/etc. calls as before.
+
 **2026-07-08 (calendar duplicate-entry fix; read-only account view)** — Two requests from chat,
 shipped together:
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition, type FormEvent } from "react";
-import { X, Loader2, Plus, Copy, Pencil, Printer, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { X, Loader2, Plus, Copy, Pencil, Printer, Trash2, Lock, Users } from "lucide-react";
 import {
   ASSIGNABLE_STATUSES,
   PRIORITY_LABELS,
@@ -15,11 +15,12 @@ import {
   type Bank,
   type BankComment,
   type BankStatus,
+  type Priority,
   type OpenMethod,
   type ConversionStage,
   type Reminder,
 } from "@/lib/types";
-import { getActivityLevel } from "@/lib/dormancy";
+import { getActivityLevel, type ActivityLevel } from "@/lib/dormancy";
 import { formatCurrency, formatDate, maskAccountNumber } from "@/lib/format";
 import { ActivityDot } from "@/components/badges";
 import { AccountModal } from "@/components/AccountModal";
@@ -54,39 +55,64 @@ const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
 const labelClass = "mb-1 block text-xs font-medium text-slate-500 uppercase tracking-wide";
 
-function SectionHeader({
-  title,
-  shared,
+/** A compact read-only label/value row, used in every shared "facts" box. */
+function Frow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 border-b border-slate-100 py-1.5 last:border-b-0">
+      <span className="shrink-0 text-xs text-slate-500">{label}</span>
+      <span className="text-right text-sm font-medium text-slate-800">
+        {value ?? <span className="font-normal text-slate-300">—</span>}
+      </span>
+    </div>
+  );
+}
+
+/** A small card wrapper shared by every box in both the "Only you" and
+ *  "Shared" columns — this is the sole visual unit of the redesigned drawer. */
+function Box({
+  tone,
+  children,
 }: {
-  title: string;
-  shared: boolean;
+  tone: "you" | "shared";
+  children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between mb-3">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">{title}</h3>
-      <span
-        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-          shared
-            ? "bg-emerald-50 text-emerald-700"
-            : "bg-slate-100 text-slate-500"
-        }`}
-      >
-        {shared ? (
-          <>
-            <svg className="h-2.5 w-2.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-              <path d="M8 1a2 2 0 1 1 0 4 2 2 0 0 1 0-4zM3 10a5 5 0 1 1 10 0H3z" />
-            </svg>
-            Shared
-          </>
-        ) : (
-          <>
-            <svg className="h-2.5 w-2.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-              <path d="M8 1a3 3 0 0 1 3 3v1h1a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1V4a3 3 0 0 1 3-3zm0 1.5A1.5 1.5 0 0 0 6.5 4v1h3V4A1.5 1.5 0 0 0 8 2.5zM7 10a1 1 0 1 0 2 0 1 1 0 0 0-2 0z" />
-            </svg>
-            Only you
-          </>
-        )}
-      </span>
+    <div
+      className={`mb-2.5 rounded-xl border bg-white p-3 shadow-sm last:mb-0 ${
+        tone === "you" ? "border-amber-100" : "border-emerald-100"
+      }`}
+    >
+      {children}
+    </div>
+  );
+}
+
+function BoxHeader({
+  title,
+  onEdit,
+  editLabel,
+}: {
+  title: string;
+  onEdit?: () => void;
+  editLabel?: string;
+}) {
+  return (
+    <div className="mb-2 flex items-center gap-2">
+      <h4 className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{title}</h4>
+      <span className="flex-1" />
+      {onEdit && (
+        <button
+          type="button"
+          onClick={onEdit}
+          className="flex items-center gap-1 rounded-md p-1 text-slate-400 hover:bg-amber-50 hover:text-amber-700"
+        >
+          {editLabel ? (
+            <span className="text-xs font-semibold">{editLabel}</span>
+          ) : (
+            <Pencil className="h-3.5 w-3.5" />
+          )}
+        </button>
+      )}
     </div>
   );
 }
@@ -164,8 +190,15 @@ export function BankForm({
   const [relResults, setRelResults] = useState<Awaited<ReturnType<typeof searchBanksForRelationship>>>([]);
   const [relBusy, setRelBusy] = useState(false);
 
-  // Bank info expand/collapse
-  const [infoExpanded, setInfoExpanded] = useState(false);
+  // Per-box expand/collapse (view vs. edit-fields) — presentation only, every
+  // field below still belongs to the one `values` object saved by the single
+  // "Save bank" button, exactly as before. A brand-new bank starts with the
+  // shared boxes already open since there's nothing yet to summarize.
+  const [infoExpanded, setInfoExpanded] = useState(initial === null);
+  const [openInfoExpanded, setOpenInfoExpanded] = useState(initial === null);
+  const [ipoExpanded, setIpoExpanded] = useState(false);
+  const [notesExpanded, setNotesExpanded] = useState(false);
+  const [remindersAdding, setRemindersAdding] = useState(false);
 
   // "Can't open" share prompt
   const [cannotOpenPrompt, setCannotOpenPrompt] = useState(false);
@@ -188,9 +221,6 @@ export function BankForm({
   const [reminderBusy, setReminderBusy] = useState(false);
   const [reminderError, setReminderError] = useState<string | null>(null);
 
-  function refreshReminders() {
-    if (initial?.id) getReminders(initial.id).then(setReminders).catch(() => {});
-  }
   function handleAddReminder() {
     if (!initial?.id || !reminderNote.trim() || !reminderDate) return;
     const bankId = initial.id;
@@ -394,6 +424,18 @@ export function BankForm({
 
   const alreadyLinkedCerts = new Set(relatedBanks.map((r) => r.cert));
 
+  // A truthful, derived "how active is this bank overall" signal for the header —
+  // the account with the most recent last_activity_date, using the same level
+  // logic each account row already uses. Never shown if there are no accounts.
+  const bestActivity = accounts.reduce<{ level: ActivityLevel; date: string } | null>(
+    (best, a) => {
+      if (!a.last_activity_date) return best;
+      if (best && a.last_activity_date <= best.date) return best;
+      return { level: getActivityLevel(a, defaultDormancyMonths), date: a.last_activity_date };
+    },
+    null,
+  );
+
   return (
     <div
       className="fixed inset-0 z-50 flex justify-end bg-slate-900/40"
@@ -402,12 +444,30 @@ export function BankForm({
       <form
         onSubmit={handleSubmit}
         onMouseDown={(e) => e.stopPropagation()}
-        className="flex h-full w-full max-w-2xl flex-col bg-white shadow-2xl"
+        className="flex h-full w-full max-w-3xl flex-col bg-white shadow-2xl"
       >
-        <header className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-          <h2 className="text-lg font-semibold text-slate-900">
-            {initial ? initial.name : "Add bank"}
-          </h2>
+        <header className="flex items-start justify-between gap-3 border-b border-slate-200 px-6 py-4">
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-lg font-semibold text-slate-900">
+              {initial ? initial.name : "Add bank"}
+            </h2>
+            {initial && (
+              <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-slate-400">
+                {(initial.city || initial.state) && (
+                  <span>{[initial.city, initial.state].filter(Boolean).join(", ")}</span>
+                )}
+                {initial.cert != null && <span>· FDIC #{initial.cert}</span>}
+                {initial.assets != null && (
+                  <span>· ${(initial.assets / 1000).toFixed(0)}M assets</span>
+                )}
+                {bestActivity && (
+                  <span className="inline-flex items-center gap-1">
+                    · <ActivityDot level={bestActivity.level} /> Last activity {formatDate(bestActivity.date)}
+                  </span>
+                )}
+              </p>
+            )}
+          </div>
           <button
             type="button"
             onClick={attemptClose}
@@ -417,71 +477,109 @@ export function BankForm({
           </button>
         </header>
 
-        <div className="flex-1 space-y-0 overflow-y-auto divide-y divide-slate-100">
+        <div className="flex-1 overflow-y-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2">
 
-          {/* ── My status (private) ── */}
-          <section className="px-6 py-5">
-            <SectionHeader title="My status" shared={false} />
-            <div className="flex flex-wrap gap-2 mb-4">
-              {ASSIGNABLE_STATUSES.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => handleStatusClick(s)}
-                  className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-                    values.status === s
-                      ? "border-amber-500 bg-amber-500 text-white"
-                      : "border-slate-300 text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  {STATUS_LABELS[s]}
-                </button>
-              ))}
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={labelClass} htmlFor="priority">Priority</label>
-                <select
-                  id="priority"
-                  className={inputClass}
-                  value={values.priority}
-                  onChange={(e) => set("priority", e.target.value)}
-                >
-                  <option value="">—</option>
-                  {(Object.keys(PRIORITY_LABELS) as Array<keyof typeof PRIORITY_LABELS>).map((p) => (
-                    <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>
-                  ))}
-                </select>
+            {/* ══════════════ LEFT — Only you ══════════════ */}
+            <div className="border-b border-slate-200 bg-amber-50/50 p-4 sm:border-b-0 sm:border-r sm:border-slate-200">
+              <div className="mb-3 flex items-center gap-2 px-0.5">
+                <Lock className="h-3.5 w-3.5 text-amber-700" />
+                <span className="text-xs font-bold uppercase tracking-wide text-amber-800">Only you</span>
+                <span className="ml-auto text-[11px] text-slate-400">private to your login</span>
               </div>
-              <div>
-                <label className={labelClass} htmlFor="target_balance">Target balance ($)</label>
-                <input
-                  id="target_balance"
-                  type="number"
-                  className={inputClass}
-                  placeholder="amount to keep"
-                  value={values.target_balance}
-                  onChange={(e) => set("target_balance", e.target.value)}
+
+              {/* My status: dropdown + priority pills + target amount, one row */}
+              <Box tone="you">
+                <BoxHeader title="My status" />
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={values.status}
+                    onChange={(e) => handleStatusClick(e.target.value as BankStatus)}
+                    className="flex-1 min-w-[150px] rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-sm font-medium text-violet-800 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                  >
+                    {ASSIGNABLE_STATUSES.map((s) => (
+                      <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                    ))}
+                  </select>
+                  <div className="inline-flex overflow-hidden rounded-lg border border-slate-200">
+                    {(Object.keys(PRIORITY_LABELS) as Priority[]).map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => set("priority", values.priority === p ? "" : p)}
+                        aria-pressed={values.priority === p}
+                        className={`border-r border-slate-200 px-2.5 py-1.5 text-xs font-semibold last:border-r-0 ${
+                          values.priority === p
+                            ? "bg-rose-50 text-rose-700"
+                            : "bg-white text-slate-500 hover:bg-slate-50"
+                        }`}
+                      >
+                        {PRIORITY_LABELS[p]}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="number"
+                    value={values.target_balance}
+                    onChange={(e) => set("target_balance", e.target.value)}
+                    placeholder="Target $"
+                    className="w-24 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                  />
+                </div>
+              </Box>
+
+              {/* My notes — compact when there's nothing, or when collapsed */}
+              <Box tone="you">
+                <BoxHeader
+                  title="My notes"
+                  onEdit={values.notes.trim() ? () => setNotesExpanded((v) => !v) : undefined}
                 />
-              </div>
-            </div>
-            <div className="mt-4">
-              <label className={labelClass} htmlFor="notes">My notes (private)</label>
-              <textarea
-                id="notes"
-                rows={2}
-                className={inputClass}
-                value={values.notes}
-                onChange={(e) => set("notes", e.target.value)}
-              />
-            </div>
+                {!notesExpanded ? (
+                  values.notes.trim() ? (
+                    <p className="whitespace-pre-wrap rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                      {values.notes}
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setNotesExpanded(true)}
+                      className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 hover:underline"
+                    >
+                      <Lock className="h-3 w-3" />
+                      Private note
+                    </button>
+                  )
+                ) : (
+                  <>
+                    <textarea
+                      rows={3}
+                      autoFocus
+                      className={inputClass}
+                      value={values.notes}
+                      onChange={(e) => set("notes", e.target.value)}
+                    />
+                    <div className="mt-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setNotesExpanded(false)}
+                        className="rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </>
+                )}
+              </Box>
 
-            {/* Private reminders — emailed to you on the due date */}
-            {initial?.id && (
-              <div className="mt-4">
-                <label className={labelClass}>Reminders (private)</label>
+              {/* Reminders — one line ("+ Add reminder") when there are none */}
+              <Box tone="you">
+                <BoxHeader
+                  title="Reminders"
+                  onEdit={initial?.id ? () => setRemindersAdding((v) => !v) : undefined}
+                  editLabel={initial?.id ? "+ Add" : undefined}
+                />
                 {reminders.length > 0 && (
-                  <ul className="mb-2 space-y-1">
+                  <ul className="space-y-1.5">
                     {reminders.map((r) => {
                       const done = !!r.done_at;
                       const overdue = !done && r.due_date < today;
@@ -496,14 +594,10 @@ export function BankForm({
                             onChange={() => handleToggleReminder(r)}
                             className="h-4 w-4 shrink-0 rounded border-slate-300 accent-amber-600"
                           />
-                          <span
-                            className={`min-w-0 flex-1 truncate ${done ? "text-slate-400 line-through" : "text-slate-700"}`}
-                          >
+                          <span className={`min-w-0 flex-1 truncate ${done ? "text-slate-400 line-through" : "text-slate-700"}`}>
                             {r.note}
                           </span>
-                          <span
-                            className={`shrink-0 text-xs ${overdue ? "font-medium text-rose-600" : "text-slate-400"}`}
-                          >
+                          <span className={`shrink-0 text-xs ${overdue ? "font-medium text-rose-600" : "text-slate-400"}`}>
                             {formatDate(r.due_date)}
                           </span>
                           <button
@@ -519,516 +613,570 @@ export function BankForm({
                     })}
                   </ul>
                 )}
-                <div className="flex items-center gap-2">
-                  <input
-                    className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-                    placeholder="Remind me to…"
-                    value={reminderNote}
-                    onChange={(e) => setReminderNote(e.target.value)}
-                  />
-                  <div className="w-40 shrink-0">
-                    <DateInput
-                      value={reminderDate}
-                      onChange={setReminderDate}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-                    />
+                {reminders.length === 0 && !remindersAdding && (
+                  <p className="text-xs text-slate-400">No reminders set for this bank.</p>
+                )}
+                {initial?.id && remindersAdding && (
+                  <div className={reminders.length > 0 ? "mt-2" : ""}>
+                    <div className="flex items-center gap-2">
+                      <input
+                        className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                        placeholder="Remind me to…"
+                        value={reminderNote}
+                        onChange={(e) => setReminderNote(e.target.value)}
+                      />
+                      <div className="w-36 shrink-0">
+                        <DateInput
+                          value={reminderDate}
+                          onChange={setReminderDate}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAddReminder}
+                        disabled={reminderBusy || !reminderNote.trim() || !reminderDate}
+                        className="shrink-0 rounded-lg bg-amber-500 px-3 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50"
+                      >
+                        Add
+                      </button>
+                    </div>
+                    {reminderError && (
+                      <p className="mt-1 text-xs text-rose-600">{reminderError}</p>
+                    )}
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      We&apos;ll email you on the date. Only you can see these.
+                    </p>
                   </div>
+                )}
+              </Box>
+
+              {/* My accounts — appears right after, with nothing hogging space above it */}
+              <Box tone="you">
+                <BoxHeader title={`My accounts (${accounts.length})`} />
+                {!initial ? (
+                  <p className="rounded-lg bg-slate-50 px-3 py-2.5 text-xs text-slate-500">
+                    Save the bank first, then reopen it to add accounts.
+                  </p>
+                ) : accounts.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400">
+                    No accounts yet.
+                  </p>
+                ) : (
+                  <ul className="mb-2.5 space-y-1.5">
+                    {accounts.map((a) => {
+                      const level = getActivityLevel(a, defaultDormancyMonths);
+                      return (
+                        <li
+                          key={a.id}
+                          className="flex items-center gap-2.5 rounded-lg border border-slate-200 px-2.5 py-2"
+                        >
+                          {level !== "none" ? (
+                            <ActivityDot level={level} />
+                          ) : (
+                            <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-slate-200" />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 text-sm font-medium text-slate-800">
+                              {a.holder || "—"}
+                              {a.account_type && (
+                                <span className="font-normal text-slate-400">
+                                  · {ACCOUNT_TYPE_LABELS[a.account_type]}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-400">
+                              {a.account_number ? maskAccountNumber(a.account_number) : "no account #"}
+                              {a.balance != null ? ` · ${formatCurrency(a.balance)}` : ""}
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-0.5">
+                            <button type="button" onClick={() => setAcctModal({ account: a })}
+                              className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Edit">
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button type="button" onClick={() => setPrintCheck(a)}
+                              className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Print check">
+                              <Printer className="h-3.5 w-3.5" />
+                            </button>
+                            <button type="button" onClick={() => handleDuplicate(a)} disabled={busyAcctId === a.id}
+                              className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50" title="Duplicate">
+                              <Copy className="h-3.5 w-3.5" />
+                            </button>
+                            <button type="button" onClick={() => handleDeleteAccount(a)} disabled={busyAcctId === a.id}
+                              className="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50" title="Delete">
+                              {busyAcctId === a.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                {initial && (
                   <button
                     type="button"
-                    onClick={handleAddReminder}
-                    disabled={reminderBusy || !reminderNote.trim() || !reminderDate}
-                    className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                    onClick={() => setAcctModal({ account: null })}
+                    className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100"
                   >
-                    Add
+                    <Plus className="h-3.5 w-3.5" />
+                    Add account
                   </button>
-                </div>
-                {reminderError && (
-                  <p className="mt-1 text-xs text-rose-600">{reminderError}</p>
                 )}
-                <p className="mt-1 text-xs text-slate-400">
-                  We&apos;ll email you on the date. Only you can see these.
-                </p>
-              </div>
-            )}
-          </section>
+              </Box>
+            </div>
 
-          {/* ── Accounts (private) ── */}
-          <section className="px-6 py-5">
-            <SectionHeader title={`Accounts (${accounts.length})`} shared={false} />
-            {!initial ? (
-              <p className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                Save the bank first, then reopen it to add accounts.
-              </p>
-            ) : accounts.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-400">
-                No accounts yet.
-              </p>
-            ) : (
-              <ul className="space-y-2 mb-3">
-                {accounts.map((a) => {
-                  const level = getActivityLevel(a, defaultDormancyMonths);
-                  return (
-                    <li
-                      key={a.id}
-                      className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5"
-                    >
-                      {level !== "none" ? (
-                        <ActivityDot level={level} />
-                      ) : (
-                        <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-slate-200" />
+            {/* ══════════════ RIGHT — Shared ══════════════ */}
+            <div className="bg-emerald-50/50 p-4">
+              <div className="mb-3 flex items-center gap-2 px-0.5">
+                <Users className="h-3.5 w-3.5 text-emerald-700" />
+                <span className="text-xs font-bold uppercase tracking-wide text-emerald-800">Shared</span>
+                <span className="ml-auto text-[11px] text-slate-400">everyone sees &amp; edits this</span>
+              </div>
+
+              {/* Shared-field update notice — only shown when we have the detail
+                  of what actually changed (older/empty stamps are suppressed). */}
+              {initial?.shared_updated_by &&
+                initial.shared_updated_by !== currentUserId &&
+                initial.shared_updated_by_name &&
+                initial.shared_updated_summary && (
+                  <div className="mb-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+                    <p className="text-xs text-amber-800">
+                      <span className="font-semibold">{initial.shared_updated_by_name}</span>
+                      {" updated shared bank info"}
+                      {initial.shared_fields_updated_at && (
+                        <> on {formatDate(initial.shared_fields_updated_at.slice(0, 10))}</>
                       )}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 text-sm font-medium text-slate-800">
-                          {a.holder || "—"}
-                          {a.account_type && (
-                            <span className="font-normal text-slate-400">
-                              · {ACCOUNT_TYPE_LABELS[a.account_type]}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-slate-400">
-                          {a.account_number ? maskAccountNumber(a.account_number) : "no account #"}
-                          {a.balance != null ? ` · ${formatCurrency(a.balance)}` : ""}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-0.5">
-                        <button type="button" onClick={() => setAcctModal({ account: a })}
-                          className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Edit">
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                        <button type="button" onClick={() => setPrintCheck(a)}
-                          className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Print check">
-                          <Printer className="h-4 w-4" />
-                        </button>
-                        <button type="button" onClick={() => handleDuplicate(a)} disabled={busyAcctId === a.id}
-                          className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50" title="Duplicate">
-                          <Copy className="h-4 w-4" />
-                        </button>
-                        <button type="button" onClick={() => handleDeleteAccount(a)} disabled={busyAcctId === a.id}
-                          className="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50" title="Delete">
-                          {busyAcctId === a.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                        </button>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-            {initial && (
-              <button
-                type="button"
-                onClick={() => setAcctModal({ account: null })}
-                className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-700 hover:bg-amber-100"
-              >
-                <Plus className="h-4 w-4" />
-                Add account
-              </button>
-            )}
-          </section>
-
-          {/* ── Shared-field update notice ── only shown when we have the detail
-              of what actually changed (older/empty stamps are suppressed). ── */}
-          {initial?.shared_updated_by &&
-            initial.shared_updated_by !== currentUserId &&
-            initial.shared_updated_by_name &&
-            initial.shared_updated_summary && (
-              <div className="mx-6 mt-0 mb-0 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                <p className="text-xs text-amber-800">
-                  <span className="font-semibold">{initial.shared_updated_by_name}</span>
-                  {" updated shared bank info"}
-                  {initial.shared_fields_updated_at && (
-                    <> on {formatDate(initial.shared_fields_updated_at.slice(0, 10))}</>
-                  )}
-                </p>
-                <p className="mt-1 text-xs text-amber-700">
-                  <span className="font-medium">Changed:</span> {initial.shared_updated_summary}
-                </p>
-              </div>
-            )}
-
-          {/* ── Bank info (shared) ── */}
-          <section className="px-6 py-5">
-            <SectionHeader title="Bank info" shared={true} />
-
-            {/* Collapsed one-liner */}
-            <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 mb-3">
-              <span className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
-                {values.city || values.state
-                  ? <span>{[values.city, values.state].filter(Boolean).join(", ")}</span>
-                  : <span className="text-slate-400">No location</span>}
-                {values.cert && <span className="text-slate-400">· FDIC #{values.cert}</span>}
-                {values.assets && <span className="text-slate-400">· ${(Number(values.assets) / 1000).toFixed(0)}M assets</span>}
-                {values.holding_company && <span className="text-slate-400">· {values.holding_company}</span>}
-              </span>
-              <button
-                type="button"
-                onClick={() => setInfoExpanded((v) => !v)}
-                className="ml-2 shrink-0 text-slate-400 hover:text-slate-600"
-                title={infoExpanded ? "Collapse" : "Edit bank info"}
-              >
-                {infoExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </button>
-            </div>
-
-            {infoExpanded && (
-              <div className="space-y-3">
-                <div>
-                  <label className={labelClass} htmlFor="name">Bank name <span className="text-rose-500">*</span></label>
-                  <input id="name" className={inputClass} value={values.name} onChange={(e) => set("name", e.target.value)} required />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className={labelClass} htmlFor="city">City</label>
-                    <input id="city" className={inputClass} value={values.city} onChange={(e) => set("city", e.target.value)} />
-                  </div>
-                  <div>
-                    <label className={labelClass} htmlFor="state">State</label>
-                    <input id="state" className={inputClass} placeholder="e.g. NY" value={values.state} onChange={(e) => set("state", e.target.value)} />
-                  </div>
-                  <div>
-                    <label className={labelClass} htmlFor="cert">FDIC cert #</label>
-                    <input id="cert" type="number" className={inputClass} value={values.cert} onChange={(e) => set("cert", e.target.value)} />
-                  </div>
-                  <div>
-                    <label className={labelClass} htmlFor="assets">Assets ($000)</label>
-                    <input id="assets" type="number" className={inputClass} value={values.assets} onChange={(e) => set("assets", e.target.value)} />
-                  </div>
-                  <div className="col-span-2">
-                    <label className={labelClass} htmlFor="holding_company">Holding company</label>
-                    <input id="holding_company" className={inputClass} value={values.holding_company} onChange={(e) => set("holding_company", e.target.value)} />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Verified holding company (from the /holding-companies sync wizard) */}
-            {holdingCompanyInfo && (
-              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <p className="mb-1 flex items-center justify-between text-xs font-medium text-slate-500 uppercase tracking-wide">
-                  Holding company
-                  <span className="text-[10px] font-normal normal-case text-slate-400">verified via Fed data</span>
-                </p>
-                <p className="text-sm text-slate-700">
-                  <span className="font-medium">{holdingCompanyInfo.name}</span>
-                  {holdingCompanyInfo.assets != null && (
-                    <span className="text-slate-400">
-                      {" "}
-                      · ${(holdingCompanyInfo.assets / 1000).toFixed(0)}M assets
-                      {holdingCompanyInfo.assetsAsOf ? ` (as of ${holdingCompanyInfo.assetsAsOf})` : ""}
-                    </span>
-                  )}
-                </p>
-                {holdingCompanyInfo.siblingBanks.length > 0 && (
-                  <p className="mt-1 text-xs text-slate-500">
-                    Also owns:{" "}
-                    {holdingCompanyInfo.siblingBanks.map((sb, i) => (
-                      <span key={sb.cert}>
-                        {i > 0 && ", "}
-                        {sb.bankId && onOpenBank ? (
-                          <button
-                            type="button"
-                            onClick={() => onOpenBank(sb.bankId!)}
-                            className="text-amber-700 hover:underline"
-                          >
-                            {sb.name}
-                          </button>
-                        ) : (
-                          sb.name
-                        )}
-                      </span>
-                    ))}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Related banks */}
-            {initial?.cert != null && (
-              <div className="mt-3">
-                <label className={labelClass}>Related banks</label>
-                {relatedBanks.length === 0 && (
-                  <p className="mb-2 text-xs text-slate-400">
-                    No related banks. Banks in the same holding company appear here
-                    automatically — search below to link any other bank.
-                  </p>
-                )}
-                {relatedBanks.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {relatedBanks.map((rb) => (
-                      <span
-                        key={rb.cert}
-                        className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700"
-                      >
-                        {rb.bankId && onOpenBank ? (
-                          <button
-                            type="button"
-                            onClick={() => onOpenBank(rb.bankId!)}
-                            className="text-amber-700 hover:underline font-medium"
-                          >
-                            {rb.name}
-                          </button>
-                        ) : (
-                          <span className="font-medium">{rb.name}</span>
-                        )}
-                        {rb.state && <span className="text-slate-400">{rb.state}</span>}
-                        {rb.source === "holding_company" ? (
-                          <span className="text-slate-300 text-[10px] italic" title="Same holding company">
-                            holding co.
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveRelationship(rb.cert)}
-                            className="ml-0.5 text-slate-300 hover:text-rose-500"
-                            title="Remove link"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        )}
-                      </span>
-                    ))}
+                    </p>
+                    <p className="mt-1 text-xs text-amber-700">
+                      <span className="font-medium">Changed:</span> {initial.shared_updated_summary}
+                    </p>
                   </div>
                 )}
-                <div className="relative">
-                  <input
-                    className={`${inputClass} text-sm`}
-                    placeholder="Search to link a bank…"
-                    value={relSearch}
-                    onChange={(e) => setRelSearch(e.target.value)}
-                    disabled={relBusy}
-                  />
-                  {relResults.length > 0 && (
-                    <ul className="absolute z-10 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg text-sm overflow-hidden">
-                      {relResults
-                        .filter((r) => !alreadyLinkedCerts.has(r.cert))
-                        .map((r) => (
-                          <li key={r.cert}>
-                            <button
-                              type="button"
-                              onClick={() => handleAddRelationship(r.cert)}
-                              className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-amber-50"
-                            >
-                              <span className="font-medium text-slate-800">{r.name}</span>
-                              <span className="text-xs text-slate-400">{r.state}</span>
-                            </button>
-                          </li>
-                        ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
-            )}
-          </section>
 
-          {/* ── How to open (shared) ── */}
-          <section className="px-6 py-5">
-            <SectionHeader title="How to open" shared={true} />
-            <div className="space-y-4">
-              <div>
-                <label className={labelClass} htmlFor="eligibility">Who can open</label>
-                <select
-                  id="eligibility"
-                  className={inputClass}
-                  value={values.eligibility}
-                  onChange={(e) => set("eligibility", e.target.value)}
-                >
-                  <option value="">—</option>
-                  {(Object.keys(ELIGIBILITY_LABELS) as Array<keyof typeof ELIGIBILITY_LABELS>).map((k) => (
-                    <option key={k} value={k}>{ELIGIBILITY_LABELS[k]}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <span className={labelClass}>Open methods</span>
-                <div className="flex flex-wrap gap-2">
-                  {(Object.keys(OPEN_METHOD_LABELS) as OpenMethod[]).map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => toggleMethod(m)}
-                      className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-                        values.open_methods.includes(m)
-                          ? "border-amber-500 bg-amber-500 text-white"
-                          : "border-slate-300 text-slate-600 hover:bg-slate-100"
-                      }`}
-                    >
-                      {OPEN_METHOD_LABELS[m]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className={labelClass} htmlFor="min_to_open">Minimum to open ($)</label>
-                  <input
-                    id="min_to_open"
-                    type="number"
-                    className={inputClass}
-                    value={values.min_to_open}
-                    onChange={(e) => set("min_to_open", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className={labelClass} htmlFor="phone">Preferred contact / phone</label>
-                  <input
-                    id="phone"
-                    className={inputClass}
-                    placeholder="name or number"
-                    value={values.phone}
-                    onChange={(e) => set("phone", e.target.value)}
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className={labelClass} htmlFor="branch_location">Preferred branch / address</label>
-                  <input
-                    id="branch_location"
-                    className={inputClass}
-                    placeholder="branch to visit or call"
-                    value={values.branch_location}
-                    onChange={(e) => set("branch_location", e.target.value)}
-                  />
-                </div>
-                <div className="col-span-2">
-                  <div className="flex items-center justify-between">
-                    <label className={labelClass} htmlFor="website">Website</label>
-                    {values.website.trim() && (
-                      <a
-                        href={values.website.startsWith("http") ? values.website : `https://${values.website}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mb-1 text-xs font-medium text-amber-600 hover:underline"
-                      >
-                        Open site ↗
-                      </a>
-                    )}
-                  </div>
-                  <input
-                    id="website"
-                    className={inputClass}
-                    placeholder="bankwebsite.com"
-                    value={values.website}
-                    onChange={(e) => set("website", e.target.value)}
-                  />
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* ── Conversion / IPO (shared) ── */}
-          <section className="px-6 py-5">
-            <SectionHeader title="Conversion / IPO" shared={true} />
-            <div className="space-y-4">
-              <div>
-                <label className={labelClass} htmlFor="conversion_stage">Stage</label>
-                <select
-                  id="conversion_stage"
-                  className={inputClass}
-                  value={values.conversion_stage}
-                  onChange={(e) => set("conversion_stage", e.target.value as ConversionStage)}
-                >
-                  {CONVERSION_STAGE_ORDER.map((s) => (
-                    <option key={s} value={s}>{CONVERSION_STAGE_LABELS[s]}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={labelClass} htmlFor="eligibility_date">Eligibility / record date</label>
-                <DateInput
-                  id="eligibility_date"
-                  className={inputClass}
-                  value={values.eligibility_date}
-                  onChange={(v) => set("eligibility_date", v)}
-                />
-                <p className="mt-1 text-xs text-slate-400">
-                  Deposit date that sets your IPO subscription priority.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* ── Community notes (shared) ── */}
-          {initial?.cert != null && (
-            <section className="px-6 py-5">
-              <SectionHeader title="Community notes" shared={true} />
-              <p className="-mt-1 mb-3 text-xs text-slate-400">
-                Visible to everyone — posted under your display name ({userDisplayName || "your name"}).
-              </p>
-              {comments.length > 0 && (
-                <ul className="space-y-2 mb-3">
-                  {comments.map((c) => {
-                    const isUnread = readAt == null || c.created_at > readAt;
-                    return (
-                      <li
-                        key={c.id}
-                        className={`rounded-lg px-3 py-2 text-sm ${isUnread ? "bg-amber-50" : "bg-slate-50"}`}
-                      >
-                        <div className="mb-0.5 flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 text-xs text-slate-400">
-                            <span className={`${isUnread ? "font-semibold text-slate-800" : "font-medium text-slate-600"}`}>
-                              {c.author_name || "Someone"}
-                            </span>
-                            <span>{formatDate(c.created_at.slice(0, 10))}</span>
-                            {isUnread && (
-                              <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">New</span>
-                            )}
-                          </div>
-                          {c.author_id === currentUserId && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteComment(c.id)}
-                              disabled={commentDeletingId === c.id}
-                              className="rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
-                              title="Delete note"
-                            >
-                              {commentDeletingId === c.id
-                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                : <Trash2 className="h-3.5 w-3.5" />}
-                            </button>
-                          )}
-                        </div>
-                        <p className={`whitespace-pre-wrap ${isUnread ? "font-semibold text-slate-900" : "text-slate-700"}`}>
-                          {c.body}
+              {/* Bank facts — first, per feedback */}
+              <Box tone="shared">
+                <BoxHeader title="Bank facts" onEdit={() => setInfoExpanded((v) => !v)} />
+                {!infoExpanded ? (
+                  <>
+                    <div className="text-sm">
+                      <Frow
+                        label="Location"
+                        value={[values.city, values.state].filter(Boolean).join(", ") || null}
+                      />
+                      <Frow label="FDIC cert #" value={values.cert || null} />
+                      <Frow
+                        label="Total assets"
+                        value={values.assets ? `$${(Number(values.assets) / 1000).toFixed(0)}M` : null}
+                      />
+                      <Frow label="Holding company" value={values.holding_company || null} />
+                    </div>
+                    {holdingCompanyInfo && (
+                      <div className="mt-2.5 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                        <p className="mb-1 flex items-center justify-between text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                          Holding company
+                          <span className="text-[9.5px] font-normal normal-case text-slate-400">verified via Fed data</span>
                         </p>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              {commentError && (
-                <p className="mb-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{commentError}</p>
-              )}
-              <textarea
-                rows={2}
-                className={inputClass}
-                placeholder="Add a note for everyone…"
-                value={commentBody}
-                onChange={(e) => setCommentBody(e.target.value)}
-              />
-              <div className="mt-2 flex items-center justify-between gap-2">
-                <label className="flex items-center gap-2 text-xs text-slate-500">
-                  <input
-                    type="checkbox"
-                    checked={notifyAll}
-                    onChange={(e) => setNotifyAll(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 accent-amber-600"
-                  />
-                  Email everyone
-                </label>
-                <button
-                  type="button"
-                  onClick={handlePostComment}
-                  disabled={commentBusy || !commentBody.trim()}
-                  className="flex items-center gap-2 rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
-                >
-                  {commentBusy && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Post
-                </button>
-              </div>
-            </section>
-          )}
+                        <p className="text-sm text-slate-700">
+                          <span className="font-medium">{holdingCompanyInfo.name}</span>
+                          {holdingCompanyInfo.assets != null && (
+                            <span className="text-slate-400">
+                              {" "}
+                              · ${(holdingCompanyInfo.assets / 1000).toFixed(0)}M assets
+                              {holdingCompanyInfo.assetsAsOf ? ` (as of ${holdingCompanyInfo.assetsAsOf})` : ""}
+                            </span>
+                          )}
+                        </p>
+                        {holdingCompanyInfo.siblingBanks.length > 0 && (
+                          <p className="mt-1 text-xs text-slate-500">
+                            Also owns:{" "}
+                            {holdingCompanyInfo.siblingBanks.map((sb, i) => (
+                              <span key={sb.cert}>
+                                {i > 0 && ", "}
+                                {sb.bankId && onOpenBank ? (
+                                  <button type="button" onClick={() => onOpenBank(sb.bankId!)} className="text-emerald-700 hover:underline">
+                                    {sb.name}
+                                  </button>
+                                ) : sb.name}
+                              </span>
+                            ))}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {initial?.cert != null && relatedBanks.length > 0 && (
+                      <div className="mt-2.5">
+                        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Related banks</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {relatedBanks.map((rb) => (
+                            <span
+                              key={rb.cert}
+                              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700"
+                            >
+                              {rb.bankId && onOpenBank ? (
+                                <button type="button" onClick={() => onOpenBank(rb.bankId!)} className="font-medium text-emerald-700 hover:underline">
+                                  {rb.name}
+                                </button>
+                              ) : (
+                                <span className="font-medium">{rb.name}</span>
+                              )}
+                              {rb.state && <span className="text-slate-400">{rb.state}</span>}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="space-y-3">
+                      <div>
+                        <label className={labelClass} htmlFor="name">Bank name <span className="text-rose-500">*</span></label>
+                        <input id="name" className={inputClass} value={values.name} onChange={(e) => set("name", e.target.value)} required />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className={labelClass} htmlFor="city">City</label>
+                          <input id="city" className={inputClass} value={values.city} onChange={(e) => set("city", e.target.value)} />
+                        </div>
+                        <div>
+                          <label className={labelClass} htmlFor="state">State</label>
+                          <input id="state" className={inputClass} placeholder="e.g. NY" value={values.state} onChange={(e) => set("state", e.target.value)} />
+                        </div>
+                        <div>
+                          <label className={labelClass} htmlFor="cert">FDIC cert #</label>
+                          <input id="cert" type="number" className={inputClass} value={values.cert} onChange={(e) => set("cert", e.target.value)} />
+                        </div>
+                        <div>
+                          <label className={labelClass} htmlFor="assets">Assets ($000)</label>
+                          <input id="assets" type="number" className={inputClass} value={values.assets} onChange={(e) => set("assets", e.target.value)} />
+                        </div>
+                        <div className="col-span-2">
+                          <label className={labelClass} htmlFor="holding_company">Holding company</label>
+                          <input id="holding_company" className={inputClass} value={values.holding_company} onChange={(e) => set("holding_company", e.target.value)} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {initial?.cert != null && (
+                      <div className="mt-3">
+                        <label className={labelClass}>Related banks</label>
+                        {relatedBanks.length === 0 && (
+                          <p className="mb-2 text-xs text-slate-400">
+                            No related banks. Banks in the same holding company appear here
+                            automatically — search below to link any other bank.
+                          </p>
+                        )}
+                        {relatedBanks.length > 0 && (
+                          <div className="mb-2 flex flex-wrap gap-2">
+                            {relatedBanks.map((rb) => (
+                              <span
+                                key={rb.cert}
+                                className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700"
+                              >
+                                {rb.bankId && onOpenBank ? (
+                                  <button type="button" onClick={() => onOpenBank(rb.bankId!)} className="font-medium text-emerald-700 hover:underline">
+                                    {rb.name}
+                                  </button>
+                                ) : (
+                                  <span className="font-medium">{rb.name}</span>
+                                )}
+                                {rb.state && <span className="text-slate-400">{rb.state}</span>}
+                                {rb.source === "holding_company" ? (
+                                  <span className="text-[10px] italic text-slate-300" title="Same holding company">
+                                    holding co.
+                                  </span>
+                                ) : (
+                                  <button type="button" onClick={() => handleRemoveRelationship(rb.cert)} className="ml-0.5 text-slate-300 hover:text-rose-500" title="Remove link">
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <div className="relative">
+                          <input
+                            className={`${inputClass} text-sm`}
+                            placeholder="Search to link a bank…"
+                            value={relSearch}
+                            onChange={(e) => setRelSearch(e.target.value)}
+                            disabled={relBusy}
+                          />
+                          {relResults.length > 0 && (
+                            <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white text-sm shadow-lg">
+                              {relResults.filter((r) => !alreadyLinkedCerts.has(r.cert)).map((r) => (
+                                <li key={r.cert}>
+                                  <button type="button" onClick={() => handleAddRelationship(r.cert)} className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-amber-50">
+                                    <span className="font-medium text-slate-800">{r.name}</span>
+                                    <span className="text-xs text-slate-400">{r.state}</span>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="mt-3 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setInfoExpanded(false)}
+                        className="rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </>
+                )}
+              </Box>
+
+              {/* Shared notes — right after bank facts, per feedback */}
+              <Box tone="shared">
+                <div className="mb-2 flex items-center gap-2">
+                  <h4 className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                    Shared notes {comments.length > 0 && <span className="text-emerald-600">({comments.length})</span>}
+                  </h4>
+                </div>
+                {!initial?.cert ? (
+                  <p className="text-xs text-slate-400">Save the bank first to see shared notes.</p>
+                ) : (
+                  <>
+                    {comments.length > 0 && (
+                      <ul className="mb-2.5 space-y-1.5">
+                        {comments.map((c) => {
+                          const isUnread = readAt == null || c.created_at > readAt;
+                          return (
+                            <li key={c.id} className={`rounded-lg px-2.5 py-1.5 text-sm ${isUnread ? "bg-amber-50" : "bg-slate-50"}`}>
+                              <div className="mb-0.5 flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                                  <span className={isUnread ? "font-semibold text-slate-800" : "font-medium text-slate-600"}>
+                                    {c.author_name || "Someone"}
+                                  </span>
+                                  <span>{formatDate(c.created_at.slice(0, 10))}</span>
+                                  {isUnread && (
+                                    <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[9.5px] font-semibold text-white">New</span>
+                                  )}
+                                </div>
+                                {c.author_id === currentUserId && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteComment(c.id)}
+                                    disabled={commentDeletingId === c.id}
+                                    className="rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                                    title="Delete note"
+                                  >
+                                    {commentDeletingId === c.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                                  </button>
+                                )}
+                              </div>
+                              <p className={`whitespace-pre-wrap ${isUnread ? "font-semibold text-slate-900" : "text-slate-700"}`}>
+                                {c.body}
+                              </p>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                    {commentError && (
+                      <p className="mb-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{commentError}</p>
+                    )}
+                    <textarea
+                      rows={2}
+                      className={inputClass}
+                      placeholder="Add a note for everyone…"
+                      value={commentBody}
+                      onChange={(e) => setCommentBody(e.target.value)}
+                    />
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <label className="flex items-center gap-1.5 text-xs text-slate-500">
+                        <input
+                          type="checkbox"
+                          checked={notifyAll}
+                          onChange={(e) => setNotifyAll(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 accent-amber-600"
+                        />
+                        Email everyone
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handlePostComment}
+                        disabled={commentBusy || !commentBody.trim()}
+                        className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        {commentBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                        Post
+                      </button>
+                    </div>
+                  </>
+                )}
+              </Box>
+
+              {/* How to open */}
+              <Box tone="shared">
+                <BoxHeader title="How to open" onEdit={() => setOpenInfoExpanded((v) => !v)} />
+                {!openInfoExpanded ? (
+                  <div className="text-sm">
+                    <Frow label="Who can open" value={values.eligibility ? ELIGIBILITY_LABELS[values.eligibility as keyof typeof ELIGIBILITY_LABELS] : null} />
+                    <Frow
+                      label="Methods"
+                      value={
+                        values.open_methods.length > 0 ? (
+                          <span className="flex flex-wrap justify-end gap-1">
+                            {values.open_methods.map((m) => (
+                              <span key={m} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                                {OPEN_METHOD_LABELS[m]}
+                              </span>
+                            ))}
+                          </span>
+                        ) : null
+                      }
+                    />
+                    <Frow label="Minimum to open" value={values.min_to_open ? `$${values.min_to_open}` : null} />
+                    <Frow
+                      label="Website"
+                      value={
+                        values.website.trim() ? (
+                          <a
+                            href={values.website.startsWith("http") ? values.website : `https://${values.website}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-emerald-700 hover:underline"
+                          >
+                            {values.website} ↗
+                          </a>
+                        ) : null
+                      }
+                    />
+                    <Frow label="Contact" value={values.phone || null} />
+                    <Frow label="Branch" value={values.branch_location || null} />
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-3">
+                      <div>
+                        <label className={labelClass} htmlFor="eligibility">Who can open</label>
+                        <select id="eligibility" className={inputClass} value={values.eligibility} onChange={(e) => set("eligibility", e.target.value)}>
+                          <option value="">—</option>
+                          {(Object.keys(ELIGIBILITY_LABELS) as Array<keyof typeof ELIGIBILITY_LABELS>).map((k) => (
+                            <option key={k} value={k}>{ELIGIBILITY_LABELS[k]}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <span className={labelClass}>Open methods</span>
+                        <div className="flex flex-wrap gap-2">
+                          {(Object.keys(OPEN_METHOD_LABELS) as OpenMethod[]).map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => toggleMethod(m)}
+                              className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                                values.open_methods.includes(m)
+                                  ? "border-emerald-500 bg-emerald-500 text-white"
+                                  : "border-slate-300 text-slate-600 hover:bg-slate-100"
+                              }`}
+                            >
+                              {OPEN_METHOD_LABELS[m]}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className={labelClass} htmlFor="min_to_open">Minimum to open ($)</label>
+                          <input id="min_to_open" type="number" className={inputClass} value={values.min_to_open} onChange={(e) => set("min_to_open", e.target.value)} />
+                        </div>
+                        <div>
+                          <label className={labelClass} htmlFor="phone">Preferred contact / phone</label>
+                          <input id="phone" className={inputClass} placeholder="name or number" value={values.phone} onChange={(e) => set("phone", e.target.value)} />
+                        </div>
+                        <div className="col-span-2">
+                          <label className={labelClass} htmlFor="branch_location">Preferred branch / address</label>
+                          <input id="branch_location" className={inputClass} placeholder="branch to visit or call" value={values.branch_location} onChange={(e) => set("branch_location", e.target.value)} />
+                        </div>
+                        <div className="col-span-2">
+                          <label className={labelClass} htmlFor="website">Website</label>
+                          <input id="website" className={inputClass} placeholder="bankwebsite.com" value={values.website} onChange={(e) => set("website", e.target.value)} />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setOpenInfoExpanded(false)}
+                        className="rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </>
+                )}
+              </Box>
+
+              {/* Conversion / IPO — last, per feedback */}
+              <Box tone="shared">
+                <BoxHeader title="Conversion / IPO" onEdit={() => setIpoExpanded((v) => !v)} />
+                {!ipoExpanded ? (
+                  <div className="text-sm">
+                    <Frow
+                      label="Stage"
+                      value={
+                        <span
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                            values.conversion_stage === "none"
+                              ? "bg-slate-100 text-slate-500"
+                              : "bg-violet-100 text-violet-700"
+                          }`}
+                        >
+                          {CONVERSION_STAGE_LABELS[values.conversion_stage]}
+                        </span>
+                      }
+                    />
+                    <Frow label="Eligibility / record date" value={values.eligibility_date ? formatDate(values.eligibility_date) : null} />
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-3">
+                      <div>
+                        <label className={labelClass} htmlFor="conversion_stage">Stage</label>
+                        <select
+                          id="conversion_stage"
+                          className={inputClass}
+                          value={values.conversion_stage}
+                          onChange={(e) => set("conversion_stage", e.target.value as ConversionStage)}
+                        >
+                          {CONVERSION_STAGE_ORDER.map((s) => (
+                            <option key={s} value={s}>{CONVERSION_STAGE_LABELS[s]}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelClass} htmlFor="eligibility_date">Eligibility / record date</label>
+                        <DateInput id="eligibility_date" className={inputClass} value={values.eligibility_date} onChange={(v) => set("eligibility_date", v)} />
+                        <p className="mt-1 text-xs text-slate-400">
+                          Deposit date that sets your IPO subscription priority.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setIpoExpanded(false)}
+                        className="rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </>
+                )}
+              </Box>
+            </div>
+          </div>
 
           {error && (
-            <div className="px-6 pb-4">
+            <div className="px-4 pb-4 sm:px-6">
               <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
             </div>
           )}

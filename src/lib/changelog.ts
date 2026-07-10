@@ -21,6 +21,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-07-10",
+    title: "Redesigned the bank detail view",
+    items: [
+      "Opening a bank now shows everything at once in two clearly separated columns — \"Only you\" (your status, priority, target balance, notes, reminders, accounts) on the left, \"Shared\" (bank facts, shared notes, how to open, conversion/IPO) on the right — instead of one long stacked form.",
+      "Your notes and reminders now take up almost no space when there's nothing saved yet — just a small \"+ Add\" link — so your accounts show up right away instead of scrolling past empty sections.",
+      "Every shared section can be edited in place with a small pencil icon, right where you're already looking.",
+    ],
+  },
+  {
     date: "2026-07-08",
     title: "Click a bank on the Accounts page for a read-only view",
     items: [
