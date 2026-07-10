@@ -32,7 +32,7 @@ export function AccountViewModal({
     >
       <div
         onMouseDown={(e) => e.stopPropagation()}
-        className="my-8 w-full max-w-md overflow-hidden rounded-2xl bg-amber-50 shadow-2xl"
+        className="my-8 w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
       >
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-1">
           <div className="min-w-0 flex-1">
@@ -51,7 +51,7 @@ export function AccountViewModal({
           </button>
         </div>
 
-        <div className="px-4 pb-1 pt-3">
+        <div className="bg-amber-50/50 px-4 pb-1 pt-3">
           <Box>
             <BoxHeader title="Account details" />
             <Frow label="Holder" value={account.holder} />
