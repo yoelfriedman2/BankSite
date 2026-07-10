@@ -4,6 +4,28 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 
 ## One-time setup pending
 
+- **APK packaging — code side is done, one manual step left to actually produce the .apk.**
+  Prepped the app to be wrapped as an installable Android app (a Trusted Web Activity — a real
+  APK that opens `banktracker.app` full-screen with no browser chrome, not a rewrite): fixed
+  `src/app/manifest.ts` (was SVG-only, which most TWA/PWA tooling won't accept — added real PNG
+  icons at 192/512 plus dedicated maskable variants with safe-zone padding baked in, generated
+  from the existing `public/icon.svg` mark), and fixed a real bug in the process — the auth
+  middleware (`src/middleware.ts` / `src/lib/supabase/middleware.ts`) had no exemption for
+  `/.well-known/`, so an unauthenticated request for the Digital Asset Links file Android needs
+  for TWA verification would 302 to `/login` instead of returning JSON. Added a placeholder
+  `public/.well-known/assetlinks.json` (package name guessed as `app.banktracker.twa` — the
+  standard reverse-domain form for `banktracker.app`).
+  **What's left, and why it can't be finished from this sandbox**: actually generating the signed
+  .apk needs either the PWABuilder.com cloud build or the Bubblewrap CLI (which downloads the
+  Android SDK from `dl.google.com` on first run) — both this environment's egress policy blocks
+  (`dl.google.com` returns a 403 through the proxy). Recommended path: go to
+  <https://www.pwabuilder.com>, enter `https://banktracker.app`, let it audit the manifest (should
+  score well now), then "Package for stores" → Android → download the signed APK/AAB. It will also
+  print the real `sha256_cert_fingerprints` value — paste that into
+  `public/.well-known/assetlinks.json` (replacing the placeholder) and redeploy so the installed
+  app opens full-screen instead of falling back to showing a browser address bar. No code changes
+  needed after that; this is a one-time signing-key + upload step outside the repo.
+
 - **Run migration `0038_interest_accrual.sql` — NOT optional, run promptly.** Adds
   `accounts.interest_last_accrued_on`, the cron-only bookkeeping column the new automatic monthly
   interest feature needs. Unlike most migrations in this file, this one does **not** degrade
