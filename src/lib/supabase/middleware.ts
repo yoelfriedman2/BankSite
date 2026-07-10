@@ -2,7 +2,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 /** Paths that an unauthenticated visitor is allowed to reach. */
-const PUBLIC_PREFIXES = ["/login", "/auth"];
+const PUBLIC_PREFIXES = ["/login", "/auth", "/.well-known"];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PREFIXES.some(

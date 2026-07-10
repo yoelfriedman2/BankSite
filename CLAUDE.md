@@ -176,6 +176,74 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-10 (APK packaging prep — TWA-ready, one manual step left)** — User asked how hard it'd
+be to get this into a usable Android APK. Answer: not a rewrite — wrap the deployed site as a
+Trusted Web Activity (a real installable APK that opens the live `banktracker.app` full-screen,
+no browser chrome), since the app is already server-rendered with Supabase OAuth, server actions,
+and cron jobs that would all keep working unchanged. Did the code-side prep this session:
+
+- **Fixed `src/app/manifest.ts`** (the app already had this — a Next.js file-convention manifest
+  served at `/manifest.webmanifest` — easy to miss on a first pass, and briefly duplicated into a
+  redundant hand-written `public/manifest.json` before catching it and deleting that). It only
+  declared one SVG icon reused for both `any` and `maskable` purpose, which most TWA/PWA tooling
+  (Bubblewrap, PWABuilder) won't accept — installability and the Android launcher icon need real
+  PNGs, and a `maskable` icon reusing an edge-to-edge logo gets clipped by Android's circular/
+  squircle icon mask since there's no safe-zone padding. Generated `public/icon-192.png`,
+  `icon-512.png`, `icon-maskable-192.png` (padded ~20% onto a solid `#4338CA` background matching
+  the logo's gradient start), `icon-maskable-512.png`, and `apple-touch-icon.png` from the existing
+  `public/icon.svg` mark (via a temporary `sharp` install in the scratchpad, not added as a project
+  dependency), and wired the PNGs into `manifest.ts`'s icons array alongside the original SVG entry.
+  Also added `icons.apple`/`icons.icon` PNG entries to the root layout's `metadata` (`layout.tsx`)
+  for iOS/favicon coverage.
+- **Real bug found and fixed**: the auth middleware (`src/middleware.ts`'s matcher +
+  `src/lib/supabase/middleware.ts`'s `PUBLIC_PREFIXES`) had no exemption for `/.well-known/` —
+  an unauthenticated request for the Digital Asset Links file Android needs to verify a TWA
+  (`/.well-known/assetlinks.json`) would 302-redirect to `/login` instead of returning JSON,
+  which would silently break TWA verification (the installed app would fall back to showing a
+  browser address bar instead of a true full-screen native-feeling app). `manifest.webmanifest`
+  itself was already correctly exempted from before this session.
+  Added a placeholder `public/.well-known/assetlinks.json` (package name guessed as
+  `app.banktracker.twa`, the standard reverse-domain form for the user's confirmed domain
+  `banktracker.app`) — the real `sha256_cert_fingerprints` value can only be known once a signing
+  key exists, so it's a placeholder pending the manual step below.
+- **What's NOT done, and can't be from this sandbox**: actually producing the signed .apk needs
+  either the PWABuilder.com cloud build or the Bubblewrap CLI, and Bubblewrap's first run downloads
+  the Android SDK from `dl.google.com` — confirmed blocked by this environment's egress policy (403
+  through the proxy). Full recommended steps logged in `TODO.md`'s "One-time setup pending" — short
+  version: PWABuilder.com → enter the live URL → "Package for stores" → Android → download the
+  signed package, then paste the real fingerprint it prints into `assetlinks.json` and redeploy.
+- Verified via `npm run build` (temp `xlsx` CDN→npm swap, restored after, same workaround as every
+  other session that's touched `package.json` in this sandbox) — clean, `/manifest.webmanifest`
+  still statically prerendered as before. No DEMO_MODE/Playwright pass needed — nothing in the
+  authenticated app's UI changed, only manifest/icon/middleware config. Skipped changelog/Guide on
+  purpose: the feature isn't real yet from an end user's perspective until the APK itself exists
+  (see TODO.md) — add those entries once it's actually built and installed, not for this prep step.
+
+**Same-day follow-up — a real long-standing bug found via the user's own PWABuilder scan, plus a
+wrong-logo mistake caught before it shipped**: the user ran <https://www.pwabuilder.com>'s analyzer
+against the live site (still on `main`, this branch not yet merged) to sanity-check the plan. Two
+things came out of that:
+1. It confirmed the icon fix above hasn't deployed yet (expected — still on a branch), but its
+   `IconsAreFetchable` check failed on `https://banktracker.app/icon.svg` itself — a genuinely
+   broken production URL, not a manifest problem. Root cause: **`public/icon.svg` and
+   `src/app/icon.svg` both resolve to the same `/icon.svg` route** (a static public file colliding
+   with Next's app-router icon file convention) — almost certainly the exact cause of the
+   "pre-existing, unrelated `/icon.svg` 500" that several earlier session entries in this file
+   noted in passing and left alone as out of scope. Fixed for real this time: deleted
+   `public/icon.svg` and kept `src/app/icon.svg`, the one Next's own route convention serves
+   cleanly with no collision. Confirmed via a local `next start` + `curl` (not just a clean build)
+   that `/icon.svg`, `/manifest.webmanifest`, `/icon-192.png`, and `/.well-known/assetlinks.json`
+   all now return 200 with the right content-type.
+2. **The two icon.svg files were different logos** — `src/app/icon.svg` matches `Logo.tsx` (navy
+   background, three gold/white bars — the actual mark rendered everywhere in the app, including
+   the login screen); `public/icon.svg` was a stale, unused leftover from an earlier redesign
+   (indigo gradient, bank-building glyph). The PNG/maskable icons generated earlier in this same
+   session were built from the *wrong* (stale) one — regenerated from the correct `src/app/icon.svg`
+   source (maskable padding background corrected from the old logo's indigo `#4338CA` to this
+   logo's own navy `#0f172a` to match). Worth remembering: when two same-named assets exist in a
+   Next.js project, check whether they're actually identical before assuming one is just a build
+   artifact of the other.
+
 **2026-07-10 (bank-logo polish + a real status-color bug, from live feedback on the round above)** —
 The user saw the logo/total-balance/color-match work above live in production (screenshot
 confirmed logos actually rendering — the "not verified end-to-end in this sandbox" caveat from that
