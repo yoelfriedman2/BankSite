@@ -14,6 +14,7 @@ import {
 import type { ChangelogEntry } from "@/lib/changelog";
 import type { AuditEntry } from "@/lib/audit";
 import { markChangelogSeen } from "@/components/useChangelogUnread";
+import { PageHeader } from "@/components/ui/Card";
 
 function fmtDate(iso: string) {
   // Parse as local time — a bare YYYY-MM-DD is treated as UTC midnight, which
@@ -72,7 +73,7 @@ export function UpdatesClient({
 
   return (
     <div className="max-w-5xl">
-      <h1 className="mb-5 text-2xl font-semibold text-slate-900">Updates</h1>
+      <PageHeader title="Updates" />
 
       {/* Mobile tab switcher — below md, only one section shows at a time so
           you don't have to scroll past Activity to reach What's new. */}
@@ -168,7 +169,7 @@ export function UpdatesClient({
             {changelog.map((entry) => (
               <div
                 key={`${entry.date}-${entry.title}`}
-                className="rounded-2xl border border-slate-200 bg-white p-5"
+                className="rounded-2xl border border-slate-200/80 bg-white shadow-sm p-5"
               >
                 <div className="mb-2 flex items-center gap-2">
                   <h3 className="text-sm font-semibold text-slate-900">{entry.title}</h3>

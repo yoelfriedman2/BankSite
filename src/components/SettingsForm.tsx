@@ -32,6 +32,7 @@ import {
 } from "@/app/(app)/settings/actions";
 import { exportToExcel } from "@/lib/export";
 import { useToast } from "@/components/Toast";
+import { PageHeader } from "@/components/ui/Card";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -59,7 +60,7 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6">
+    <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm p-6">
       <div className="mb-1 flex items-center gap-2">
         {icon}
         <h2 className="text-sm font-semibold text-slate-800">{title}</h2>
@@ -310,7 +311,7 @@ export function SettingsForm({
 
   return (
     <div className="max-w-2xl">
-      <h1 className="mb-4 text-2xl font-semibold text-slate-900">Settings</h1>
+      <PageHeader title="Settings" />
 
       {/* ── Tabs ── */}
       <div className="mb-6 flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">

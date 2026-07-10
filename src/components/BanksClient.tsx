@@ -45,6 +45,7 @@ import { BankForm } from "@/components/BankForm";
 import { ImportDialog } from "@/components/ImportDialog";
 import { exportToExcel, exportCommentsToExcel } from "@/lib/export";
 import { setBankStatus, deleteBank, getAllBankComments, type RelatedRef } from "@/app/(app)/banks/actions";
+import { PageHeader } from "@/components/ui/Card";
 
 type SortKey =
   | "name"
@@ -604,48 +605,46 @@ export function BanksClient({
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Banks</h1>
-          <p className="text-sm text-slate-500">
-            {counts.all} banks · {counts.open + counts.open_add_account + counts.open_add_funds} open · {counts.want_to_open} to open · {counts.cannot_open} can&apos;t
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setImportOpen(true)}
-            className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            <UploadCloud className="h-4 w-4" />
-            Import
-          </button>
-          <button
-            onClick={() => exportToExcel(banks, accounts, { isOwner })}
-            className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            title={isOwner ? "Export the full bank list + your accounts" : "Export your accounts"}
-          >
-            <Download className="h-4 w-4" />
-            {isOwner ? "Export" : "Export my accounts"}
-          </button>
-          <button
-            onClick={async () => {
-              const rows = await getAllBankComments();
-              await exportCommentsToExcel(rows);
-            }}
-            className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            <Download className="h-4 w-4" />
-            Export notes
-          </button>
-          <button
-            onClick={openAdd}
-            className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
-          >
-            <Plus className="h-4 w-4" />
-            Add bank
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Banks"
+        subtitle={`${counts.all} banks · ${counts.open + counts.open_add_account + counts.open_add_funds} open · ${counts.want_to_open} to open · ${counts.cannot_open} can't`}
+        actions={
+          <>
+            <button
+              onClick={() => setImportOpen(true)}
+              className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              <UploadCloud className="h-4 w-4" />
+              Import
+            </button>
+            <button
+              onClick={() => exportToExcel(banks, accounts, { isOwner })}
+              className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+              title={isOwner ? "Export the full bank list + your accounts" : "Export your accounts"}
+            >
+              <Download className="h-4 w-4" />
+              {isOwner ? "Export" : "Export my accounts"}
+            </button>
+            <button
+              onClick={async () => {
+                const rows = await getAllBankComments();
+                await exportCommentsToExcel(rows);
+              }}
+              className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              <Download className="h-4 w-4" />
+              Export notes
+            </button>
+            <button
+              onClick={openAdd}
+              className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-amber-600"
+            >
+              <Plus className="h-4 w-4" />
+              Add bank
+            </button>
+          </>
+        }
+      />
 
       {/* Search — filters + sorting live on the table's own column headers now
           (desktop); mobile gets a single Filters button since cards have no
@@ -746,7 +745,7 @@ export function BanksClient({
       {/* Mobile cards */}
       <div className="space-y-2 md:hidden">
         {filtered.length === 0 ? (
-          <p className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center text-slate-400">
+          <p className="rounded-2xl border border-slate-200/80 bg-white px-4 py-10 text-center text-slate-400 shadow-sm">
             No banks match your filters.
           </p>
         ) : (
@@ -766,7 +765,7 @@ export function BanksClient({
                     openBank(b);
                   }
                 }}
-                className="flex w-full cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+                className="flex w-full cursor-pointer items-start gap-3 rounded-xl border border-slate-200/80 bg-white p-3 text-left shadow-sm transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
               >
                 {health !== "none" ? (
                   <span className="mt-1 shrink-0">
@@ -821,7 +820,7 @@ export function BanksClient({
       </div>
 
       {/* Table (md and up) */}
-      <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white md:block">
+      <div className="hidden overflow-x-auto rounded-2xl border border-slate-200/80 bg-white shadow-sm md:block">
         <table className="w-full min-w-[960px] table-fixed text-sm">
           <colgroup>
             <col className="w-[29%]" />
@@ -836,7 +835,7 @@ export function BanksClient({
             <col className="w-[5%]" />
           </colgroup>
           <thead>
-            <tr className="border-b border-slate-200 text-left text-xs tracking-wide text-slate-500">
+            <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500">
               <Th label="Bank" sortKey="name" />
               <Th
                 label="State"

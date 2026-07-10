@@ -42,7 +42,7 @@ export default function UpdatePasswordPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+      <div className="w-full max-w-sm rounded-2xl border border-slate-200/80 bg-white p-8 shadow-sm">
         <div className="mb-6 flex flex-col items-center text-center">
           <Logo className="mb-3 h-12 w-12" />
           <h1 className="text-xl font-semibold text-slate-900">

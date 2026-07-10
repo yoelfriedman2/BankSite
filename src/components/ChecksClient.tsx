@@ -11,6 +11,7 @@ import {
   type PrintedCheckWithAccount,
 } from "@/app/(app)/checks/actions";
 import type { Account, Bank } from "@/lib/types";
+import { Card, CardHeader, EmptyState } from "@/components/ui/Card";
 
 export type AccountWithBank = Account & { bank: Bank };
 
@@ -60,9 +61,13 @@ export function ChecksClient({
   return (
     <>
       {accounts.length === 0 ? (
-        <div className="mt-12 text-center text-sm text-slate-400">
-          No accounts yet. Add accounts via the Banks page and they&apos;ll appear here.
-        </div>
+        <Card className="mt-4">
+          <EmptyState
+            icon={<Printer className="h-6 w-6" />}
+            title="No accounts yet"
+            subtitle="Add accounts via the Banks page and they'll appear here."
+          />
+        </Card>
       ) : (
         <div className="space-y-6">
           {groups.map(([bankName, accts]) => (
@@ -74,7 +79,7 @@ export function ChecksClient({
                   return (
                     <li
                       key={a.id}
-                      className="flex items-center gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3"
+                      className="flex items-center gap-4 rounded-xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm transition-shadow hover:shadow-md"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 text-sm font-medium text-slate-800">
@@ -121,19 +126,17 @@ export function ChecksClient({
 
       {/* ── Check log: every check printed, across all accounts ── */}
       {log.length > 0 && (
-        <div className="mt-10 rounded-2xl border border-slate-200 bg-white">
-          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-            <h2 className="flex items-center gap-2 font-semibold text-slate-900">
-              <BookOpen className="h-5 w-5 text-blue-600" />
-              Check log
-            </h2>
-            <span className="text-sm text-slate-400">{log.length}</span>
-          </div>
+        <Card className="mt-10">
+          <CardHeader
+            icon={<BookOpen className="h-[18px] w-[18px] text-blue-600" />}
+            title="Check log"
+            count={log.length}
+          />
           <ul>
             {log.map((c) => (
               <li
                 key={c.id}
-                className="flex items-center gap-3 border-b border-slate-100 px-5 py-2.5 text-sm last:border-0 hover:bg-slate-50"
+                className="flex items-center gap-3 border-b border-slate-100 px-5 py-2.5 text-sm last:border-0 hover:bg-slate-50/80"
               >
                 <span className="w-14 shrink-0 font-semibold tabular-nums text-slate-700">
                   {c.check_number ?? "—"}
@@ -165,7 +168,7 @@ export function ChecksClient({
               </li>
             ))}
           </ul>
-        </div>
+        </Card>
       )}
 
       {selected && (

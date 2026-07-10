@@ -27,6 +27,7 @@ import {
   type FdicReport,
 } from "@/app/(app)/fdic-sync/actions";
 import { formatAssets } from "@/lib/format";
+import { PageHeader } from "@/components/ui/Card";
 
 type Status = "pending" | "applying" | "done" | "error" | "dismissed";
 
@@ -143,30 +144,34 @@ export function FdicSyncClient({ canApply }: { canApply: boolean }) {
 
   return (
     <div className="max-w-4xl">
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-semibold text-slate-900">
-            <RefreshCw className="h-6 w-6 text-amber-500" />
+      <PageHeader
+        title={
+          <span className="flex items-center gap-2">
+            <RefreshCw className="h-5 w-5 text-amber-500" />
             FDIC sync
-          </h1>
-          <p className="mt-1 max-w-xl text-sm text-slate-500">
+          </span>
+        }
+        subtitle={
+          <>
             Compares every bank (by cert number) against the FDIC&apos;s live BankFind
             database and shows only the differences. Anyone can run this check;
             {canApply
               ? " you can apply the changes shown below."
               : " only an FDIC admin can apply a change — ask the owner if you need that."}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={runCheck}
-          disabled={checking}
-          className="flex shrink-0 items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
-        >
-          {checking ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          {checking ? "Checking…" : report ? "Check again" : "Check against FDIC"}
-        </button>
-      </div>
+          </>
+        }
+        actions={
+          <button
+            type="button"
+            onClick={runCheck}
+            disabled={checking}
+            className="flex shrink-0 items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-amber-600 disabled:opacity-60"
+          >
+            {checking ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            {checking ? "Checking…" : report ? "Check again" : "Check against FDIC"}
+          </button>
+        }
+      />
 
       {checkError && (
         <div className="mb-6 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{checkError}</div>
@@ -409,7 +414,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+    <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
       <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
         <div className="flex items-center gap-2">
           {icon}

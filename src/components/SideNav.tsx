@@ -97,9 +97,11 @@ export function SideNav({
   })).filter((g) => g.links.length > 0);
   const updatesUnread = useChangelogUnread();
 
+  const initial = (displayName || "?").trim().charAt(0).toUpperCase();
+
   return (
-    <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-800 bg-slate-900 text-slate-300 md:flex md:sticky md:top-0 md:h-screen md:overflow-y-auto">
-      <div className="flex items-center gap-2.5 px-5 py-5">
+    <aside className="hidden w-64 shrink-0 flex-col bg-slate-900 text-slate-300 md:flex md:sticky md:top-0 md:h-screen md:overflow-y-auto">
+      <div className="flex items-center gap-2.5 border-b border-white/5 px-5 py-5">
         <Logo className="h-9 w-9 shadow-sm" />
         <div className="leading-tight">
           <div className="text-sm font-semibold text-white">Bank Tracker</div>
@@ -107,15 +109,15 @@ export function SideNav({
         </div>
       </div>
 
-      <div className="px-3 pb-3">
+      <div className="px-3 pt-3 pb-1">
         <GlobalSearch />
       </div>
 
-      <nav className="flex-1 space-y-4 px-3 py-2">
+      <nav className="flex-1 space-y-5 px-3 py-3">
         {groups.map((group) => (
-          <div key={group.label ?? "top"} className="space-y-1">
+          <div key={group.label ?? "top"} className="space-y-0.5">
             {group.label && (
-              <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+              <div className="px-3 pb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-slate-600">
                 {group.label}
               </div>
             )}
@@ -126,16 +128,23 @@ export function SideNav({
                   key={href}
                   href={href}
                   data-tour={tour}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  className={`group relative flex items-center gap-3 rounded-lg py-2 pl-3 pr-2.5 text-sm font-medium transition-colors ${
                     active
-                      ? "bg-slate-800 text-white"
-                      : "text-slate-400 hover:bg-slate-800/60 hover:text-white"
+                      ? "bg-amber-500/10 text-white"
+                      : "text-slate-400 hover:bg-white/5 hover:text-white"
                   }`}
                 >
-                  <Icon className="h-[18px] w-[18px]" />
-                  {label}
+                  {active && (
+                    <span className="absolute inset-y-1 left-0 w-[3px] rounded-full bg-amber-400" />
+                  )}
+                  <Icon
+                    className={`h-[18px] w-[18px] shrink-0 transition-colors ${
+                      active ? "text-amber-400" : "text-slate-500 group-hover:text-slate-300"
+                    }`}
+                  />
+                  <span className="truncate">{label}</span>
                   {href === "/updates" && updatesUnread && (
-                    <span className="ml-auto h-2 w-2 rounded-full bg-amber-400" />
+                    <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
                   )}
                 </Link>
               );
@@ -144,14 +153,17 @@ export function SideNav({
         ))}
       </nav>
 
-      <div className="border-t border-slate-800 p-3">
-        <div className="truncate px-2 pb-2 text-xs text-slate-500">
-          {displayName}
+      <div className="border-t border-white/5 p-3">
+        <div className="mb-1 flex items-center gap-2.5 rounded-lg px-2 py-1.5">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-700 text-xs font-semibold text-slate-200">
+            {initial}
+          </span>
+          <span className="truncate text-xs text-slate-400">{displayName}</span>
         </div>
         <form action="/auth/signout" method="post">
           <button
             type="submit"
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
           >
             <LogOut className="h-[18px] w-[18px]" />
             Sign out

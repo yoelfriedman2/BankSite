@@ -40,6 +40,7 @@ import { AccountModal } from "@/components/AccountModal";
 import { AccountViewModal } from "@/components/AccountViewModal";
 import { ImportDialog } from "@/components/ImportDialog";
 import { logActivityToday } from "@/app/(app)/accounts/actions";
+import { PageHeader } from "@/components/ui/Card";
 
 type BankRef = { id: string; name: string; cert: number | null };
 
@@ -520,21 +521,19 @@ export function AccountsClient({
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Accounts</h1>
-          <p className="text-sm text-slate-500">
-            {rows.length} accounts · {attentionCount} need attention
-          </p>
-        </div>
-        <button
-          onClick={() => setImportOpen(true)}
-          className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          <UploadCloud className="h-4 w-4" />
-          Import
-        </button>
-      </div>
+      <PageHeader
+        title="Accounts"
+        subtitle={`${rows.length} accounts · ${attentionCount} need attention`}
+        actions={
+          <button
+            onClick={() => setImportOpen(true)}
+            className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+          >
+            <UploadCloud className="h-4 w-4" />
+            Import
+          </button>
+        }
+      />
 
       {/* Totals by holder */}
       {byHolder.length > 0 && (
@@ -542,7 +541,7 @@ export function AccountsClient({
           {byHolder.map(([name, v]) => (
             <div
               key={name}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+              className="rounded-lg border border-slate-200/80 bg-white px-3 py-2 text-sm shadow-sm"
             >
               <span className="font-medium text-slate-700">{name}</span>{" "}
               <span className="font-semibold text-slate-900">
@@ -665,7 +664,7 @@ export function AccountsClient({
       {/* Mobile cards */}
       <div className="space-y-2 md:hidden">
         {filtered.length === 0 ? (
-          <p className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center text-slate-400">
+          <p className="rounded-2xl border border-slate-200/80 bg-white px-4 py-10 text-center text-slate-400 shadow-sm">
             {rows.length === 0
               ? "No accounts yet. Open a bank to add one."
               : "No accounts match your filters."}
@@ -678,7 +677,7 @@ export function AccountsClient({
               <div
                 key={r.id}
                 onClick={() => setViewing(r)}
-                className="cursor-pointer rounded-xl border border-slate-200 bg-white p-3 hover:bg-slate-50 active:bg-slate-100"
+                className="cursor-pointer rounded-xl border border-slate-200/80 bg-white p-3 shadow-sm transition-shadow hover:shadow-md hover:bg-slate-50 active:bg-slate-100"
               >
                 <div className="flex items-center gap-2">
                   {level !== "none" ? (
@@ -730,7 +729,7 @@ export function AccountsClient({
       </div>
 
       {/* Table (md and up) */}
-      <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white md:block">
+      <div className="hidden overflow-x-auto rounded-2xl border border-slate-200/80 bg-white shadow-sm md:block">
         <table className="w-full min-w-[1000px] table-fixed text-sm">
           <colgroup>
             <col className="w-[20%]" />
@@ -743,7 +742,7 @@ export function AccountsClient({
             <col className="w-[4%]" />
           </colgroup>
           <thead>
-            <tr className="border-b border-slate-200 text-left text-xs tracking-wide text-slate-500">
+            <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500">
               <Th label="Bank" sortKey="bank" />
               <Th
                 label="Holder"

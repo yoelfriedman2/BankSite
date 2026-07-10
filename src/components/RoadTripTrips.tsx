@@ -203,7 +203,7 @@ export function RoadTripTrips({
         </div>
       )}
 
-      <div className="rounded-2xl border border-slate-200 bg-white">
+      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm">
         <button
           type="button"
           onClick={() => setOpen(!open)}

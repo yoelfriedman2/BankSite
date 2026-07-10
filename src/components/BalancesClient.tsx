@@ -5,6 +5,7 @@ import { Loader2, Search } from "lucide-react";
 import { DateInput } from "@/components/DateInput";
 import { formatCurrency } from "@/lib/format";
 import { getBalanceAsOf, type BalanceAsOfRow } from "@/app/(app)/money/actions";
+import { PageHeader } from "@/components/ui/Card";
 
 export function BalancesClient({
   initialRows,
@@ -50,12 +51,10 @@ export function BalancesClient({
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-900">Balance by date</h1>
-        <p className="text-sm text-slate-500">
-          Pick a date to see what each account held then — this is what sets your IPO share allocation on a bank&apos;s record date.
-        </p>
-      </div>
+      <PageHeader
+        title="Balance by date"
+        subtitle="Pick a date to see what each account held then — this is what sets your IPO share allocation on a bank's record date."
+      />
 
       {/* Controls */}
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -100,10 +99,10 @@ export function BalancesClient({
         </span>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white shadow-sm">
         <table className="min-w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+            <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="px-4 py-3 font-medium">Bank</th>
               <th className="px-4 py-3 font-medium">Holder</th>
               <th className="px-4 py-3 text-right font-medium">Balance on date</th>

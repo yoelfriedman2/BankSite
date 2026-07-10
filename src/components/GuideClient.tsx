@@ -29,6 +29,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ASSIGNABLE_STATUSES, STATUS_LABELS } from "@/lib/types";
+import { PageHeader } from "@/components/ui/Card";
 
 type Visual = "status" | "dormancy";
 type Topic = {
@@ -441,10 +442,7 @@ export function GuideClient() {
     <div className="max-w-3xl">
       <style>{`@keyframes guideIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}`}</style>
 
-      <h1 className="text-2xl font-semibold text-slate-900">How it works</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Tap a part of the app to see what it does.
-      </p>
+      <PageHeader title="How it works" subtitle="Tap a part of the app to see what it does." />
 
       {/* Topic picker */}
       <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -472,7 +470,7 @@ export function GuideClient() {
       {/* Detail */}
       <div
         key={active}
-        className="mt-5 rounded-2xl border border-slate-200 bg-white p-6"
+        className="mt-5 rounded-2xl border border-slate-200/80 bg-white shadow-sm p-6"
         style={{ animation: "guideIn .18s ease-out" }}
       >
         <div className="flex items-center gap-3">

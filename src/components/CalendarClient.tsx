@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { PageHeader } from "@/components/ui/Card";
 
 export type CalEvent = {
   date: string; // YYYY-MM-DD
@@ -73,34 +74,36 @@ export function CalendarClient({ events }: { events: CalEvent[] }) {
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold text-slate-900">Calendar</h1>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setCursor(new Date(year, month - 1, 1))}
-            className="rounded-lg border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <span className="w-40 text-center text-sm font-medium text-slate-700">
-            {monthLabel}
-          </span>
-          <button
-            onClick={() => setCursor(new Date(year, month + 1, 1))}
-            className="rounded-lg border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() =>
-              setCursor(new Date(today.getFullYear(), today.getMonth(), 1))
-            }
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-          >
-            Today
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Calendar"
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCursor(new Date(year, month - 1, 1))}
+              className="rounded-lg border border-slate-300 bg-white p-2 text-slate-600 transition-colors hover:bg-slate-50"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="w-40 text-center text-sm font-medium text-slate-700">
+              {monthLabel}
+            </span>
+            <button
+              onClick={() => setCursor(new Date(year, month + 1, 1))}
+              className="rounded-lg border border-slate-300 bg-white p-2 text-slate-600 transition-colors hover:bg-slate-50"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() =>
+                setCursor(new Date(today.getFullYear(), today.getMonth(), 1))
+              }
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
+            >
+              Today
+            </button>
+          </div>
+        }
+      />
 
       {/* Legend */}
       {typesPresent.length > 0 && (
@@ -116,9 +119,9 @@ export function CalendarClient({ events }: { events: CalEvent[] }) {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white shadow-sm">
         <div className="min-w-[640px]">
-          <div className="grid grid-cols-7 border-b border-slate-200 text-xs font-medium uppercase tracking-wide text-slate-400">
+          <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50/60 text-xs font-medium uppercase tracking-wide text-slate-400">
             {WEEKDAYS.map((w) => (
               <div key={w} className="px-2 py-2 text-center">
                 {w}

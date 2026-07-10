@@ -36,6 +36,7 @@ import {
 } from "@/lib/nicParse";
 import { buildHoldingCompanyDiff, type HcGroupDiff } from "@/lib/nicDiff";
 import { formatAssets } from "@/lib/format";
+import { PageHeader } from "@/components/ui/Card";
 
 const NIC_URL = "https://www.ffiec.gov/npw/FinancialReport/DataDownload";
 const NIC_FINANCIAL_URL = "https://www.ffiec.gov/npw/FinancialReport/FinancialDataDownload";
@@ -422,26 +423,25 @@ export function HoldingCompaniesClient({
   if (mode === "browse") {
     return (
       <div className="max-w-3xl">
-        <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="mb-1 flex items-center gap-2 text-2xl font-semibold text-slate-900">
-              <Building2 className="h-6 w-6 text-amber-500" />
+        <PageHeader
+          title={
+            <span className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-amber-500" />
               Holding companies
-            </h1>
-            <p className="max-w-xl text-sm text-slate-500">
-              Every holding company matched so far, its own total assets, and which tracked banks
-              it owns.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={enterWizard}
-            className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Run sync
-          </button>
-        </div>
+            </span>
+          }
+          subtitle="Every holding company matched so far, its own total assets, and which tracked banks it owns."
+          actions={
+            <button
+              type="button"
+              onClick={enterWizard}
+              className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-amber-600"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Run sync
+            </button>
+          }
+        />
 
         {overviewLoading && (
           <div className="flex items-center gap-2 text-sm text-slate-400">
@@ -549,16 +549,15 @@ export function HoldingCompaniesClient({
       >
         <ArrowLeft className="h-3.5 w-3.5" /> Back to holding companies
       </button>
-      <h1 className="mb-1 flex items-center gap-2 text-2xl font-semibold text-slate-900">
-        <Building2 className="h-6 w-6 text-amber-500" />
-        Holding companies
-      </h1>
-      <p className="mb-6 max-w-xl text-sm text-slate-500">
-        Finds which banks share a parent holding company, and how large that holding company
-        actually is — using free data from the Federal Reserve. Most people won&apos;t need this
-        page; it&apos;s meant to be run every few months by whoever&apos;s keeping the shared bank
-        data current.
-      </p>
+      <PageHeader
+        title={
+          <span className="flex items-center gap-2">
+            <Building2 className="h-5 w-5 text-amber-500" />
+            Holding companies
+          </span>
+        }
+        subtitle="Finds which banks share a parent holding company, and how large that holding company actually is — using free data from the Federal Reserve. Most people won't need this page; it's meant to be run every few months by whoever's keeping the shared bank data current."
+      />
 
       {step !== "done" && <StepDots current={step} />}
 

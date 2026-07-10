@@ -95,7 +95,7 @@ export function AdminBackupsPanel() {
   }
 
   return (
-    <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4">
+    <div className="mb-6 rounded-2xl border border-slate-200/80 bg-white shadow-sm p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800">

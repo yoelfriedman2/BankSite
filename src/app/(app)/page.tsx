@@ -29,6 +29,7 @@ import { DashboardReminders } from "@/components/DashboardReminders";
 import { getOutstandingSweeps } from "@/app/(app)/money/actions";
 import { DashboardMoneyOut } from "@/components/DashboardMoneyOut";
 import { getUpNextData } from "@/app/(app)/up-next/actions";
+import { PageHeader, StatTile, Card, CardHeader, CardLink, EmptyState } from "@/components/ui/Card";
 
 export const dynamic = "force-dynamic";
 
@@ -38,37 +39,6 @@ type AttentionItem = {
   level: "red" | "orange";
   reason: string;
 };
-
-function StatCard({
-  label,
-  value,
-  icon,
-  accent,
-  href,
-}: {
-  label: string;
-  value: string | number;
-  icon: React.ReactNode;
-  accent: string;
-  href: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="rounded-2xl border border-slate-200 bg-white p-5 transition-colors hover:border-amber-300 hover:bg-amber-50/30"
-    >
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-slate-500">{label}</span>
-        <span
-          className={`flex h-8 w-8 items-center justify-center rounded-lg ${accent}`}
-        >
-          {icon}
-        </span>
-      </div>
-      <p className="mt-3 text-2xl font-semibold text-slate-900">{value}</p>
-    </Link>
-  );
-}
 
 export default async function DashboardPage() {
   let banks: Bank[];
@@ -158,72 +128,62 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-semibold text-slate-900">Dashboard</h1>
+      <PageHeader title="Dashboard" subtitle="Your accounts and tracking, at a glance." />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard
+        <StatTile
           label="Open banks"
           value={counts.open}
-          icon={<Landmark className="h-5 w-5 text-emerald-600" />}
-          accent="bg-emerald-50"
+          icon={<Landmark className="h-[18px] w-[18px]" />}
+          tone="emerald"
           href="/banks?status=open"
         />
-        <StatCard
+        <StatTile
           label="Accounts"
           value={accounts.length}
-          icon={<CreditCard className="h-5 w-5 text-blue-600" />}
-          accent="bg-blue-50"
+          icon={<CreditCard className="h-[18px] w-[18px]" />}
+          tone="blue"
           href="/accounts"
         />
-        <StatCard
+        <StatTile
           label="Total balance"
           value={formatCurrency(totalBalance)}
-          icon={<Wallet className="h-5 w-5 text-amber-600" />}
-          accent="bg-amber-50"
+          icon={<Wallet className="h-[18px] w-[18px]" />}
+          tone="amber"
           href="/accounts"
         />
-        <StatCard
+        <StatTile
           label="Need attention"
           value={attention.length}
-          icon={<AlertTriangle className="h-5 w-5 text-amber-600" />}
-          accent="bg-amber-50"
+          icon={<AlertTriangle className="h-[18px] w-[18px]" />}
+          tone={attention.length > 0 ? "rose" : "amber"}
           href="/accounts?attention=1"
         />
       </div>
 
-      <div className="mt-8 rounded-2xl border border-slate-200 bg-white">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-          <h2 className="font-semibold text-slate-900">Needs attention</h2>
-          <Link
-            href="/accounts?attention=1"
-            className="flex items-center gap-1 text-sm font-medium text-amber-600 hover:underline"
-          >
-            View all
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
+      <Card className="mt-6">
+        <CardHeader
+          title="Needs attention"
+          action={<CardLink href="/accounts?attention=1">View all<ArrowRight className="h-4 w-4" /></CardLink>}
+        />
 
         {attentionPreview.length === 0 ? (
-          <div className="flex flex-col items-center px-5 py-10 text-center">
-            <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-              <CircleCheck className="h-6 w-6" />
-            </span>
-            <p className="font-medium text-slate-900">All caught up</p>
-            <p className="mt-1 text-sm text-slate-500">
-              No accounts are close to going dormant and no CDs are maturing
-              soon.
-            </p>
-          </div>
+          <EmptyState
+            icon={<CircleCheck className="h-6 w-6" />}
+            title="All caught up"
+            subtitle="No accounts are close to going dormant and no CDs are maturing soon."
+            tone="good"
+          />
         ) : (
           <ul>
             {attentionPreview.map((item, i) => (
               <li key={`${item.account.id}-${i}`}>
                 <Link
                   href="/accounts?attention=1"
-                  className="flex items-center gap-3 border-b border-slate-100 px-5 py-3 last:border-0 hover:bg-slate-50"
+                  className="flex items-center gap-3 border-b border-slate-100 px-5 py-3 last:border-0 hover:bg-slate-50/80"
                 >
                   <span
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
                       item.level === "red"
                         ? "bg-rose-50 text-rose-600"
                         : "bg-amber-50 text-amber-600"
@@ -262,39 +222,29 @@ export default async function DashboardPage() {
             ))}
           </ul>
         )}
-      </div>
+      </Card>
 
-      <div className="mt-8 rounded-2xl border border-slate-200 bg-white">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-          <h2 className="font-semibold text-slate-900">Up next</h2>
-          <Link
-            href="/up-next"
-            className="flex items-center gap-1 text-sm font-medium text-amber-600 hover:underline"
-          >
-            View all
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
+      <Card className="mt-6">
+        <CardHeader
+          title="Up next"
+          action={<CardLink href="/up-next">View all<ArrowRight className="h-4 w-4" /></CardLink>}
+        />
 
         {upNextPreview.length === 0 ? (
-          <div className="flex flex-col items-center px-5 py-10 text-center">
-            <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-              <ListTodo className="h-6 w-6" />
-            </span>
-            <p className="font-medium text-slate-900">Nothing left to open</p>
-            <p className="mt-1 text-sm text-slate-500">
-              Every bank you're tracking is open, applied, or marked can&apos;t open.
-            </p>
-          </div>
+          <EmptyState
+            icon={<ListTodo className="h-6 w-6" />}
+            title="Nothing left to open"
+            subtitle="Every bank you're tracking is open, applied, or marked can't open."
+          />
         ) : (
           <ul>
             {upNextPreview.map((bank, i) => (
               <li key={bank.id}>
                 <Link
                   href="/up-next"
-                  className="flex items-center gap-3 border-b border-slate-100 px-5 py-3 last:border-0 hover:bg-slate-50"
+                  className="flex items-center gap-3 border-b border-slate-100 px-5 py-3 last:border-0 hover:bg-slate-50/80"
                 >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-sm font-semibold text-amber-700">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-sm font-semibold text-amber-700">
                     {i + 1}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -308,7 +258,7 @@ export default async function DashboardPage() {
             ))}
           </ul>
         )}
-      </div>
+      </Card>
 
       <DashboardReminders reminders={openReminders} />
 

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeftRight, ArrowRight } from "lucide-react";
 import type { OutstandingSweep } from "@/app/(app)/money/actions";
 import { formatCurrency } from "@/lib/format";
+import { Card, CardHeader, CardLink } from "@/components/ui/Card";
 
 /** Dashboard overview of cash currently moved out, grouped by reason. */
 export function DashboardMoneyOut({ sweeps }: { sweeps: OutstandingSweep[] }) {
@@ -17,23 +18,17 @@ export function DashboardMoneyOut({ sweeps }: { sweeps: OutstandingSweep[] }) {
   }
 
   return (
-    <div className="mt-8 rounded-2xl border border-slate-200 bg-white">
-      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-        <h2 className="flex items-center gap-2 font-semibold text-slate-900">
-          <ArrowLeftRight className="h-5 w-5 text-indigo-600" />
-          Money moved out
-        </h2>
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold text-slate-900">{formatCurrency(total)}</span>
-          <Link
-            href="/money"
-            className="flex items-center gap-1 text-sm font-medium text-amber-600 hover:underline"
-          >
-            Manage
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
-      </div>
+    <Card className="mt-6">
+      <CardHeader
+        title="Money moved out"
+        icon={<ArrowLeftRight className="h-[18px] w-[18px] text-indigo-600" />}
+        action={
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-semibold tabular-nums text-slate-900">{formatCurrency(total)}</span>
+            <CardLink href="/money">Manage<ArrowRight className="h-4 w-4" /></CardLink>
+          </div>
+        }
+      />
 
       <ul>
         {[...groups.entries()].map(([reason, items]) => {
@@ -42,7 +37,7 @@ export function DashboardMoneyOut({ sweeps }: { sweeps: OutstandingSweep[] }) {
             <li key={reason}>
               <Link
                 href="/money"
-                className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-3 last:border-0 hover:bg-slate-50"
+                className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-3 last:border-0 hover:bg-slate-50/80"
               >
                 <span className="min-w-0 truncate font-medium text-slate-800">{reason}</span>
                 <span className="shrink-0 text-sm font-semibold tabular-nums text-indigo-700">
@@ -53,6 +48,6 @@ export function DashboardMoneyOut({ sweeps }: { sweeps: OutstandingSweep[] }) {
           );
         })}
       </ul>
-    </div>
+    </Card>
   );
 }

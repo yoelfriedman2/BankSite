@@ -11,6 +11,7 @@ import {
 } from "@/app/(app)/banks/actions";
 import { restoreAccount, permanentlyDeleteAccount } from "@/app/(app)/accounts/actions";
 import { ACCOUNT_TYPE_LABELS, type Account } from "@/lib/types";
+import { PageHeader } from "@/components/ui/Card";
 
 type Props = {
   banks: TrashedBank[];
@@ -74,12 +75,7 @@ export function TrashClient({ banks, accounts }: Props) {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-900">Trash</h1>
-        <p className="text-sm text-slate-500">
-          Restore items or permanently delete them.
-        </p>
-      </div>
+      <PageHeader title="Trash" subtitle="Restore items or permanently delete them." />
 
       {empty ? (
         <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-16 text-center">
@@ -94,10 +90,10 @@ export function TrashClient({ banks, accounts }: Props) {
               <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Banks ({banks.length})
               </h2>
-              <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+              <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white shadow-sm">
                 <table className="min-w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs uppercase tracking-wide text-slate-500">
                       <th className="px-4 py-3 font-medium">Bank</th>
                       <th className="px-4 py-3 font-medium">Location</th>
                       <th className="px-4 py-3 font-medium">Accounts</th>
@@ -172,10 +168,10 @@ export function TrashClient({ banks, accounts }: Props) {
               <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
                 Accounts ({accounts.length})
               </h2>
-              <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+              <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white shadow-sm">
                 <table className="min-w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs uppercase tracking-wide text-slate-500">
                       <th className="px-4 py-3 font-medium">Holder</th>
                       <th className="px-4 py-3 font-medium">Bank</th>
                       <th className="px-4 py-3 font-medium">Type</th>

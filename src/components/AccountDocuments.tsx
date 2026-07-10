@@ -235,7 +235,7 @@ export function AccountDocuments({ accountId }: { accountId: string }) {
       {docs.length > 0 && (
         <ul className="space-y-1">
           {docs.map((doc) => (
-            <li key={doc.id} className="flex items-center gap-2 rounded-md bg-slate-50 px-2 py-1.5">
+            <li key={doc.id} className="flex items-center gap-2 rounded-md bg-slate-50 px-2 py-1.5 transition-colors hover:bg-slate-100/70">
               <FileIcon mimeType={doc.mime_type} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-medium text-slate-700">{doc.filename}</p>

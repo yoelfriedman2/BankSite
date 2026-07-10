@@ -8,6 +8,7 @@ import {
   getDocumentUrl,
   type AccountDocumentWithContext,
 } from "@/app/(app)/accounts/documents";
+import { Card, EmptyState } from "@/components/ui/Card";
 
 function FileIcon({ mimeType }: { mimeType: string | null }) {
   if (mimeType?.startsWith("image/")) return <ImgIcon className="h-4 w-4 shrink-0 text-slate-400" />;
@@ -61,10 +62,13 @@ export function DocumentsClient({ documents }: { documents: AccountDocumentWithC
 
   if (docs.length === 0) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
-        No documents uploaded yet — statements, photos, and scans you add from an
-        account&apos;s editor will show up here.
-      </div>
+      <Card>
+        <EmptyState
+          icon={<FileText className="h-6 w-6" />}
+          title="No documents uploaded yet"
+          subtitle="Statements, photos, and scans you add from an account's editor will show up here."
+        />
+      </Card>
     );
   }
 
@@ -74,13 +78,13 @@ export function DocumentsClient({ documents }: { documents: AccountDocumentWithC
         <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>
       )}
       {groups.map(([bankName, items]) => (
-        <div key={bankName} className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+        <Card key={bankName} className="p-4 sm:p-5">
           <h2 className="mb-3 text-sm font-semibold text-slate-800">{bankName}</h2>
           <ul className="space-y-1.5">
             {items.map((doc) => (
               <li
                 key={doc.id}
-                className="flex flex-col gap-2 rounded-md bg-slate-50 px-3 py-2 sm:flex-row sm:items-center sm:gap-3"
+                className="flex flex-col gap-2 rounded-md bg-slate-50 px-3 py-2 transition-colors hover:bg-slate-100/70 sm:flex-row sm:items-center sm:gap-3"
               >
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   <FileIcon mimeType={doc.mime_type} />
@@ -115,7 +119,7 @@ export function DocumentsClient({ documents }: { documents: AccountDocumentWithC
               </li>
             ))}
           </ul>
-        </div>
+        </Card>
       ))}
     </div>
   );

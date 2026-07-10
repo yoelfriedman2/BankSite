@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { FeesInterestClient, type FeeInterestRow } from "@/components/FeesInterestClient";
 import { DEMO_MODE, getDemoBanks, getDemoAccounts } from "@/lib/demo";
 import type { Account } from "@/lib/types";
+import { PageHeader } from "@/components/ui/Card";
 
 export const dynamic = "force-dynamic";
 
@@ -46,13 +47,10 @@ export default async function FeesInterestPage() {
 
   return (
     <div className="max-w-4xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-900">Fees & interest</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Every account with a recurring fee, and how much interest your CDs are
-          projected to earn based on the rates you&apos;ve filled in.
-        </p>
-      </div>
+      <PageHeader
+        title="Fees & interest"
+        subtitle="Every account with a recurring fee, and how much interest your CDs are projected to earn based on the rates you've filled in."
+      />
       <FeesInterestClient rows={rows} />
     </div>
   );

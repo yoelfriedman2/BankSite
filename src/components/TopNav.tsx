@@ -115,9 +115,11 @@ export function TopNav({
     };
   }, [open]);
 
+  const initial = (displayName || "?").trim().charAt(0).toUpperCase();
+
   return (
     <>
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur md:hidden">
+      <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur md:hidden">
         <div className="flex items-center gap-2 px-3 py-2.5">
           <button
             type="button"
@@ -171,11 +173,11 @@ export function TopNav({
             </button>
           </div>
 
-          <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-2">
+          <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-3">
             {groups.map((group) => (
-              <div key={group.label ?? "top"} className="space-y-1">
+              <div key={group.label ?? "top"} className="space-y-0.5">
                 {group.label && (
-                  <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                  <div className="px-3 pb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-slate-600">
                     {group.label}
                   </div>
                 )}
@@ -187,16 +189,21 @@ export function TopNav({
                       href={href}
                       data-tour={tour}
                       onClick={() => setOpen(false)}
-                      className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                      className={`group relative flex items-center gap-3 rounded-lg py-2.5 pl-3 pr-2.5 text-sm font-medium transition-colors ${
                         active
-                          ? "bg-slate-800 text-white"
-                          : "text-slate-400 hover:bg-slate-800/60 hover:text-white"
+                          ? "bg-amber-500/10 text-white"
+                          : "text-slate-400 hover:bg-white/5 hover:text-white"
                       }`}
                     >
-                      <Icon className="h-[18px] w-[18px]" />
-                      {label}
+                      {active && (
+                        <span className="absolute inset-y-1 left-0 w-[3px] rounded-full bg-amber-400" />
+                      )}
+                      <Icon
+                        className={`h-[18px] w-[18px] shrink-0 ${active ? "text-amber-400" : "text-slate-500 group-hover:text-slate-300"}`}
+                      />
+                      <span className="truncate">{label}</span>
                       {href === "/updates" && updatesUnread && (
-                        <span className="ml-auto h-2 w-2 rounded-full bg-amber-400" />
+                        <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
                       )}
                     </Link>
                   );
@@ -205,12 +212,17 @@ export function TopNav({
             ))}
           </nav>
 
-          <div className="border-t border-slate-800 p-3">
-            <div className="truncate px-2 pb-2 text-xs text-slate-500">{displayName}</div>
+          <div className="border-t border-white/5 p-3">
+            <div className="mb-1 flex items-center gap-2.5 rounded-lg px-2 py-1.5">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-700 text-xs font-semibold text-slate-200">
+                {initial}
+              </span>
+              <span className="truncate text-xs text-slate-400">{displayName}</span>
+            </div>
             <form action="/auth/signout" method="post">
               <button
                 type="submit"
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
               >
                 <LogOut className="h-[18px] w-[18px]" />
                 Sign out

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Bell, Check } from "lucide-react";
 import { toggleReminderDone, type OpenReminder } from "@/app/(app)/reminders";
 import { formatDate } from "@/lib/format";
+import { Card, CardHeader } from "@/components/ui/Card";
 
 export function DashboardReminders({ reminders }: { reminders: OpenReminder[] }) {
   const [items, setItems] = useState(reminders);
@@ -25,21 +26,19 @@ export function DashboardReminders({ reminders }: { reminders: OpenReminder[] })
   if (items.length === 0) return null;
 
   return (
-    <div className="mt-8 rounded-2xl border border-slate-200 bg-white">
-      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-        <h2 className="flex items-center gap-2 font-semibold text-slate-900">
-          <Bell className="h-5 w-5 text-amber-600" />
-          Reminders
-        </h2>
-        <span className="text-sm text-slate-400">{items.length}</span>
-      </div>
+    <Card className="mt-6">
+      <CardHeader
+        title="Reminders"
+        icon={<Bell className="h-[18px] w-[18px] text-amber-600" />}
+        count={items.length}
+      />
       <ul>
         {items.map((r) => {
           const overdue = r.due_date < today;
           return (
             <li
               key={r.id}
-              className="flex items-center gap-3 border-b border-slate-100 px-5 py-3 last:border-0 hover:bg-slate-50"
+              className="flex items-center gap-3 border-b border-slate-100 px-5 py-3 last:border-0 hover:bg-slate-50/80"
             >
               <button
                 type="button"
@@ -64,6 +63,6 @@ export function DashboardReminders({ reminders }: { reminders: OpenReminder[] })
           );
         })}
       </ul>
-    </div>
+    </Card>
   );
 }

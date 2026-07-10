@@ -4,6 +4,7 @@ import { DEMO_MODE, getDemoProfile } from "@/lib/demo";
 import { getRoadTripData } from "./actions";
 import { getFdicPermissions } from "@/app/(app)/fdic-sync/actions";
 import { RoadTripClient } from "@/components/RoadTripClient";
+import { PageHeader } from "@/components/ui/Card";
 
 export const dynamic = "force-dynamic";
 
@@ -24,13 +25,10 @@ export default async function RoadTripPage() {
 
   return (
     <div className="max-w-5xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-900">Road trip planner</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Pick must-visit banks, set your day, and see which other nearby banks fit —
-          with an ordered itinerary and Google Maps links at the end.
-        </p>
-      </div>
+      <PageHeader
+        title="Road trip planner"
+        subtitle="Pick must-visit banks, set your day, and see which other nearby banks fit — with an ordered itinerary and Google Maps links at the end."
+      />
       <RoadTripClient data={data} canRefreshBranches={canRefreshBranches} />
     </div>
   );

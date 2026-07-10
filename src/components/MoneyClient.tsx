@@ -18,6 +18,7 @@ import {
   type OutstandingSweep,
   type SweepAccountOption,
 } from "@/app/(app)/money/actions";
+import { PageHeader, StatTile, Card, EmptyState } from "@/components/ui/Card";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -64,34 +65,23 @@ export function MoneyClient({
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-900">Money moved</h1>
-        <p className="text-sm text-slate-500">
-          Track cash temporarily pulled from accounts (e.g. to fund an IPO) and what still needs to go back.
-        </p>
-      </div>
+      <PageHeader
+        title="Money moved"
+        subtitle="Track cash temporarily pulled from accounts (e.g. to fund an IPO) and what still needs to go back."
+      />
 
       {/* Summary */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div className="rounded-xl bg-slate-50 p-4">
-          <div className="text-xs text-slate-500">Out now, to return</div>
-          <div className="text-2xl font-semibold text-slate-900">{formatCurrency(totalOut)}</div>
-        </div>
-        <div className="rounded-xl bg-slate-50 p-4">
-          <div className="text-xs text-slate-500">Across accounts</div>
-          <div className="text-2xl font-semibold text-slate-900">{sweeps.length}</div>
-        </div>
-        <div className="rounded-xl bg-slate-50 p-4">
-          <div className="text-xs text-slate-500">Open reasons</div>
-          <div className="text-2xl font-semibold text-slate-900">{groups.length}</div>
-        </div>
+        <StatTile label="Out now, to return" value={formatCurrency(totalOut)} icon={<ArrowDownToLine className="h-[18px] w-[18px]" />} tone="amber" />
+        <StatTile label="Across accounts" value={sweeps.length} icon={<Check className="h-[18px] w-[18px]" />} tone="blue" />
+        <StatTile label="Open reasons" value={groups.length} icon={<Plus className="h-[18px] w-[18px]" />} tone="slate" />
       </div>
 
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-slate-700">Currently moved out</h2>
         <button
           onClick={() => setNewOpen(true)}
-          className="flex items-center gap-2 rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-600"
+          className="flex items-center gap-2 rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-amber-600"
         >
           <Plus className="h-4 w-4" />
           New money move
@@ -99,20 +89,20 @@ export function MoneyClient({
       </div>
 
       {groups.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center">
-          <ArrowDownToLine className="mx-auto mb-3 h-7 w-7 text-slate-300" />
-          <p className="font-medium text-slate-700">Nothing moved out right now</p>
-          <p className="mt-1 text-sm text-slate-400">
-            When you pull money from accounts to fund an IPO, record it here so you remember to put it back.
-          </p>
-        </div>
+        <Card className="border-dashed">
+          <EmptyState
+            icon={<ArrowDownToLine className="h-6 w-6" />}
+            title="Nothing moved out right now"
+            subtitle="When you pull money from accounts to fund an IPO, record it here so you remember to put it back."
+          />
+        </Card>
       ) : (
         <div className="space-y-4">
           {groups.map(([reason, items]) => {
             const groupTotal = items.reduce((s, x) => s + x.amount, 0);
             return (
-              <div key={reason} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3">
+              <Card key={reason} className="overflow-hidden">
+                <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-3">
                   <div className="min-w-0 flex-1">
                     <div className="font-medium text-slate-900">{reason}</div>
                     <div className="text-xs text-slate-500">
@@ -159,7 +149,7 @@ export function MoneyClient({
                     </li>
                   ))}
                 </ul>
-              </div>
+              </Card>
             );
           })}
         </div>

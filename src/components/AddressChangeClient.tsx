@@ -40,7 +40,7 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
   if (!data.campaign) {
     const count = data.eligibleItemCount;
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-6">
+      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm p-6">
         <h2 className="flex items-center gap-2 font-semibold text-slate-900">
           <MapPin className="h-5 w-5 text-amber-600" />
           Start an address change
@@ -106,7 +106,7 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Moving to</p>
@@ -162,7 +162,7 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
         </div>
       </div>
 
-      <ul className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <ul className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
         {data.items.map((item) => {
           const done = doneMap[item.id];
           return (

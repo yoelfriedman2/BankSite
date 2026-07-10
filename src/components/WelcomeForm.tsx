@@ -35,7 +35,7 @@ export function WelcomeForm({
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-900 px-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white p-8 shadow-2xl">
         <div className="mb-6 flex flex-col items-center gap-3 text-center">
           <Logo className="h-12 w-12" />
           <div>

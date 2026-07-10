@@ -10,6 +10,7 @@ import {
   type AccessStatus,
 } from "@/app/(app)/admin/actions";
 import { AdminBackupsPanel } from "@/components/AdminBackupsPanel";
+import { PageHeader } from "@/components/ui/Card";
 
 function fmtDate(iso: string | null) {
   if (!iso) return "—";
@@ -103,17 +104,15 @@ export function AdminUsersClient({
 
   return (
     <div className="max-w-4xl">
-      <div className="mb-6">
-        <h1 className="flex items-center gap-2 text-2xl font-semibold text-slate-900">
-          <ShieldCheck className="h-6 w-6 text-amber-500" />
-          Users
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Everyone with access, and what they&apos;ve saved. Deleting a user permanently
-          removes their account and their private data — their public community notes
-          stay, credited to their name.
-        </p>
-      </div>
+      <PageHeader
+        title={
+          <span className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-amber-500" />
+            Users
+          </span>
+        }
+        subtitle="Everyone with access, and what they've saved. Deleting a user permanently removes their account and their private data — their public community notes stay, credited to their name."
+      />
 
       <AdminBackupsPanel />
 
@@ -170,7 +169,7 @@ export function AdminUsersClient({
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-400">

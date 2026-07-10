@@ -3,6 +3,7 @@ import { ChecksClient, type AccountWithBank } from "@/components/ChecksClient";
 import { DEMO_MODE, getDemoBanks, getDemoAccounts } from "@/lib/demo";
 import { getAllPrintedChecks } from "@/app/(app)/checks/actions";
 import type { Account, Bank } from "@/lib/types";
+import { PageHeader } from "@/components/ui/Card";
 
 export default async function ChecksPage() {
   let accounts: AccountWithBank[];
@@ -29,12 +30,10 @@ export default async function ChecksPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-900">Print Checks</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Select an account to fill in and print a check. Routing and account numbers are pulled from your saved account data.
-        </p>
-      </div>
+      <PageHeader
+        title="Print Checks"
+        subtitle="Select an account to fill in and print a check. Routing and account numbers are pulled from your saved account data."
+      />
       <ChecksClient accounts={accounts} history={history} />
     </div>
   );

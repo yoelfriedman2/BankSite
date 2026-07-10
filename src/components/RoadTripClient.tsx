@@ -297,7 +297,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
   const currentBankCerts = [...new Set(fullSequence.map((s) => s.cert))];
 
   const branchRefreshBar = canRefreshBranches && (
-    <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm">
       <div className="min-w-0">
         <p className="flex items-center gap-1.5 text-sm font-medium text-slate-800">
           <MapPin className="h-4 w-4 text-amber-500" />
@@ -780,7 +780,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+    <section className="rounded-2xl border border-slate-200/80 bg-white shadow-sm p-4 sm:p-5">
       <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
       {subtitle && <p className="mb-4 mt-0.5 text-xs text-slate-500">{subtitle}</p>}
       {!subtitle && <div className="mb-4" />}

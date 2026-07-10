@@ -14,6 +14,7 @@ import {
 import { StatusBadge, PriorityBadge } from "@/components/badges";
 import { OPEN_METHOD_LABELS, ELIGIBILITY_LABELS } from "@/lib/types";
 import { formatCurrency } from "@/lib/format";
+import { Card, CardHeader, EmptyState } from "@/components/ui/Card";
 
 function InfoLine({ bank }: { bank: QueueBank }) {
   const parts: string[] = [];
@@ -71,23 +72,23 @@ export function UpNextClient({ data }: { data: UpNextData }) {
   return (
     <div className="space-y-6">
       {/* ── Your queue ── */}
-      <div className="rounded-2xl border border-slate-200 bg-white">
-        <div className="border-b border-slate-100 px-5 py-4">
-          <h2 className="font-semibold text-slate-900">Your queue</h2>
-          <p className="mt-0.5 text-sm text-slate-500">
-            The order you've decided to work through. Reorder with the arrows.
-          </p>
-        </div>
+      <Card>
+        <CardHeader
+          title="Your queue"
+          subtitle="The order you've decided to work through. Reorder with the arrows."
+        />
         {data.queued.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-slate-400">
-            Nothing queued yet — add a few banks from Suggested below.
-          </p>
+          <EmptyState
+            icon={<Plus className="h-6 w-6" />}
+            title="Nothing queued yet"
+            subtitle="Add a few banks from Suggested below."
+          />
         ) : (
           <ul>
             {data.queued.map((bank, i) => (
               <li
                 key={bank.id}
-                className="flex items-center gap-3 border-b border-slate-100 px-5 py-3 last:border-0 hover:bg-slate-50"
+                className="flex items-center gap-3 border-b border-slate-100 px-5 py-3 last:border-0 hover:bg-slate-50/80"
               >
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-semibold text-amber-700">
                   {i + 1}
@@ -146,14 +147,12 @@ export function UpNextClient({ data }: { data: UpNextData }) {
             ))}
           </ul>
         )}
-      </div>
+      </Card>
 
       {/* ── Applied, waiting to hear back ── */}
       {data.applied.length > 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 px-5 py-4">
-            <h2 className="font-semibold text-slate-900">Applied — waiting to hear back</h2>
-          </div>
+        <Card>
+          <CardHeader title="Applied — waiting to hear back" />
           <ul>
             {data.applied.map((bank) => (
               <li
@@ -181,31 +180,28 @@ export function UpNextClient({ data }: { data: UpNextData }) {
               </li>
             ))}
           </ul>
-        </div>
+        </Card>
       )}
 
       {/* ── Suggested ── */}
-      <div className="rounded-2xl border border-slate-200 bg-white">
-        <div className="border-b border-slate-100 px-5 py-4">
-          <h2 className="font-semibold text-slate-900">Suggested — easiest first</h2>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Ranked by your priority, then how easy each is to open — online and
-            nationwide first.
-          </p>
-        </div>
+      <Card>
+        <CardHeader
+          title="Suggested — easiest first"
+          subtitle="Ranked by your priority, then how easy each is to open — online and nationwide first."
+        />
         {data.suggested.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-slate-400">
-            {data.suggestedTotal === 0
-              ? "No banks left to suggest — nice work."
-              : "Nothing to suggest right now."}
-          </p>
+          <EmptyState
+            icon={<Plus className="h-6 w-6" />}
+            title={data.suggestedTotal === 0 ? "No banks left to suggest — nice work" : "Nothing to suggest right now"}
+            tone={data.suggestedTotal === 0 ? "good" : "neutral"}
+          />
         ) : (
           <>
             <ul>
               {data.suggested.map((bank) => (
                 <li
                   key={bank.id}
-                  className="flex items-center gap-3 border-b border-slate-100 px-5 py-3 last:border-0 hover:bg-slate-50"
+                  className="flex items-center gap-3 border-b border-slate-100 px-5 py-3 last:border-0 hover:bg-slate-50/80"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="flex flex-wrap items-center gap-1.5 font-medium text-slate-900">
@@ -252,7 +248,7 @@ export function UpNextClient({ data }: { data: UpNextData }) {
             )}
           </>
         )}
-      </div>
+      </Card>
     </div>
   );
 }
