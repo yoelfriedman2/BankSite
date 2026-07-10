@@ -29,7 +29,10 @@ info, notes); each user's status/notes/accounts/balances are private via RLS.
     the signed-in user's own rows only).
   - `lib/supabase/admin.ts` (`createAdminClient`) — service-role, bypasses RLS.
     Only used server-side for: propagating shared bank fields to other users,
-    sending broadcast emails, admin/owner tooling, and the FDIC sync tool.
+    sending broadcast emails, admin/owner tooling, the FDIC sync tool, and the
+    scheduled cron jobs (`api/cron/*` — reminders, backups, monthly fee and
+    interest auto-accrual), which by nature run with no signed-in user to
+    scope an RLS-respecting client to.
     **Never import this into a client component.**
 - Every route's data-mutating logic lives in a co-located `"use server"`
   `actions.ts` file (e.g. `app/(app)/banks/actions.ts`,
@@ -104,13 +107,13 @@ the code:
    add an entry at the top. One feature = one bubble — a few sub-points are fine
    *only* if they describe that same feature; if a session shipped two unrelated
    features (even same-day), give each its own entry rather than merging them.
-   Per that file's own header comment: **big features and major, user-visible
-   bug fixes only** — most bug fixes are invisible to users and don't belong
-   here; only log a fix if a real user would notice and recognize "that's fixed
-   now" (e.g. a whole feature was silently broken for everyone). When in doubt,
-   leave it out. Always skip internal/security-only changes and owner-only admin
-   tooling (nobody else can use it, so don't advertise it in the family-facing
-   log).
+   Per that file's own header comment: **genuinely new, user-visible features
+   only — never bug fixes**, no matter how visible the bug was or how big the
+   fix felt while shipping it. If it's fixing something that already existed
+   rather than adding something that didn't, it does not belong here. When in
+   doubt, leave it out. Always skip internal/security-only changes and
+   owner-only admin tooling (nobody else can use it, so don't advertise it in
+   the family-facing log).
 2. **`src/components/GuideClient.tsx`** ("How it works" walkthrough) — if the
    feature is something an end user would want explained, add or update a topic.
    Same exclusion: admin-only tooling doesn't belong here either (there's no
@@ -136,8 +139,100 @@ the code:
    to `preview_snapshot` (accessibility tree, confirms content/structure) plus
    the scrollWidth check (confirms no overflow) rather than giving up on
    verification.
+7. **Data-safety checklist, before every commit that touches schema, RLS, or a
+   server action.** This app's whole value proposition is that each user's
+   private data (accounts, balances, credentials, notes) stays theirs and
+   nobody else's — that has to hold on every single change, not just the ones
+   explicitly framed as "security work." Before committing:
+   - **New tables/columns default to RLS-safe.** Every per-user table needs a
+     real RLS policy scoping rows to `auth.uid()` (see any existing migration
+     for the pattern) — never ship a new table without one, and never widen an
+     existing "own rows only" policy to "any authenticated" without a specific
+     reason (the 2026-07-07 access-control incident in "Current state" below
+     is what widening it too far looks like). Shared tables (banks reference
+     data, community notes) are the deliberate exception — see "Shared vs.
+     private bank fields" above — but a table being shared should be a
+     conscious choice, not a default.
+   - **New/changed columns don't retroactively break other users' rows.**
+     Additive migrations only (`ADD COLUMN IF NOT EXISTS`, nullable or with a
+     safe default) — never a migration that rewrites or drops existing data
+     without the user explicitly asking for that specific cleanup.
+   - **New code degrades gracefully until its migration is run**, per the
+     "Migrations are never run automatically" convention above — a family
+     member using the app between when code ships and when the owner runs the
+     migration should see the app work as before, not a crash. (A few
+     features are explicitly exempted from this, and say so loudly in "Current
+     state" when they are — e.g. sweep transactions, interest accrual —
+     because the alternative was silent money-math corruption; that's a
+     conscious tradeoff each time, not the default.)
+   - **Never use `createAdminClient` (service-role, bypasses RLS) in a client
+     component, or for anything other than the specific documented cases**
+     (shared-field propagation, broadcast email, admin/owner tooling, FDIC
+     sync) — see "Tech stack & architecture" above.
+   - **Manual verification, not just "the types check"**: if the change is
+     genuinely hard to click-test in DEMO_MODE (e.g. it depends on real
+     multi-user RLS behavior), say so explicitly in the session's summary
+     rather than silently skipping the check.
 
 ## Current state (update this — most recent first)
+
+**2026-07-10 (automatic monthly interest, widened to every account type)** — Interest tracking was
+CD-only (a rate field only appeared on CD accounts), which is almost certainly why a chat report of
+"I entered an interest rate and don't see it on the Fees & interest page" turned out not to be a
+bug at all in DEMO_MODE testing (add/edit both worked correctly end-to-end for a CD) — the account
+they'd tried it on was very likely a savings/checking/money-market account, where the field simply
+didn't exist yet. Two things shipped together, after confirming both with the user first (this
+touches real money math, so it wasn't guessed):
+
+- **Interest rate (APY %) now applies to every account type**, not just CD — moved from the
+  CD-only conditional block in `AccountModal.tsx`'s Dates box into the always-visible "Balance &
+  fees" box (next to the monthly fee fields, since both are now general money-config, not
+  type-specific). `AccountViewModal.tsx`'s read-only view and `FeesInterestClient.tsx` (renamed
+  "CD interest" → "Interest") updated the same way — the Fees & interest page now totals every
+  rate-bearing account, with the account type shown inline, CD maturity date only shown for CDs.
+- **Automatic monthly interest accrual** (migration **0038_interest_accrual.sql**, adds
+  `accounts.interest_last_accrued_on` — cron-only, mirrors how `monthly_fee_last_charged_on` tracks
+  the monthly-fee auto-deduction from migration 0029): once a rate is set on any account, the
+  existing daily cron (`api/cron/reminders/route.ts`) now credits one month's interest
+  (`balance × rate / 100 / 12`, rounded to cents) to the balance every calendar month, logged to
+  `account_balance_history` with reason "interest credited" — same self-healing "due" check shape
+  as the monthly fee (a missed cron day still catches up on the next run instead of skipping the
+  month). New pure module `lib/interestAccrual.ts` (`monthlyInterestAmount`,
+  `isInterestAccrualDue`, `stampOnRateChange`) mirrors `lib/monthlyFee.ts` on purpose — same
+  independently-testable-without-a-database shape. When a rate is first set or changed, the account
+  editor stamps `interest_last_accrued_on` to today so the *next* cron run starts a clean calendar
+  month rather than crediting a full month for a period that only partially elapsed under the new
+  rate — same "skip the partial period" precedent as the monthly fee's `skipCurrentMonthIfPast`.
+  Per explicit user decision, this applies to CDs too (the tracked balance grows monthly like a
+  real accruing account would, not just a static "projected annual interest" figure) — a deliberate
+  simplification of how real CDs actually work (locked until maturity), chosen because the user
+  wanted a running view of current CD value rather than a maturity-only figure.
+  **Not optional/gracefully-degrading** (see `TODO.md`) — same as the monthly fee and sweep
+  transactions before it, this migration must run before account saves work again once this ships.
+
+Verified three ways, per explicit "triple check the money math" instruction: (1) a standalone Node
+script exercising the pure accrual logic — self-healing due-checks across month/year boundaries,
+the skip-partial-period stamp, and a 12-month compounding simulation on a sample balance confirming
+the total credited lands slightly *above* the flat annual projection already shown on the page (real
+compounding, not a bug) and within ~2% of it (not wildly off); (2) `npm run build` and
+`tsc --noEmit` both clean; (3) a full DEMO_MODE Playwright pass — added a rate to a brand-new CD
+(desktop) and to a brand-new *savings* account (the actual likely repro of the original complaint),
+confirmed both show correctly on Fees & interest with the right per-type formatting, confirmed the
+read-only view modal shows the rate for a non-CD account, confirmed the CD editor still shows CD
+maturity date correctly after the field reshuffle, and confirmed no mobile overflow (375px) on the
+account modal, view modal, or Fees & interest page. Changelog and Guide entries added (genuinely new
+feature, not a bug fix — see the tightened changelog policy below).
+
+**2026-07-10 (changelog policy tightened to "features only, never bug fixes")** — Same session,
+explicit chat request: `src/lib/changelog.ts`'s header comment previously allowed "major,
+user-visible bug fixes" as well as features. Tightened to features only, full stop — no bug fix
+belongs on the family-facing Updates page regardless of how visible or long-standing it was. Also
+added a "Data-safety checklist" as standing instruction #7 above (RLS-safe by default on new
+tables, additive-only migrations, graceful degradation until a migration runs, admin-client usage
+confined to its documented cases, verify-don't-assume for anything hard to click-test in
+DEMO_MODE) — codifying what this project has followed by convention into an explicit pre-commit
+checklist, per an explicit chat request to make sure user-data isolation and non-destructive
+schema changes stay guaranteed on every commit, not just the ones framed as "security work."
 
 **2026-07-10 (Account view/edit popups redesigned to match the new Banks look)** — Follow-up to the
 Banks drawer redesign below, same session: `AccountModal.tsx` (the add/edit popup) and

@@ -8,6 +8,7 @@ import {
 } from "@/lib/email";
 import { buildBackupZip, saveBackupToStorage } from "@/lib/backup";
 import { isMonthlyFeeDue } from "@/lib/monthlyFee";
+import { isInterestAccrualDue, monthlyInterestAmount } from "@/lib/interestAccrual";
 
 /* Called once daily by Vercel Cron (see vercel.json).
    Checks every user who has notify_email=true and sends activity reminders. */
@@ -202,6 +203,67 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ── Monthly interest auto-accrual ──
+  // Rides this same daily cron, same shape as the monthly fee section above.
+  // Reads interest_rate (migration 0031) / interest_last_accrued_on
+  // (migration 0038) — if 0038 hasn't run yet the select below just errors
+  // and this section no-ops rather than failing the whole cron run.
+  let interestCredited = 0;
+  const { data: interestAccounts, error: interestErr } = await admin
+    .from("accounts")
+    .select("id, user_id, balance, interest_rate, interest_last_accrued_on")
+    .is("deleted_at", null)
+    .not("interest_rate", "is", null);
+
+  if (interestErr) {
+    console.error("[cron/reminders] interest accrual query failed (migration 0038 not run yet?):", interestErr.message);
+  } else {
+    const todayStr = today.toISOString().slice(0, 10);
+    for (const a of interestAccounts ?? []) {
+      const due = isInterestAccrualDue(
+        {
+          interest_rate: a.interest_rate != null ? Number(a.interest_rate) : null,
+          interest_last_accrued_on: a.interest_last_accrued_on as string | null,
+        },
+        today,
+      );
+      if (!due) continue;
+
+      const rate = Number(a.interest_rate);
+      const oldBalance = a.balance != null ? Number(a.balance) : 0;
+      const amount = monthlyInterestAmount(oldBalance, rate);
+
+      if (amount <= 0) {
+        // Nothing to credit (zero/negative balance) — still stamp the month
+        // so this account isn't re-evaluated every day for the rest of it.
+        await admin
+          .from("accounts")
+          .update({ interest_last_accrued_on: todayStr })
+          .eq("id", a.id);
+        continue;
+      }
+
+      const newBalance = Number((oldBalance + amount).toFixed(2));
+      const { error: updateErr } = await admin
+        .from("accounts")
+        .update({ balance: newBalance, interest_last_accrued_on: todayStr })
+        .eq("id", a.id);
+      if (updateErr) {
+        console.error(`[cron/reminders] interest credit failed for account ${a.id}:`, updateErr.message);
+        continue;
+      }
+      await admin.from("account_balance_history").insert({
+        user_id: a.user_id,
+        account_id: a.id,
+        as_of_date: todayStr,
+        balance: newBalance,
+        change_amount: amount,
+        reason: "interest credited",
+      });
+      interestCredited++;
+    }
+  }
+
   // ── Weekly full backup (Mondays, or on demand with ?backup=1) ──
   // Rides this daily cron because Vercel's free plan caps the project at two
   // cron jobs, both already used. Every Monday the whole database is zipped
@@ -230,5 +292,5 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, reminded: sent, remindersEmailed, feesCharged, backup });
+  return NextResponse.json({ ok: true, reminded: sent, remindersEmailed, feesCharged, interestCredited, backup });
 }

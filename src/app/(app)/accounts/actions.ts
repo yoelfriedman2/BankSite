@@ -16,6 +16,7 @@ import {
 } from "@/lib/demo";
 import type { Account, ActivityType } from "@/lib/types";
 import { skipCurrentMonthIfPast } from "@/lib/monthlyFee";
+import { stampOnRateChange } from "@/lib/interestAccrual";
 
 export type AccountFormValues = {
   id?: string;
@@ -72,7 +73,10 @@ function monthlyFeeFields(values: AccountFormValues): { monthly_fee: number | nu
 
 function buildPatch(
   values: AccountFormValues,
-): Omit<AccountFields, "deleted_at" | "last_check_number" | "monthly_fee_last_charged_on"> {
+): Omit<
+  AccountFields,
+  "deleted_at" | "last_check_number" | "monthly_fee_last_charged_on" | "interest_last_accrued_on"
+> {
   const log = (values.activity_log ?? [])
     .filter((e) => e.date)
     .map((e) => ({
@@ -111,7 +115,15 @@ function buildPatch(
 
 function fieldsFromAccount(
   a: Account,
-): Omit<AccountFields, "deleted_at" | "last_check_number" | "monthly_fee" | "monthly_fee_day" | "monthly_fee_last_charged_on"> {
+): Omit<
+  AccountFields,
+  | "deleted_at"
+  | "last_check_number"
+  | "monthly_fee"
+  | "monthly_fee_day"
+  | "monthly_fee_last_charged_on"
+  | "interest_last_accrued_on"
+> {
   return {
     holder: a.holder,
     account_type: a.account_type,
@@ -159,15 +171,23 @@ export async function upsertAccount(
       const feeConfigChanged =
         (prev?.monthly_fee ?? null) !== patch.monthly_fee ||
         (prev?.monthly_fee_day ?? null) !== patch.monthly_fee_day;
+      // Only touch interest_last_accrued_on when the rate itself actually
+      // changed — never on an unrelated field edit, or a real pending
+      // accrual could get silently reset for the month.
+      const rateChanged = (prev?.interest_rate ?? null) !== patch.interest_rate;
       updateDemoAccount(values.id, {
         ...patch,
         ...(feeConfigChanged ? { monthly_fee_last_charged_on: monthlyFeeLastChargedOn } : {}),
+        ...(rateChanged
+          ? { interest_last_accrued_on: stampOnRateChange(patch.interest_rate, now) }
+          : {}),
       });
     } else {
       addDemoAccount(values.bank_id, {
         ...patch,
         last_check_number: null,
         monthly_fee_last_charged_on: monthlyFeeLastChargedOn,
+        interest_last_accrued_on: stampOnRateChange(patch.interest_rate, now),
         deleted_at: null,
       });
     }
@@ -199,7 +219,7 @@ export async function upsertAccount(
     // "balance as of date" history stays accurate.
     const { data: prev } = await supabase
       .from("accounts")
-      .select("balance, monthly_fee, monthly_fee_day")
+      .select("balance, monthly_fee, monthly_fee_day, interest_rate")
       .eq("id", values.id)
       .maybeSingle();
     const oldBalance = prev?.balance != null ? Number(prev.balance) : null;
@@ -210,6 +230,10 @@ export async function upsertAccount(
     const feeConfigChanged =
       (prev?.monthly_fee ?? null) !== patch.monthly_fee ||
       (prev?.monthly_fee_day ?? null) !== patch.monthly_fee_day;
+    // Same idea for interest: only reset the accrual bookkeeping when the
+    // rate itself actually changed, never on an unrelated field edit.
+    const rateChanged =
+      (prev?.interest_rate != null ? Number(prev.interest_rate) : null) !== patch.interest_rate;
     const dbPatch = {
       ...patch,
       ...(feeConfigChanged
@@ -219,6 +243,9 @@ export async function upsertAccount(
                 ? skipCurrentMonthIfPast(patch.monthly_fee_day, now)
                 : null,
           }
+        : {}),
+      ...(rateChanged
+        ? { interest_last_accrued_on: stampOnRateChange(patch.interest_rate, now) }
         : {}),
     };
 
@@ -248,6 +275,7 @@ export async function upsertAccount(
       .insert({
         ...patch,
         monthly_fee_last_charged_on: monthlyFeeLastChargedOn,
+        interest_last_accrued_on: stampOnRateChange(patch.interest_rate, now),
         user_id: user.id,
         bank_id: values.bank_id,
       })
@@ -366,10 +394,15 @@ export async function duplicateAccount(
       activity_log: [],
       last_check_number: null,
       // A duplicate is a fresh account — it doesn't inherit the source's
-      // recurring fee terms (or its charge history) automatically.
+      // recurring fee terms (or its charge history) automatically. The
+      // interest rate itself does carry over (same bank, plausibly the same
+      // rate), but its accrual bookkeeping is reset via stampOnRateChange so
+      // the duplicate skips a backdated partial-month credit, same as a
+      // freshly-configured rate would.
       monthly_fee: null,
       monthly_fee_day: null,
       monthly_fee_last_charged_on: null,
+      interest_last_accrued_on: stampOnRateChange(source.interest_rate, new Date()),
       deleted_at: null,
     });
     if (demoBank && PROMOTE_FROM.has(demoBank.status)) {
@@ -398,6 +431,7 @@ export async function duplicateAccount(
     ...copy,
     account_number: null,
     activity_log: [],
+    interest_last_accrued_on: stampOnRateChange((source as Account).interest_rate, new Date()),
     user_id: user.id,
     bank_id: bankId,
   });

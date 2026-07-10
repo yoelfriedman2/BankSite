@@ -297,6 +297,23 @@ export function AccountModal({
                   Set both to auto-deduct this amount every month on that day. Leave either blank to turn it off.
                 </p>
               </div>
+              <div>
+                <label className={labelClass} htmlFor="interest_rate">Interest rate (APY %)</label>
+                <input
+                  id="interest_rate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="e.g. 4.5"
+                  className={inputClass}
+                  value={values.interest_rate}
+                  onChange={(e) => set("interest_rate", e.target.value)}
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  Once set, interest is credited to the balance automatically around the start of
+                  each month, and shown on the Fees &amp; interest page.
+                </p>
+              </div>
             </div>
           </Box>
 
@@ -342,33 +359,15 @@ export function AccountModal({
               )}
 
               {showCd && (
-                <>
-                  <div>
-                    <label className={labelClass} htmlFor="cd_maturity_date">CD maturity date</label>
-                    <DateInput
-                      id="cd_maturity_date"
-                      className={inputClass}
-                      value={values.cd_maturity_date}
-                      onChange={(v) => set("cd_maturity_date", v)}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelClass} htmlFor="interest_rate">Interest rate (APY %)</label>
-                    <input
-                      id="interest_rate"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="e.g. 4.5"
-                      className={inputClass}
-                      value={values.interest_rate}
-                      onChange={(e) => set("interest_rate", e.target.value)}
-                    />
-                    <p className="mt-1 text-xs text-slate-400">
-                      Used on the Fees &amp; interest page to project this CD&apos;s annual interest.
-                    </p>
-                  </div>
-                </>
+                <div>
+                  <label className={labelClass} htmlFor="cd_maturity_date">CD maturity date</label>
+                  <DateInput
+                    id="cd_maturity_date"
+                    className={inputClass}
+                    value={values.cd_maturity_date}
+                    onChange={(v) => set("cd_maturity_date", v)}
+                  />
+                </div>
               )}
             </div>
           </Box>

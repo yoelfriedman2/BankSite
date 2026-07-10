@@ -49,8 +49,9 @@ export default async function FeesInterestPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-slate-900">Fees & interest</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Every account with a recurring fee, and how much interest your CDs are
-          projected to earn based on the rates you&apos;ve filled in.
+          Every account with a recurring fee, and how much interest your accounts are
+          projected to earn based on the rates you&apos;ve filled in — interest is
+          credited automatically each month.
         </p>
       </div>
       <FeesInterestClient rows={rows} />

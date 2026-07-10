@@ -5,13 +5,13 @@
 // combine them into one bubble with unrelated sub-points. Add new ones at the
 // TOP.
 //
-// Big features and major, user-visible bug fixes ONLY. Do not add an entry for
-// every bug fixed this session — most bug fixes are invisible to users (a
-// regression from a prior refactor, an edge case in a form, a query limit) and
-// don't belong here. Only include a fix if a real user hit it, noticed it, and
-// would recognize "oh, that's fixed now" — e.g. a whole feature was silently
-// broken for everyone. When in doubt, leave it out. Always skip internal,
-// security-only, and owner-only-admin-tooling changes.
+// Genuinely new, user-visible FEATURES ONLY — never bug fixes, no matter how
+// big the fix felt while shipping it, and no matter how visible the thing
+// that was broken was. If it's fixing something that already existed rather
+// than adding something that didn't, it does not belong here, full stop —
+// don't log it even as a one-line aside on an unrelated feature entry. Skip
+// internal, security-only, and owner-only-admin-tooling changes too. When in
+// doubt, leave it out.
 
 export interface ChangelogEntry {
   date: string; // YYYY-MM-DD
@@ -20,6 +20,15 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    date: "2026-07-10",
+    title: "Automatic monthly interest",
+    items: [
+      "Interest rate (APY) can now be set on any account — checking, savings, and money market, not just CDs.",
+      "Once a rate is set, interest is credited to the balance automatically around the start of every month (no more updating balances by hand to reflect interest earned) and logged in that account's balance history.",
+      "The Fees & interest page now totals projected annual interest across every rate-bearing account, not just CDs.",
+    ],
+  },
   {
     date: "2026-07-10",
     title: "Redesigned the account view and editor",

@@ -4,6 +4,14 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 
 ## One-time setup pending
 
+- **Run migration `0038_interest_accrual.sql` — NOT optional, run promptly.** Adds
+  `accounts.interest_last_accrued_on`, the cron-only bookkeeping column the new automatic monthly
+  interest feature needs. Unlike most migrations in this file, this one does **not** degrade
+  gracefully: until it runs, **adding any new account will fail** (every insert writes this column
+  unconditionally), and **editing an existing account will fail if that edit touches the interest
+  rate field** (edits to unrelated fields are unaffected — same "only touch it when the config
+  actually changed" pattern as `monthly_fee_last_charged_on` from migration 0029). Run this one
+  first, before anything else pending below.
 - **Run migration `0037_road_trips_approved_only.sql`** — small security follow-up to 0036:
   extends the "must be approved" RLS rule to the `road_trips` table (a shared/public trip was
   still readable by a signed-in-but-not-approved user). Purely an RLS policy change, no app code

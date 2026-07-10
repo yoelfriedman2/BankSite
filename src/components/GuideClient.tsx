@@ -194,13 +194,14 @@ const TOPICS: Topic[] = [
     id: "fees-interest",
     icon: Percent,
     title: "Fees & interest",
-    blurb: "Every recurring fee and CD interest total, in one place.",
+    blurb: "Every recurring fee and every account's interest, in one place.",
     points: [
       "Every account with a monthly fee, totaled per month and per year",
-      "Every CD's projected annual interest, based on the rate you set",
+      "Every account's projected annual interest, based on the rate you set — checking, savings, and money market accounts, not just CDs",
+      "Interest is credited to the balance automatically around the start of each month, once a rate is set — no need to update balances by hand",
     ],
     tips: [
-      "Add an interest rate (APY) on a CD's editor to include it in the total — CDs without a rate show \"add a rate to include\" instead of being silently skipped.",
+      "Add an interest rate (APY) on any account's editor to include it here and turn on auto-crediting — accounts without a rate are simply left out, not shown as $0.",
     ],
   },
   {

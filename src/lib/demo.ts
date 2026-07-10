@@ -131,6 +131,7 @@ function blankAccount(): AccountFields {
     monthly_fee_day: null,
     monthly_fee_last_charged_on: null,
     interest_rate: null,
+    interest_last_accrued_on: null,
     exclude_min_balance: false,
     deleted_at: null,
   };
@@ -763,6 +764,7 @@ export function importDemoRows(rows: ImportRow[]): {
           monthly_fee_day: null,
           monthly_fee_last_charged_on: null,
           interest_rate: null,
+          interest_last_accrued_on: null,
           exclude_min_balance: false,
           deleted_at: null,
         });

@@ -74,19 +74,17 @@ export function AccountViewModal({
                   : null
               }
             />
+            <Frow
+              label="Interest rate"
+              value={account.interest_rate != null ? `${account.interest_rate}% APY` : null}
+            />
           </Box>
 
           <Box>
             <BoxHeader title="Dates" />
             <Frow label="Date opened" value={formatDate(account.date_opened)} />
             {account.account_type === "cd" ? (
-              <>
-                <Frow label="CD maturity" value={formatDate(account.cd_maturity_date)} />
-                <Frow
-                  label="Interest rate"
-                  value={account.interest_rate != null ? `${account.interest_rate}% APY` : null}
-                />
-              </>
+              <Frow label="CD maturity" value={formatDate(account.cd_maturity_date)} />
             ) : (
               <Frow label="Last activity" value={formatDate(account.last_activity_date)} />
             )}
