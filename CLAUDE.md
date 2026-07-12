@@ -176,6 +176,41 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-12 (external bank/website links now escape the packaged Android app)** — User reported
+that, in the installed APK (the TWA built earlier), tapping a bank's website link kept them inside
+the app instead of handing off to a real browser. Every such link already used the correct web
+convention (`target="_blank" rel="noopener noreferrer"` — confirmed present on all six spots:
+`BankForm.tsx`'s bank drawer, `AddressChangeClient.tsx`, `UpNextClient.tsx`,
+`HoldingCompaniesClient.tsx`'s NIC download link, and `RoadTripClient.tsx`'s bank-website and
+Google Maps links), so this wasn't a code bug in the normal browser/PWA sense — it's how Android's
+Trusted Web Activity spec itself works: any off-origin navigation renders as a minimal in-task
+Custom Tab overlay rather than launching the device's actual separate browser app, and there's no
+TWA manifest flag to change that.
+
+Added `src/lib/externalLink.ts` (`isRunningAsTwa` — detects the TWA via
+`document.referrer.startsWith("android-app://")`, the one reliable signal Android stamps only when
+a page is launched from the installed app; `openInExternalBrowser` — forces a URL out via an
+Android `intent://` URL) and a new shared `<ExternalLink>` component
+(`src/components/ExternalLink.tsx`) that renders a normal `target="_blank"` anchor everywhere and
+only intercepts the click to redirect through the intent when actually running inside the TWA —
+zero behavior change in a normal browser tab or installed PWA. All six external-link spots above
+now render through this component instead of a raw `<a>`. **New convention: any future outbound
+link (bank websites, external reference/download links) should use `<ExternalLink>` from
+`@/components/ExternalLink` instead of a raw `<a target="_blank">`**, so it automatically gets the
+same TWA hand-off behavior.
+
+**Not verified against the real installed APK** — this sandbox has no Android device/emulator and
+no way to install a TWA, so the `document.referrer` TWA-detection path is untested against a real
+app launch (the fallback normal-browser path was verified: `npm run build` clean, and confirmed by
+reading through every call site that the rendered anchor is unchanged — same `target`/`rel`, same
+click-through — when `isRunningAsTwa()` is false). The user should sideload/update the installed
+APK and confirm a bank-website tap now opens the phone's actual browser app rather than staying in
+the TWA's overlay; if the `android-app://` referrer turns out not to be reliably set by this specific
+APK (built via PWABuilder, not Bubblewrap — the referrer-stamping behavior is standard TWA/Custom
+Tabs behavior either way, but hasn't been cross-checked against PWABuilder's specific output), that
+would be the next thing to debug. Skipped changelog/Guide on purpose (a behavior fix within the
+already-unshipped-as-a-feature APK, not a new user-visible feature — see the changelog policy above).
+
 **2026-07-10 (APK packaging prep — TWA-ready, one manual step left)** — User asked how hard it'd
 be to get this into a usable Android APK. Answer: not a rewrite — wrap the deployed site as a
 Trusted Web Activity (a real installable APK that opens the live `banktracker.app` full-screen,

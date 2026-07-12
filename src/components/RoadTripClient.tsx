@@ -8,7 +8,7 @@ import {
   X,
   Plus,
   Navigation,
-  ExternalLink,
+  ExternalLink as ExternalLinkIcon,
   AlertTriangle,
   MapPin,
   Phone,
@@ -32,6 +32,7 @@ import {
 } from "@/lib/roadtrip";
 import type { MapPoint } from "@/components/RoadTripMap";
 import { RoadTripTrips } from "@/components/RoadTripTrips";
+import { ExternalLink as ExternalLinkAnchor } from "@/components/ExternalLink";
 
 const RoadTripMap = dynamic(() => import("@/components/RoadTripMap").then((m) => m.RoadTripMap), {
   ssr: false,
@@ -680,10 +681,10 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                                   </span>
                                 )}
                                 {stop.website && (
-                                  <a href={stop.website} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-blue-500">
+                                  <ExternalLinkAnchor href={stop.website} className="flex items-center gap-1 hover:text-blue-500">
                                     <Globe className="h-3 w-3" />
                                     Website
-                                  </a>
+                                  </ExternalLinkAnchor>
                                 )}
                                 {stop.branches.length > 1 && (
                                   <button
@@ -732,16 +733,14 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                   {googleLinksByDay[dayIdx]?.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-2">
                       {googleLinksByDay[dayIdx].map((link, i) => (
-                        <a
+                        <ExternalLinkAnchor
                           key={link}
                           href={link}
-                          target="_blank"
-                          rel="noreferrer"
                           className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
                         >
-                          <ExternalLink className="h-3.5 w-3.5" />
+                          <ExternalLinkIcon className="h-3.5 w-3.5" />
                           Day {dayIdx + 1}: Open in Google Maps{googleLinksByDay[dayIdx].length > 1 ? ` — leg ${i + 1}` : ""}
-                        </a>
+                        </ExternalLinkAnchor>
                       ))}
                     </div>
                   )}
