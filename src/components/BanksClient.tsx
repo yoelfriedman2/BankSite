@@ -93,14 +93,16 @@ const HEALTH_RANK: Record<ActivityLevel, number> = {
   none: 3,
 };
 
+// Same ring-based pill language as StatusBadge in badges.tsx, so the one
+// editable status control in the app looks like every other status pill.
 const STATUS_SELECT_STYLES: Record<BankStatus, string> = {
-  untracked: "border-slate-200 bg-slate-50 text-slate-500",
-  open: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  open_add_account: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  open_add_funds: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  applied: "border-amber-200 bg-amber-50 text-amber-700",
-  want_to_open: "border-violet-200 bg-violet-50 text-violet-700",
-  cannot_open: "border-rose-200 bg-rose-50 text-rose-700",
+  untracked: "ring-slate-200 bg-slate-100 text-slate-500",
+  open: "ring-emerald-200 bg-emerald-50 text-emerald-700",
+  open_add_account: "ring-emerald-200 bg-emerald-50 text-emerald-700",
+  open_add_funds: "ring-emerald-200 bg-emerald-50 text-emerald-700",
+  applied: "ring-amber-200 bg-amber-50 text-amber-700",
+  want_to_open: "ring-violet-200 bg-violet-50 text-violet-700",
+  cannot_open: "ring-rose-200 bg-rose-50 text-rose-700",
 };
 
 function bankHealth(accts: Account[], defMonths: number): ActivityLevel {
@@ -476,7 +478,7 @@ export function BanksClient({
           : "justify-start";
     return (
       <th
-        className="px-3 py-3 font-medium"
+        className="px-3 py-3 text-[11px] font-semibold tracking-wider"
         aria-sort={
           active
             ? sortDir === "asc"
@@ -765,7 +767,7 @@ export function BanksClient({
                     openBank(b);
                   }
                 }}
-                className="flex w-full cursor-pointer items-start gap-3 rounded-xl border border-slate-200/80 bg-white p-3 text-left shadow-sm transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+                className="flex w-full cursor-pointer items-start gap-3 rounded-xl border border-slate-200/80 bg-white p-3.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
               >
                 {health !== "none" ? (
                   <span className="mt-1 shrink-0">
@@ -776,7 +778,7 @@ export function BanksClient({
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="truncate font-medium text-slate-900">
+                    <span className="truncate text-[15px] font-semibold text-slate-900">
                       {b.name}
                     </span>
                     {b.cert != null && unreadSet.has(b.cert) && (
@@ -835,7 +837,7 @@ export function BanksClient({
             <col className="w-[5%]" />
           </colgroup>
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500">
+            <tr className="border-b-2 border-slate-200 bg-slate-50/60 text-left text-slate-500">
               <Th label="Bank" sortKey="name" />
               <Th
                 label="State"
@@ -895,11 +897,11 @@ export function BanksClient({
                     }}
                     tabIndex={0}
                     aria-label={`Manage ${b.name}`}
-                    className="cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400"
+                    className="cursor-pointer border-b border-slate-100 transition-colors last:border-0 hover:bg-amber-50/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400"
                   >
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-3.5">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-slate-900">
+                        <span className="text-[15px] font-semibold text-slate-900">
                           {b.name}
                         </span>
                         {b.cert != null && unreadSet.has(b.cert) && (
@@ -911,20 +913,20 @@ export function BanksClient({
                       </div>
                       <RelatedChips cert={b.cert} />
                     </td>
-                    <td className="px-3 py-3 text-slate-600">
+                    <td className="px-3 py-3.5 text-slate-500">
                       {b.state ? (
                         b.state
                       ) : (
                         <span className="text-slate-300">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-3 text-right tabular-nums text-slate-600">
+                    <td className="px-3 py-3.5 text-right tabular-nums text-slate-500">
                       {formatAssets(b.assets)}
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-3.5">
                       <ConversionBadge stage={b.conversion_stage} />
                     </td>
-                    <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-3 py-3.5" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-2">
                         <select
                           value={b.status}
@@ -933,7 +935,7 @@ export function BanksClient({
                           onChange={(e) =>
                             handleStatusChange(b, e.target.value as BankStatus)
                           }
-                          className={`rounded-md border px-2 py-1 text-xs font-medium outline-none ${STATUS_SELECT_STYLES[b.status]}`}
+                          className={`rounded-full px-2.5 py-1 text-xs font-medium outline-none ring-1 ring-inset ${STATUS_SELECT_STYLES[b.status]}`}
                         >
                           {ASSIGNABLE_STATUSES.map((s) => (
                             <option key={s} value={s}>
@@ -946,14 +948,14 @@ export function BanksClient({
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-3.5">
                       {b.priority ? (
                         <PriorityBadge priority={b.priority} />
                       ) : (
                         <span className="text-slate-300">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-3 text-slate-600">
+                    <td className="px-3 py-3.5 text-slate-500">
                       {accts.length > 0 ? (
                         <div className="flex items-center gap-2">
                           <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-slate-100 px-1.5 text-xs font-semibold text-slate-600">
@@ -969,7 +971,7 @@ export function BanksClient({
                         <span className="text-slate-300">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-3 text-right tabular-nums text-slate-600">
+                    <td className="px-3 py-3.5 text-right tabular-nums text-slate-500">
                       {accts.length > 0 ? (
                         <div>
                           {formatCurrency(total)}
@@ -984,7 +986,7 @@ export function BanksClient({
                         <span className="text-slate-300">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-3.5">
                       <div className="flex justify-center">
                         {health === "none" ? (
                           <span className="text-slate-300">—</span>
@@ -993,7 +995,7 @@ export function BanksClient({
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-3 py-3.5" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
                         {b.status === "untracked" && (
                           <button
