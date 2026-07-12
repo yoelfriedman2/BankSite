@@ -244,6 +244,29 @@ things came out of that:
    Next.js project, check whether they're actually identical before assuming one is just a build
    artifact of the other.
 
+**Second same-day follow-up — merged to `main` and deployed, then `IconsAreFetchable` kept failing
+on `/icon.svg` specifically even though it loaded fine in a browser (including a fresh incognito
+window, ruling out the project's "Vercel Authentication" deployment-protection setting, which was
+checked and confirmed not to gate the production custom domain at all — a real detour chasing the
+wrong theory before landing on the actual cause)**: root-caused via a local `next start` + `curl`
+header comparison — `/icon.svg`, served by Next's app-router icon file-convention route (a
+serverless function under the hood), was the *only* icon in the manifest returned with
+`Transfer-Encoding: chunked` and no `Content-Length` header; every other icon (the PNGs, all plain
+static files in `public/`) returned a normal `Content-Length`. Browsers handle chunked responses
+without issue, which is why it always loaded fine manually — but PWABuilder's own fetch-based
+`IconsAreFetchable` check apparently doesn't, and read the missing `Content-Length` as "doesn't
+exist." Fixed by moving `/icon.svg` back to being served as a **plain static file** in `public/`
+(same mechanism as the PNGs — same correct logo content, just no longer routed through Next's
+dynamic icon-convention handler) rather than reintroducing the collision this session already
+fixed once. Removed `src/app/icon.svg` (the file-convention source) since a static `public/`
+file at the same path now serves it directly, and added an explicit `{ url: "/icon.svg",
+type: "image/svg+xml" }` entry to the root layout's `metadata.icons.icon` array so the
+`<link rel="icon">` Next used to auto-inject via the file convention still gets added manually.
+Verified locally: `curl -D -` against the rebuilt `/icon.svg` now shows `Content-Length: 954` and
+`Accept-Ranges: bytes`, matching the PNG icons' response shape exactly instead of the chunked
+serverless-function shape. Not yet re-confirmed against the live PWABuilder scan post-deploy — do
+that next before assuming `canPackage` is finally `true`.
+
 **2026-07-10 (bank-logo polish + a real status-color bug, from live feedback on the round above)** —
 The user saw the logo/total-balance/color-match work above live in production (screenshot
 confirmed logos actually rendering — the "not verified end-to-end in this sandbox" caveat from that
