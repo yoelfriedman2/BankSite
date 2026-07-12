@@ -12,7 +12,6 @@ import {
 } from "@/app/(app)/address-change/actions";
 import { formatDate } from "@/lib/format";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
-import { ExternalLink } from "@/components/ExternalLink";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -199,13 +198,15 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
                 </span>
               )}
               {item.website && (
-                <ExternalLink
+                <a
                   href={item.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 hover:underline"
                 >
                   <Globe className="h-3.5 w-3.5" />
                   Site
-                </ExternalLink>
+                </a>
               )}
             </li>
           );

@@ -11,7 +11,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Lock,
-  ExternalLink as ExternalLinkIcon,
+  ExternalLink,
   RefreshCw,
   Search,
   ChevronUp,
@@ -36,7 +36,6 @@ import {
 } from "@/lib/nicParse";
 import { buildHoldingCompanyDiff, type HcGroupDiff } from "@/lib/nicDiff";
 import { formatAssets } from "@/lib/format";
-import { ExternalLink as ExternalLinkAnchor } from "@/components/ExternalLink";
 
 const NIC_URL = "https://www.ffiec.gov/npw/FinancialReport/DataDownload";
 const NIC_FINANCIAL_URL = "https://www.ffiec.gov/npw/FinancialReport/FinancialDataDownload";
@@ -100,12 +99,14 @@ function FileUploadStep({
           <li key={i}>{line}</li>
         ))}
       </ol>
-      <ExternalLinkAnchor
+      <a
         href={href}
+        target="_blank"
+        rel="noreferrer"
         className="mb-5 inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100"
       >
-        Open the download page <ExternalLinkIcon className="h-3.5 w-3.5" />
-      </ExternalLinkAnchor>
+        Open the download page <ExternalLink className="h-3.5 w-3.5" />
+      </a>
 
       <label
         onDragOver={(e) => {

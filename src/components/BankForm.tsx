@@ -51,7 +51,6 @@ import {
   deleteReminder,
 } from "@/app/(app)/reminders";
 import { useUnsavedChanges, confirmDiscard } from "@/components/useUnsavedChanges";
-import { ExternalLink } from "@/components/ExternalLink";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -1045,12 +1044,14 @@ export function BankForm({
                       label="Website"
                       value={
                         values.website.trim() ? (
-                          <ExternalLink
+                          <a
                             href={values.website.startsWith("http") ? values.website : `https://${values.website}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="text-emerald-700 hover:underline"
                           >
                             {values.website} ↗
-                          </ExternalLink>
+                          </a>
                         ) : null
                       }
                     />

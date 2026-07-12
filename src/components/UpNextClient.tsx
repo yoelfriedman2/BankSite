@@ -12,7 +12,6 @@ import {
   type UpNextData,
 } from "@/app/(app)/up-next/actions";
 import { StatusBadge, PriorityBadge } from "@/components/badges";
-import { ExternalLink as ExternalLinkAnchor } from "@/components/ExternalLink";
 import { OPEN_METHOD_LABELS, ELIGIBILITY_LABELS } from "@/lib/types";
 import { formatCurrency } from "@/lib/format";
 
@@ -37,13 +36,15 @@ function ContactLinks({ bank }: { bank: QueueBank }) {
         </span>
       )}
       {bank.website && (
-        <ExternalLinkAnchor
+        <a
           href={bank.website}
+          target="_blank"
+          rel="noopener noreferrer"
           className="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 hover:underline"
         >
           <Globe className="h-3.5 w-3.5" />
           Site
-        </ExternalLinkAnchor>
+        </a>
       )}
     </>
   );
