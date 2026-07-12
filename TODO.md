@@ -14,18 +14,10 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
   repo — the user needs to keep those private and durable (password manager / offline backup);
   losing them would break the ability to sign future updates to the same installed app identity.
 
-- **Run migration `0038_interest_accrual.sql` — NOT optional, run promptly.** Adds
-  `accounts.interest_last_accrued_on`, the cron-only bookkeeping column the new automatic monthly
-  interest feature needs. Unlike most migrations in this file, this one does **not** degrade
-  gracefully: until it runs, **adding any new account will fail** (every insert writes this column
-  unconditionally), and **editing an existing account will fail if that edit touches the interest
-  rate field** (edits to unrelated fields are unaffected — same "only touch it when the config
-  actually changed" pattern as `monthly_fee_last_charged_on` from migration 0029). Run this one
-  first, before anything else pending below.
-- **Run migration `0037_road_trips_approved_only.sql`** — small security follow-up to 0036:
-  extends the "must be approved" RLS rule to the `road_trips` table (a shared/public trip was
-  still readable by a signed-in-but-not-approved user). Purely an RLS policy change, no app code
-  depends on it, so there's no rush — run it whenever. Requires 0032 and 0036 to already be run.
+- ~~Run migration `0038_interest_accrual.sql`~~ — confirmed run (2026-07-12). Adds
+  `accounts.interest_last_accrued_on`; new accounts and interest-rate edits now save correctly.
+- ~~Run migration `0037_road_trips_approved_only.sql`~~ — confirmed run (2026-07-12). Shared/public
+  road trips are now gated to approved users only, matching the rest of the access-control rules.
 - ~~Run migration **0036_access_control.sql**~~ — confirmed run (2026-07-08). Invite-only access
   gate is live: the 11 current users approved, new sign-ins land on `/pending` and request access,
   owner approves from Admin → Users. Verified live with a real new-user sign-in. Front-door setting
