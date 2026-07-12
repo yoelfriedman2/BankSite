@@ -281,7 +281,33 @@ packaging — `HasSquare192x192PngAnyPurposeIcon` (Required) and `HasSquare512x5
 serves fine as a plain static-file favicon via the `<link rel="icon">` in the root layout — only its
 manifest *icons* entry (the thing this one checker evaluates) was dropped. Verified locally via
 `next start` that `/manifest.webmanifest` now lists only the 4 PNG icons and `/icon.svg` still 200s
-independently. Not yet re-confirmed against a live PWABuilder scan post-deploy.
+independently. That was the last blocker — the user re-scanned and `canPackage` came back `true`.
+
+**Fourth same-day follow-up — the actual APK exists now.** Walked the user through PWABuilder's
+"Package For Stores" flow. Two real wrong turns worth remembering for next time this comes up:
+1. PWABuilder's Android packaging has two tabs, "Google Play" and "Other Android" — the natural
+   assumption (this app isn't going on the Play Store, so "Other Android" must be the one you want)
+   is backwards. "Other Android" has no signing-key configuration in its UI at all and always
+   produces an unsigned `.apk`/`.aab` pair (confirmed twice, byte-identical readme both times,
+   redirecting to PWABuilder's own "next-steps-unsigned.md" — Android refuses to install an unsigned
+   package, so those downloads were dead ends). The signing key options — "New" / "Use mine" / "None"
+   — only appear under "All Settings" on the **Google Play** tab, several fields down (Notification
+   delegation, Location delegation, Google Play billing, then Signing key). Picking "New" there and
+   downloading from that tab is what actually produces an installable, signed `.apk` — going through
+   the Play-oriented tab doesn't obligate you to actually publish to the Play Store; a signed APK is
+   a signed APK either way.
+2. Once signed correctly, the download (`signing-key-info.txt`, `signing.keystore`, `Bank
+   Tracker.apk`, `Bank Tracker.aab`, `assetlinks.json`) included a real `sha256_cert_fingerprints`
+   value and, conveniently, a ready-made `assetlinks.json` already using the same
+   `app.banktracker.twa` package id this session had guessed as a placeholder — no mismatch to
+   reconcile. Pasted the real fingerprint into `public/.well-known/assetlinks.json`, replacing the
+   placeholder.
+**`signing.keystore` and `signing-key-info.txt` were explicitly NOT committed to the repo** — the
+keystore password lives in that file in plaintext, and losing/rotating it later would break update
+continuity for the installed app, so those two files are the user's to store somewhere private and
+durable (a password manager or offline backup), never in git history. Only `assetlinks.json` — which
+is meant to be public, that's the whole point of the Digital Asset Links mechanism — was updated in
+the repo.
 
 **2026-07-10 (bank-logo polish + a real status-color bug, from live feedback on the round above)** —
 The user saw the logo/total-balance/color-match work above live in production (screenshot

@@ -4,7 +4,7 @@
     "target": {
       "namespace": "android_app",
       "package_name": "app.banktracker.twa",
-      "sha256_cert_fingerprints": ["REPLACE_WITH_YOUR_APK_SIGNING_CERT_SHA256"]
+      "sha256_cert_fingerprints": ["72:B8:6E:FB:9E:EB:8F:4C:D4:FB:6E:D1:2A:18:73:C4:26:0C:10:BF:7E:09:29:24:6D:B3:62:9C:15:29:EE:EE"]
     }
   }
 ]
