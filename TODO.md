@@ -53,7 +53,7 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 - ~~Run migration **0026_fdic_admin_role.sql**~~ — confirmed run (2026-07-07). The owner can now
   grant the FDIC-admin role toggle on Admin → Users.
 
-## Review before relying on it: manual backup + single-user restore (2026-07-07)
+## Live: manual backup + single-user restore (2026-07-07, dry-run confirmed 2026-07-12)
 
 New Admin → Users "Backups" panel: "Back up now" (builds a fresh full-DB snapshot, saves it to the
 same private storage bucket the weekly automated backup uses, and downloads it to your computer
@@ -66,18 +66,8 @@ were never lost on deletion already (they survive via `ON DELETE SET NULL`, see 
 incident writeup below), and uploaded document *files* were never part of the backup (only the
 metadata row) — the restore panel says both of these explicitly.
 
-**Not click-tested against a real deletion + restore cycle** — this sandbox has no real Supabase
-credentials, and (separately) this session's attempt to temporarily bypass the owner-only auth
-check on `/admin` for visual verification was correctly blocked by the environment's own
-safety classifier, since that page includes user deletion and this new restore tool. Verified only
-via a clean `npm run build` (full type-check) and careful reasoning through the restore logic
-(banks are matched onto the freshly-seeded row by cert rather than inserted fresh, since every new
-signup auto-seeds the whole shared bank list via `seedBanks` and would otherwise collide with the
-`unique(user_id, cert)` constraint — everything downstream of banks is remapped through that same
-cert-based id swap). **Before trusting this for a real accidental deletion**: do a low-stakes dry
-run — back up now, note a test user's data, delete that test user, re-invite them, sign them back
-in, then restore from the backup taken before the deletion, and confirm their banks/accounts came
-back correctly.
+**Dry-run confirmed (2026-07-12)**: the user tested the backup/restore cycle themselves and it
+worked. Closed — no longer just "verified via build + reasoning," now verified against a real run.
 
 ## Live: data-consistency fixes (2026-07-06, from a code review pass)
 
@@ -212,9 +202,10 @@ key `15912` in a JS `Map`, so every single row's lookup silently missed and noth
 even though every row was fetched successfully with real coordinates. `fetchFdic` (the main FDIC sync
 check, institutions endpoint) already guards against exactly this with `Number(item.data.CERT)` when
 building its own Map — `fetchFdicLocations`/`refreshBranchLocations` just never got the same treatment.
-Fixed by coercing `cert: Number(r.CERT)` when building the insert rows. Not yet re-verified against
-production (needs the user to click "Refresh branch locations" again post-deploy to confirm a
-non-zero count) but the failure mode is now fully understood, not guessed at.
+Fixed by coercing `cert: Number(r.CERT)` when building the insert rows.
+
+**Confirmed fixed (2026-07-12)**: the user re-ran "Refresh branch locations" post-deploy and it
+now saves branch locations correctly. Closed.
 
 ## Live: address change per holder + monthly fee
 
@@ -248,11 +239,8 @@ at the moment it's accepted), Assets (per-row or "Accept all"), City/state. Acce
 propagate to every user's copy of that bank by cert, same as any other shared field. Private
 fields (status, priority, notes, target balance) are never touched.
 
-## Decide: which FDIC fields should sync on a schedule (still open)
-
-The sync tool above is manual-only today. Revisit whether any category should run automatically
-(e.g. assets quarterly) vs. stay propose-and-review forever — the owner was clear not everything
-should auto-update, since some app data is deliberately different from FDIC's.
+**Decided (2026-07-12)**: the FDIC sync tool stays manual-only, indefinitely. No scheduled/automatic
+syncing of any category (assets or otherwise) — every change stays propose-and-review.
 
 ## Review: 21 banks that no longer exist (from FDIC check, 2026-07-03)
 
@@ -285,30 +273,10 @@ The FDIC says these are no longer insured institutions — merged, acquired, con
 
 Full details in `fdic-comparison-2026-07-03.xlsx` ("Closed or merged" tab).
 
-## Minor FDIC name differences (left alone as cosmetic)
+**Decided (2026-07-12)**: the five minor FDIC name-spelling/legal-suffix differences noted here
+previously are staying as-is permanently — no renaming. Closed, removed from this list.
 
-Real rebrands were applied in the app as "New Name (formerly Old Name)". These five were only
-legal-suffix or spelling tweaks, so the app names were left unchanged — fix manually if you care:
-
-- 20741 Pioneer Bank → "Pioneer Bank, National Association"
-- 29496 Seneca Savings → "Seneca Savings Bank, National Association"
-- 29535 De Witt Savings Bank → "DeWitt Savings Bank" (spacing)
-- 29571 The Home Savings and Loan Company of Kenton, Ohio → same, "DBA HSLC"
-- 29676 Paper City Savings Association → "Paper City Savings Bank, S.A."
-
-## Websites not loaded into the app (failed the live check)
-
-FDIC has a website on file for these 11, but it didn't respond when checked on 2026-07-03
-(some may just block bots). Verify by hand and add via the bank editor if real:
-
-- 15990 Watertown Savings Bank — www.watersavingsbank.com
-- 17749 Bath Savings Institution — www.bathsavings.bank
-- 18204 First County Bank — www.firstcountybank.com
-- 27678 First Federal Community Bank, SSB — www.ffcbank.com
-- 27727 Lyons Federal Bank — www.lyonsfed.com
-- 28157 The Cincinnatus Savings & Loan Co. — www.cincinnatussl.com
-- 28480 Columbia Savings and Loan Association — www.columbiasla.com
-- 28836 United Savings Bank — www.unitedsavingsbank.com
-- 29627 Second Federal Savings and Loan Association of Philadelphia — www.secondfed.com
-- 29672 cfsbank — www.cfsbank.bank
-- 31197 First Federal Savings and Loan Association — www.firstfederalhazard.com
+**Decided (2026-07-12)**: the 11 bank websites that failed the live FDIC-response check previously
+are being added to the app regardless of whether they load (owner doesn't care if they respond to
+a bot check) — see chat for the cert/name/URL list to paste into each bank's editor. Closed, removed
+from this list; re-add here only if any turn out to be wrong once entered.
