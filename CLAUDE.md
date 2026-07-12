@@ -264,8 +264,24 @@ type: "image/svg+xml" }` entry to the root layout's `metadata.icons.icon` array 
 `<link rel="icon">` Next used to auto-inject via the file convention still gets added manually.
 Verified locally: `curl -D -` against the rebuilt `/icon.svg` now shows `Content-Length: 954` and
 `Accept-Ranges: bytes`, matching the PNG icons' response shape exactly instead of the chunked
-serverless-function shape. Not yet re-confirmed against the live PWABuilder scan post-deploy — do
-that next before assuming `canPackage` is finally `true`.
+serverless-function shape.
+
+**Third same-day follow-up — the Content-Length fix deployed but `IconsAreFetchable` failed again,
+with the exact same error text as every prior attempt**: at this point four independent fixes (the
+collision, the wrong logo, and the chunked-transfer/Content-Length issue — each separately verified
+working via direct browser load, incognito load, and local `curl` header inspection) had not moved
+this one check at all, always with identical wording. That pattern — a checker result that never
+changes no matter what changes on the server — points to the checker itself, not the site: almost
+certainly a PWABuilder quirk with SVG icons declared `"sizes": "any"` (its own "Edit your manifest"
+icon-preview UI, seen earlier in chat, rendered this exact SVG correctly, so even PWABuilder's own
+tooling can load it elsewhere). Pragmatic fix rather than continuing to chase PWABuilder's internals:
+**removed the SVG entry from `manifest.ts`'s `icons` array entirely.** It was never load-bearing for
+packaging — `HasSquare192x192PngAnyPurposeIcon` (Required) and `HasSquare512x512PngAnyPurposeIcon`
+(Recommended) were already passing on the real PNGs alone. `/icon.svg` itself is untouched and still
+serves fine as a plain static-file favicon via the `<link rel="icon">` in the root layout — only its
+manifest *icons* entry (the thing this one checker evaluates) was dropped. Verified locally via
+`next start` that `/manifest.webmanifest` now lists only the 4 PNG icons and `/icon.svg` still 200s
+independently. Not yet re-confirmed against a live PWABuilder scan post-deploy.
 
 **2026-07-10 (bank-logo polish + a real status-color bug, from live feedback on the round above)** —
 The user saw the logo/total-balance/color-match work above live in production (screenshot
