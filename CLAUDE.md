@@ -203,13 +203,29 @@ same TWA hand-off behavior.
 no way to install a TWA, so the `document.referrer` TWA-detection path is untested against a real
 app launch (the fallback normal-browser path was verified: `npm run build` clean, and confirmed by
 reading through every call site that the rendered anchor is unchanged — same `target`/`rel`, same
-click-through — when `isRunningAsTwa()` is false). The user should sideload/update the installed
-APK and confirm a bank-website tap now opens the phone's actual browser app rather than staying in
-the TWA's overlay; if the `android-app://` referrer turns out not to be reliably set by this specific
-APK (built via PWABuilder, not Bubblewrap — the referrer-stamping behavior is standard TWA/Custom
-Tabs behavior either way, but hasn't been cross-checked against PWABuilder's specific output), that
-would be the next thing to debug. Skipped changelog/Guide on purpose (a behavior fix within the
-already-unshipped-as-a-feature APK, not a new user-visible feature — see the changelog policy above).
+click-through — when `isRunningAsTwa()` is false). Skipped changelog/Guide on purpose (a behavior
+fix within the already-unshipped-as-a-feature APK, not a new user-visible feature — see the
+changelog policy above).
+
+**Same-day follow-up — confirmed live and still not working, detection widened**: user confirmed
+the deploy went live (so this wasn't a deploy-lag issue) and re-tested — the bank-website link
+still opened inside the app, not a real separate browser. Since `document.referrer` is the one
+signal I couldn't verify without a real device, the most likely explanation is that this specific
+PWABuilder-built APK (as opposed to a Bubblewrap-built one) doesn't reliably stamp
+`android-app://<package>` the way the TWA spec describes. Widened `isRunningAsTwa()` in
+`lib/externalLink.ts` to also treat "Android + `display-mode: standalone/fullscreen/minimal-ui`"
+as running inside the app — a real mobile Chrome tab is never reported as standalone display-mode,
+so this is a safe, broader net that doesn't depend on the referrer header at all. Also hardened
+`openInExternalBrowser`'s `intent://` URL with an explicit `package=com.android.chrome` (so Android
+opens a genuinely separate app/task instead of possibly reusing the same Chrome instance behind the
+TWA silently) plus `S.browser_fallback_url` so the link still works even if Chrome specifically
+isn't the resolved handler on a given device. **Still unverified against the real APK** — same
+sandbox limitation as before; this is a best-effort widening based on reasoning about TWA/Custom
+Tabs platform behavior, not a confirmed fix. If a bank-website tap still doesn't escape to a real
+browser after this, the next real diagnostic step is remote-debugging the installed app via
+`chrome://inspect` (phone connected to a computer via USB, USB debugging on) to read the actual
+`document.referrer` value and `window.matchMedia("(display-mode: standalone)").matches` live inside
+the running TWA, rather than guessing at a third fix blind.
 
 **2026-07-10 (APK packaging prep — TWA-ready, one manual step left)** — User asked how hard it'd
 be to get this into a usable Android APK. Answer: not a rewrite — wrap the deployed site as a
