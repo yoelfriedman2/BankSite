@@ -176,6 +176,101 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-12 (external bank/website links now escape the packaged Android app)** — User reported
+that, in the installed APK (the TWA built earlier), tapping a bank's website link kept them inside
+the app instead of handing off to a real browser. Every such link already used the correct web
+convention (`target="_blank" rel="noopener noreferrer"` — confirmed present on all six spots:
+`BankForm.tsx`'s bank drawer, `AddressChangeClient.tsx`, `UpNextClient.tsx`,
+`HoldingCompaniesClient.tsx`'s NIC download link, and `RoadTripClient.tsx`'s bank-website and
+Google Maps links), so this wasn't a code bug in the normal browser/PWA sense — it's how Android's
+Trusted Web Activity spec itself works: any off-origin navigation renders as a minimal in-task
+Custom Tab overlay rather than launching the device's actual separate browser app, and there's no
+TWA manifest flag to change that.
+
+Added `src/lib/externalLink.ts` (`isRunningAsTwa` — detects the TWA via
+`document.referrer.startsWith("android-app://")`, the one reliable signal Android stamps only when
+a page is launched from the installed app; `openInExternalBrowser` — forces a URL out via an
+Android `intent://` URL) and a new shared `<ExternalLink>` component
+(`src/components/ExternalLink.tsx`) that renders a normal `target="_blank"` anchor everywhere and
+only intercepts the click to redirect through the intent when actually running inside the TWA —
+zero behavior change in a normal browser tab or installed PWA. All six external-link spots above
+now render through this component instead of a raw `<a>`. **New convention: any future outbound
+link (bank websites, external reference/download links) should use `<ExternalLink>` from
+`@/components/ExternalLink` instead of a raw `<a target="_blank">`**, so it automatically gets the
+same TWA hand-off behavior.
+
+**Not verified against the real installed APK** — this sandbox has no Android device/emulator and
+no way to install a TWA, so the `document.referrer` TWA-detection path is untested against a real
+app launch (the fallback normal-browser path was verified: `npm run build` clean, and confirmed by
+reading through every call site that the rendered anchor is unchanged — same `target`/`rel`, same
+click-through — when `isRunningAsTwa()` is false). Skipped changelog/Guide on purpose (a behavior
+fix within the already-unshipped-as-a-feature APK, not a new user-visible feature — see the
+changelog policy above).
+
+**Same-day follow-up — confirmed live and still not working, detection widened**: user confirmed
+the deploy went live (so this wasn't a deploy-lag issue) and re-tested — the bank-website link
+still opened inside the app, not a real separate browser. Since `document.referrer` is the one
+signal I couldn't verify without a real device, the most likely explanation is that this specific
+PWABuilder-built APK (as opposed to a Bubblewrap-built one) doesn't reliably stamp
+`android-app://<package>` the way the TWA spec describes. Widened `isRunningAsTwa()` in
+`lib/externalLink.ts` to also treat "Android + `display-mode: standalone/fullscreen/minimal-ui`"
+as running inside the app — a real mobile Chrome tab is never reported as standalone display-mode,
+so this is a safe, broader net that doesn't depend on the referrer header at all. Also hardened
+`openInExternalBrowser`'s `intent://` URL with an explicit `package=com.android.chrome` (so Android
+opens a genuinely separate app/task instead of possibly reusing the same Chrome instance behind the
+TWA silently) plus `S.browser_fallback_url` so the link still works even if Chrome specifically
+isn't the resolved handler on a given device. **Still unverified against the real APK** — same
+sandbox limitation as before; this is a best-effort widening based on reasoning about TWA/Custom
+Tabs platform behavior, not a confirmed fix. If a bank-website tap still doesn't escape to a real
+browser after this, the next real diagnostic step is remote-debugging the installed app via
+`chrome://inspect` (phone connected to a computer via USB, USB debugging on) to read the actual
+`document.referrer` value and `window.matchMedia("(display-mode: standalone)").matches` live inside
+the running TWA, rather than guessing at a third fix blind.
+
+**Second same-day follow-up — real root cause found via research, web-only fix reverted as
+confirmed dead code**: the user couldn't do the `chrome://inspect` debug session, so instead of a
+third blind guess this got researched properly against primary sources instead of reasoning from
+memory. Findings, cross-confirmed across Chrome's official Trusted Web Activity docs and two real
+bug reports filed against Google's own TWA libraries (`GoogleChromeLabs/bubblewrap#136`,
+`GoogleChrome/android-browser-helper#239`):
+1. Chrome's off-origin behavior inside a TWA (an in-task Custom Tabs overlay with a URL bar, rather
+   than a genuinely separate browser app/task) is **intentional, documented platform design** — there
+   is no manifest flag or web-side config to change it, confirmed by Chrome's own docs.
+2. **The `intent://` trick this session shipped twice is explicitly blocked by Chrome when triggered
+   by JavaScript from inside a TWA-hosted page** — a real reported case reproduces the exact same
+   code with a "Navigation is blocked" error, while the identical link works fine from a normal
+   Chrome tab. This is a deliberate security restriction (stopping web content from silently
+   launching arbitrary apps), not something a better detection heuristic can route around — which
+   means both attempts above were almost certainly silently falling back to the plain URL in-place
+   the whole time, exactly matching what the user saw both times.
+3. The only place this is confirmed working requires **native Android code**: a small custom
+   Activity registered in the packaged app's own `AndroidManifest.xml` (via a custom URI scheme or
+   App Link intent-filter) that receives the click and re-launches Chrome via a real native
+   `Intent(Intent.ACTION_VIEW, uri)` with `FLAG_ACTIVITY_NEW_TASK` — because Chrome only blocks the
+   *web-JS-triggered* `intent://` scheme, not a genuine native Intent issued by the app's own code.
+
+Since (3) can't be built from this repo — it requires editing the actual native Android Studio
+project PWABuilder generated (a separate project, not checked into this repo, and this sandbox has
+no Android SDK to build/sign it anyway, same wall hit earlier trying to run Bubblewrap locally —
+`dl.google.com` is blocked by this environment's egress policy) — **reverted `src/lib/
+externalLink.ts` and `src/components/ExternalLink.tsx` entirely and restored all six external-link
+spots to their original plain `target="_blank" rel="noopener noreferrer"` anchors** (the same
+state as before any of this session's changes — confirmed via `git diff` against the pre-fix
+commit showing zero difference). Carrying JS that pretends to fix this but silently doesn't is
+worse than plain links, which at least degrade to the (unwanted, but real and working) Custom Tab
+overlay rather than potentially erroring. **This did not get re-added as a changelog entry** — it's
+a pure revert back to the pre-session state, not a new feature.
+
+**What a real fix actually requires, if picked back up**: someone with Android Studio installed
+locally would need to (a) get PWABuilder to output the full editable Android source project (not
+just the signed APK/AAB this session's packaging entry produced), (b) add a small Kotlin Activity +
+`AndroidManifest.xml` intent-filter that intercepts a designated link pattern and relaunches it via
+a native `Intent` with `FLAG_ACTIVITY_NEW_TASK`, (c) rebuild and re-sign with the existing
+`signing.keystore` so the installed app updates in place rather than becoming a distinct app. This
+is real native Android development, not something achievable by editing this Next.js repo, and not
+something this sandbox can build or test — flagged in `TODO.md` as a decision pending the user's
+appetite for that work, rather than assumed.
+
 **2026-07-10 (APK packaging prep — TWA-ready, one manual step left)** — User asked how hard it'd
 be to get this into a usable Android APK. Answer: not a rewrite — wrap the deployed site as a
 Trusted Web Activity (a real installable APK that opens the live `banktracker.app` full-screen,

@@ -53,6 +53,30 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 - ~~Run migration **0026_fdic_admin_role.sql**~~ — confirmed run (2026-07-07). The owner can now
   grant the FDIC-admin role toggle on Admin → Users.
 
+## Decide: whether to pursue a native fix for bank-website links opening inside the packaged app (2026-07-12)
+
+Tapping a bank website (or any external) link in the installed Android APK stays inside the app's
+own in-task Custom Tab overlay instead of handing off to a real, separate browser app. Researched
+properly this session (not guessed) — see CLAUDE.md's 2026-07-12 entry for full sourcing. Short
+version: this is intentional Chrome/TWA platform design, and the JS-only workaround this session
+tried twice (an `intent://` redirect) is confirmed blocked by Chrome specifically when triggered
+from inside a TWA-hosted page — so it was reverted; there's no fix possible from this Next.js repo.
+
+A real fix requires native Android work, outside this repo and outside what this sandbox can build:
+1. Get PWABuilder to output the full editable Android Studio source project for this app (not just
+   the signed APK/AAB already downloaded) — may need re-running the packaging flow with a "download
+   source" option, if PWABuilder offers one.
+2. Add a small Kotlin Activity + `AndroidManifest.xml` intent-filter that intercepts a link and
+   re-launches it via a real native `Intent(Intent.ACTION_VIEW, uri)` with `FLAG_ACTIVITY_NEW_TASK`
+   — genuine native Intents aren't blocked the way the JS `intent://` scheme is.
+3. Rebuild and re-sign with the existing `signing.keystore` (needed so the update installs in place
+   rather than becoming a separate app) and reinstall.
+
+This needs someone with Android Studio set up locally — not something achievable from this sandbox
+(no Android SDK access, same wall as the earlier Bubblewrap-CLI attempt). Open question for the
+user: is this worth the native-dev detour, or is living with Chrome's default in-app overlay
+(closing back to the app via its own X button) an acceptable outcome for now?
+
 ## Live: manual backup + single-user restore (2026-07-07, dry-run confirmed 2026-07-12)
 
 New Admin → Users "Backups" panel: "Back up now" (builds a fresh full-DB snapshot, saves it to the
