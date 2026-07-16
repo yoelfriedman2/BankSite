@@ -7,7 +7,6 @@ import {
   Star,
   X,
   Plus,
-  Navigation,
   ExternalLink,
   AlertTriangle,
   MapPin,
@@ -17,19 +16,31 @@ import {
   Loader2,
   Info,
   ChevronDown,
+  Home,
+  BedDouble,
+  Flag,
 } from "lucide-react";
-import type { RoadTripBank, RoadTripData, RoadTripPlan, BranchOption } from "@/app/(app)/road-trip/actions";
+import type {
+  RoadTripBank,
+  RoadTripData,
+  RoadTripPlan,
+  BranchOption,
+  TripEndMode,
+  TripPlace,
+} from "@/app/(app)/road-trip/actions";
 import { refreshBranchLocations } from "@/app/(app)/fdic-sync/actions";
 import { STATUS_LABELS } from "@/lib/types";
 import {
   orderStops,
   cheapestInsertion,
+  chooseBranchesForRoute,
   buildMultiDayItinerary,
   buildGoogleMapsLinks,
   estimateDriveMinutes,
   haversineMiles,
   type LatLng,
 } from "@/lib/roadtrip";
+import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import type { MapPoint } from "@/components/RoadTripMap";
 import { RoadTripTrips } from "@/components/RoadTripTrips";
 
@@ -65,6 +76,21 @@ function bankDistanceMiles(bank: RoadTripBank, ref: LatLng): number {
   return Math.min(...bank.branches.map((br) => haversineMiles(ref, br)));
 }
 
+/** An address the user is typing/picking. Coordinates are null until they pick
+ *  a suggestion (so the branch/route math only kicks in for a real location). */
+type PlaceDraft = { address: string; lat: number | null; lng: number | null };
+const EMPTY_DRAFT: PlaceDraft = { address: "", lat: null, lng: null };
+
+function draftPoint(d: PlaceDraft): LatLng | null {
+  return d.lat != null && d.lng != null ? { lat: d.lat, lng: d.lng } : null;
+}
+function draftToPlace(d: PlaceDraft): TripPlace | null {
+  return d.lat != null && d.lng != null ? { address: d.address, lat: d.lat, lng: d.lng } : null;
+}
+function placeToDraft(p: TripPlace | null | undefined): PlaceDraft {
+  return p ? { address: p.address, lat: p.lat, lng: p.lng } : { ...EMPTY_DRAFT };
+}
+
 export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripData; canRefreshBranches: boolean }) {
   const [query, setQuery] = useState("");
   const [mustVisitIds, setMustVisitIds] = useState<string[]>([]); // order = order added
@@ -73,12 +99,17 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
   const [endTime, setEndTime] = useState("16:00");
   const [minutesPerStop, setMinutesPerStop] = useState(60);
   const [radiusMiles, setRadiusMiles] = useState(50);
-  const [roundTrip, setRoundTrip] = useState(true);
   const [numDays, setNumDays] = useState(1);
   const [extraIds, setExtraIds] = useState<string[]>([]); // accepted candidates, order added
   const [branchOverrides, setBranchOverrides] = useState<Record<string, string>>({});
   const [addQuery, setAddQuery] = useState(""); // search-to-add in section 3, any distance
   const [openBranchPicker, setOpenBranchPicker] = useState<string | null>(null); // bank id whose branch picker is expanded
+
+  // Where you leave from, how the trip ends, and where you sleep each night.
+  const [homeDraft, setHomeDraft] = useState<PlaceDraft>({ ...EMPTY_DRAFT });
+  const [endMode, setEndMode] = useState<TripEndMode>("first_bank");
+  const [endDraft, setEndDraft] = useState<PlaceDraft>({ ...EMPTY_DRAFT }); // used when endMode === "custom"
+  const [nightDrafts, setNightDrafts] = useState<Record<string, PlaceDraft>>({}); // key = 0-based day the night follows
 
   const [activeTripId, setActiveTripId] = useState<string | null>(null);
   const [activeTripTitle, setActiveTripTitle] = useState("");
@@ -138,24 +169,69 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
     return { ...bank, lat: branch.lat, lng: branch.lng, branch };
   }
 
-  const anchor: Stop | null = anchorBank ? toStop(anchorBank, null) : null;
+  const homePoint = draftPoint(homeDraft);
+
+  // The starting bank's branch is the one nearest home (or the manual override).
+  const anchor: Stop | null = anchorBank ? toStop(anchorBank, homePoint) : null;
+
+  // Where the whole trip finishes — feeds both the itinerary's closing leg and
+  // the branch optimizer (so the last stop's location accounts for it too).
+  const endPoint: LatLng | null = !anchor
+    ? null
+    : endMode === "home"
+      ? homePoint
+      : endMode === "custom"
+        ? draftPoint(endDraft)
+        : endMode === "first_bank"
+          ? { lat: anchor.lat, lng: anchor.lng }
+          : null; // "last_stop"
+
+  // Jointly choose one branch per selected bank so N banks land on the
+  // mutually-closest locations (not each nearest-to-anchor in isolation).
+  // Manual per-stop overrides stay pinned; the anchor is excluded (its branch
+  // is always the one nearest home).
+  const autoBranchByBank = useMemo<Record<string, string>>(() => {
+    if (!anchor) return {};
+    const ids = [...mustVisitIds, ...extraIds].filter((id) => id !== anchor.id);
+    const banks = ids
+      .map((id) => banksById.get(id))
+      .filter((b): b is RoadTripBank => !!b)
+      .map((b) => ({ id: b.id, branches: b.branches.map((br) => ({ id: br.id, lat: br.lat, lng: br.lng })) }));
+    return chooseBranchesForRoute({ lat: anchor.lat, lng: anchor.lng }, banks, {
+      returnTo: endPoint,
+      locked: branchOverrides,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anchor?.id, anchor?.lat, anchor?.lng, mustVisitIds.join(","), extraIds.join(","), branchOverrides, endPoint?.lat, endPoint?.lng]);
+
+  /** A bank → the branch it should use on this trip: a manual override wins,
+   *  else the optimizer's joint pick, else nearest to the anchor (for banks not
+   *  in the optimized set, e.g. candidates). */
+  function resolveStop(bank: RoadTripBank): Stop {
+    const overrideId = branchOverrides[bank.id];
+    const override = overrideId ? bank.branches.find((b) => b.id === overrideId) : undefined;
+    const autoId = autoBranchByBank[bank.id];
+    const auto = autoId ? bank.branches.find((b) => b.id === autoId) : undefined;
+    const branch = override ?? auto ?? nearestBranch(bank.branches, anchor ? { lat: anchor.lat, lng: anchor.lng } : homePoint);
+    return { ...bank, lat: branch.lat, lng: branch.lng, branch };
+  }
 
   // Order the remaining must-visits, then fold in accepted extras one at a time
   // (cheapest-insertion) in the order the user added them.
   const routeAfterAnchor = useMemo<Stop[]>(() => {
     if (!anchor) return [];
-    const rest = mustVisitBanks.filter((b) => b.id !== anchor.id).map((b) => toStop(b, anchor));
+    const rest = mustVisitBanks.filter((b) => b.id !== anchor.id).map((b) => resolveStop(b));
     let route = orderStops(anchor, rest);
     for (const id of extraIds) {
       const bank = banksById.get(id);
       if (!bank) continue;
-      const extra = toStop(bank, anchor);
+      const extra = resolveStop(bank);
       const { insertAt } = cheapestInsertion(anchor, route, extra);
       route = [...route.slice(0, insertAt), extra, ...route.slice(insertAt)];
     }
     return route;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [anchor?.id, anchor?.branch.id, mustVisitIds.join(","), extraIds.join(","), branchOverrides]);
+  }, [anchor?.id, anchor?.branch.id, mustVisitIds.join(","), extraIds.join(","), branchOverrides, autoBranchByBank]);
 
   const fullSequence: Stop[] = anchor ? [anchor, ...routeAfterAnchor] : [];
   const startMinutes = parseTime(startTime);
@@ -166,10 +242,14 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
   const itinerary = anchor
     ? buildMultiDayItinerary(anchor, fullSequence, startMinutes, endMinutes, minutesPerStop)
     : null;
-  const roundTripDriveBack =
-    roundTrip && fullSequence.length > 0 ? estimateDriveMinutes(fullSequence[fullSequence.length - 1], anchor!) : 0;
+  // Drive from home to the first stop — shown as info, not charged to the day
+  // (you're assumed to be at the first bank when it opens, whatever time you left).
+  const homeLegDrive = homePoint && fullSequence.length > 0 ? estimateDriveMinutes(homePoint, fullSequence[0]) : 0;
+  // Closing leg back to home / the first bank / a custom end (nothing for "stay at last stop").
+  const endLegDrive =
+    endPoint && fullSequence.length > 0 ? estimateDriveMinutes(fullSequence[fullSequence.length - 1], endPoint) : 0;
   const visitMinutesTotal = fullSequence.length * minutesPerStop;
-  const usedMinutes = (itinerary?.totalDriveMinutes ?? 0) + visitMinutesTotal + roundTripDriveBack;
+  const usedMinutes = (itinerary?.totalDriveMinutes ?? 0) + visitMinutesTotal + endLegDrive;
   const remainingMinutes = budgetMinutes - usedMinutes;
   const daysNeeded = itinerary?.days.length ?? 0;
 
@@ -184,7 +264,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
     if (!anchor) return [];
     return candidatePool
       .map((b) => {
-        const stop = toStop(b, anchor);
+        const stop = resolveStop(b);
         const { addedMinutes } = cheapestInsertion(anchor, routeAfterAnchor, stop);
         const totalCost = addedMinutes + minutesPerStop;
         return { bank: b, addedMinutes, totalCost, projectedRemaining: remainingMinutes - totalCost };
@@ -193,49 +273,87 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchor, candidatePool, routeAfterAnchor, minutesPerStop, remainingMinutes]);
 
-  const googleLinksByDay = useMemo(() => {
+  // Where each night is spent (a real geocoded stop, or null = resume from the
+  // previous day's last stop). Keyed by the 0-based day the night follows.
+  const nightPoint = useCallback(
+    (dayIdx: number): LatLng | null => draftPoint(nightDrafts[String(dayIdx)] ?? EMPTY_DRAFT),
+    [nightDrafts],
+  );
+  const setNight = useCallback((dayIdx: number, d: PlaceDraft) => {
+    setNightDrafts((cur) => ({ ...cur, [String(dayIdx)]: d }));
+  }, []);
+
+  // Google Maps links per day. Day 1 gets two — one starting from home, one
+  // starting at the first bank — per the user's request. Later days start from
+  // wherever you slept, and the final day ends at the trip's end point.
+  const linksByDay = useMemo<{ label: string; links: string[] }[][]>(() => {
     if (!itinerary || !anchor) return [];
+    const lastDay = itinerary.days.length - 1;
     return itinerary.days.map((day, i) => {
-      const stops = day.stops.map((s) => fullSequence.find((f) => f.id === s.id)!).filter(Boolean);
-      const pts: LatLng[] = stops.map((s) => ({ lat: s.lat, lng: s.lng }));
-      // Every day after the first starts from wherever the previous day's
-      // last stop left off (no overnight drive back to the anchor) — include
-      // that as the day's starting point so a single-stop day still gets a
-      // real "drive there" link instead of silently having none.
-      if (i > 0) {
+      const stopPts: LatLng[] = day.stops
+        .map((s) => fullSequence.find((f) => f.id === s.id))
+        .filter((s): s is Stop => !!s)
+        .map((s) => ({ lat: s.lat, lng: s.lng }));
+      const dest = i === lastDay ? endPoint : nightPoint(i);
+      const tail = dest ? [dest] : [];
+
+      if (i === 0) {
+        const groups: { label: string; links: string[] }[] = [];
+        if (homePoint) {
+          const withHome = buildGoogleMapsLinks([homePoint, ...stopPts, ...tail]);
+          if (withHome.length) groups.push({ label: "From home", links: withHome });
+        }
+        groups.push({ label: homePoint ? "Bank route only" : "Open in Google Maps", links: buildGoogleMapsLinks([...stopPts, ...tail]) });
+        return groups;
+      }
+
+      const prevNight = nightPoint(i - 1);
+      let origin: LatLng | null = prevNight;
+      if (!origin) {
         const prevDay = itinerary.days[i - 1];
         const prevLast = prevDay.stops[prevDay.stops.length - 1];
         const prevStop = fullSequence.find((f) => f.id === prevLast.id);
-        if (prevStop) pts.unshift({ lat: prevStop.lat, lng: prevStop.lng });
+        origin = prevStop ? { lat: prevStop.lat, lng: prevStop.lng } : null;
       }
-      if (roundTrip && i === itinerary.days.length - 1 && pts.length > 1) {
-        pts.push({ lat: anchor.lat, lng: anchor.lng });
-      }
-      return buildGoogleMapsLinks(pts);
+      const head = origin ? [origin] : [];
+      return [{ label: "Open in Google Maps", links: buildGoogleMapsLinks([...head, ...stopPts, ...tail]) }];
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itinerary, fullSequence, roundTrip, anchor]);
+  }, [itinerary, fullSequence, endPoint?.lat, endPoint?.lng, homePoint?.lat, homePoint?.lng, nightDrafts, anchor]);
 
   const mapPoints: MapPoint[] = useMemo(() => {
     const pts: MapPoint[] = [];
+    if (homePoint) pts.push({ id: "__home", name: "Home / start", lat: homePoint.lat, lng: homePoint.lng, role: "home" });
     if (anchor) pts.push({ id: anchor.id, name: anchor.name, lat: anchor.lat, lng: anchor.lng, role: "anchor" });
     for (const b of routeAfterAnchor) {
       pts.push({ id: b.id, name: b.name, lat: b.lat, lng: b.lng, role: mustVisitIds.includes(b.id) ? "must-visit" : "accepted" });
     }
     for (const c of rankedCandidates.slice(0, 80)) {
-      const stop = anchor ? toStop(c.bank, anchor) : null;
+      const stop = anchor ? resolveStop(c.bank) : null;
       if (!stop) continue;
       pts.push({ id: c.bank.id, name: c.bank.name, lat: stop.lat, lng: stop.lng, role: "candidate", addedMinutes: c.addedMinutes });
     }
+    for (const [key, d] of Object.entries(nightDrafts)) {
+      const p = draftPoint(d);
+      if (p) pts.push({ id: `__night${key}`, name: `Overnight after day ${Number(key) + 1}`, lat: p.lat, lng: p.lng, role: "lodging" });
+    }
+    if (endMode === "custom" && endPoint) {
+      pts.push({ id: "__end", name: "Trip end", lat: endPoint.lat, lng: endPoint.lng, role: "lodging" });
+    }
     return pts;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [anchor?.id, anchor?.branch.id, routeAfterAnchor, rankedCandidates.length]);
+  }, [anchor?.id, anchor?.branch.id, homePoint?.lat, homePoint?.lng, routeAfterAnchor, rankedCandidates.length, nightDrafts, endMode, endPoint?.lat, endPoint?.lng]);
 
-  const routeLine: LatLng[] = fullSequence.map((b) => ({ lat: b.lat, lng: b.lng }));
-  const fitKey = `${anchor?.id ?? "none"}-${radiusMiles}`;
+  const routeLine: LatLng[] = [
+    ...(homePoint ? [homePoint] : []),
+    ...fullSequence.map((b) => ({ lat: b.lat, lng: b.lng })),
+    ...(endPoint ? [endPoint] : []),
+  ];
+  const fitKey = `${anchor?.id ?? "none"}-${radiusMiles}-${homePoint ? "h" : "n"}`;
 
   const handleMapClick = useCallback(
     (id: string) => {
+      if (id.startsWith("__")) return; // home / lodging / end markers aren't clickable
       if (mustVisitIds.includes(id)) return; // clicking a must-visit does nothing here
       setExtraIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
     },
@@ -258,14 +376,14 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
     return data.banks
       .filter((b) => !selectedIds.has(b.id) && `${b.name} ${b.city ?? ""} ${b.state ?? ""}`.toLowerCase().includes(q))
       .map((b) => {
-        const stop = toStop(b, anchor);
+        const stop = resolveStop(b);
         const { addedMinutes } = cheapestInsertion(anchor, routeAfterAnchor, stop);
         return { bank: b, addedMinutes, totalCost: addedMinutes + minutesPerStop };
       })
       .sort((a, b) => a.totalCost - b.totalCost)
       .slice(0, 20);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addQuery, data.banks, anchor, routeAfterAnchor, minutesPerStop]);
+  }, [addQuery, data.banks, anchor, routeAfterAnchor, minutesPerStop, autoBranchByBank]);
 
   function applyPlan(plan: RoadTripPlan, tripId: string, title: string) {
     setMustVisitIds(plan.mustVisitIds.filter((id) => banksById.has(id)));
@@ -274,10 +392,17 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
     setEndTime(plan.endTime);
     setMinutesPerStop(plan.minutesPerStop);
     setRadiusMiles(plan.radiusMiles);
-    setRoundTrip(plan.roundTrip);
     setNumDays(plan.numDays ?? 1);
     setExtraIds(plan.extraIds.filter((id) => banksById.has(id)));
     setBranchOverrides(plan.branchOverrides ?? {});
+    // New (all optional): home/end/overnight. Fall back to the legacy roundTrip
+    // flag for the end mode so trips saved before this still load correctly.
+    setHomeDraft(placeToDraft(plan.homePlace));
+    setEndMode(plan.endMode ?? (plan.roundTrip ? "first_bank" : "last_stop"));
+    setEndDraft(placeToDraft(plan.endPlace));
+    setNightDrafts(
+      Object.fromEntries(Object.entries(plan.nightStops ?? {}).map(([k, v]) => [k, placeToDraft(v)])),
+    );
     setActiveTripId(tripId);
     setActiveTripTitle(title);
   }
@@ -289,10 +414,20 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
     endTime,
     minutesPerStop,
     radiusMiles,
-    roundTrip,
+    // Keep the legacy flag meaningful for anything still reading it: any return
+    // leg (home / first bank / custom) counts as a "round trip".
+    roundTrip: endMode !== "last_stop",
     numDays,
     extraIds,
     branchOverrides,
+    homePlace: draftToPlace(homeDraft),
+    endMode,
+    endPlace: draftToPlace(endDraft),
+    nightStops: Object.fromEntries(
+      Object.entries(nightDrafts)
+        .map(([k, d]) => [k, draftToPlace(d)] as const)
+        .filter((entry): entry is readonly [string, TripPlace] => entry[1] !== null),
+    ),
   };
   const currentBankCerts = [...new Set(fullSequence.map((s) => s.cert))];
 
@@ -447,7 +582,23 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
       ) : (
         <>
           {/* ── 2. Your day(s) ── */}
-          <Card title="2. Your day(s)" subtitle="Defaults to a one-day trip, 9am–4pm, an hour per bank.">
+          <Card title="2. Your day(s)" subtitle="Where you start from, your hours, and how the trip ends.">
+            <div className="mb-4">
+              <span className="mb-1 block text-xs font-medium text-slate-500">Start from (home address)</span>
+              <AddressAutocomplete
+                value={homeDraft.address}
+                onChange={(v) => setHomeDraft({ address: v, lat: null, lng: null })}
+                onSelectCoords={(p) => setHomeDraft({ address: p.display, lat: p.lat, lng: p.lng })}
+                placeholder="Type your address and pick a suggestion…"
+              />
+              <p className="mt-1 flex items-start gap-1.5 text-xs text-slate-400">
+                <Home className="mt-0.5 h-3 w-3 shrink-0" />
+                {homePoint
+                  ? "The starting bank uses its branch closest to here. The day still starts at your start time — the drive from home happens before that."
+                  : "Optional — pick a suggestion so the starting bank uses the branch closest to home (and to end back here)."}
+              </p>
+            </div>
+
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
               <Field label="Start time">
                 <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inputCls} />
@@ -490,33 +641,42 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
               <Info className="mt-0.5 h-3 w-3 shrink-0" />
               Detour radius: how far out of your way you&apos;re willing to drive to pick up an extra
               bank. Only affects the &quot;Add more banks nearby&quot; suggestions below — you can
-              always search for and add a specific bank regardless of distance. For a multi-day
-              trip, each day gets its own overnight stay — you continue the next morning from
-              wherever the previous day ended, rather than driving back every night.
+              always search for and add a specific bank regardless of distance. For a multi-day trip,
+              set where you sleep each night in the itinerary below.
             </p>
 
             <div className="mt-4">
               <span className="mb-1.5 block text-xs font-medium text-slate-500">End the trip</span>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setRoundTrip(true)}
-                  className={`rounded-lg border px-3 py-2 text-sm font-medium ${
-                    roundTrip ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-500 hover:bg-slate-50"
-                  }`}
-                >
-                  Back where I started{anchor ? ` (${anchor.name})` : ""}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRoundTrip(false)}
-                  className={`rounded-lg border px-3 py-2 text-sm font-medium ${
-                    !roundTrip ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-500 hover:bg-slate-50"
-                  }`}
-                >
-                  At the last stop
-                </button>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <EndModeButton active={endMode === "home"} disabled={!homePoint} onClick={() => setEndMode("home")}>
+                  Back home
+                </EndModeButton>
+                <EndModeButton active={endMode === "first_bank"} onClick={() => setEndMode("first_bank")}>
+                  Back to first bank
+                </EndModeButton>
+                <EndModeButton active={endMode === "last_stop"} onClick={() => setEndMode("last_stop")}>
+                  Stay at last stop
+                </EndModeButton>
+                <EndModeButton active={endMode === "custom"} onClick={() => setEndMode("custom")}>
+                  A different address…
+                </EndModeButton>
               </div>
+              {endMode === "home" && !homePoint && (
+                <p className="mt-1.5 text-xs text-amber-600">Add a home address above to end back there.</p>
+              )}
+              {endMode === "custom" && (
+                <div className="mt-2">
+                  <AddressAutocomplete
+                    value={endDraft.address}
+                    onChange={(v) => setEndDraft({ address: v, lat: null, lng: null })}
+                    onSelectCoords={(p) => setEndDraft({ address: p.display, lat: p.lat, lng: p.lng })}
+                    placeholder="Where the trip ends (e.g. a hotel)…"
+                  />
+                  {!draftPoint(endDraft) && (
+                    <p className="mt-1 text-xs text-slate-400">Pick a suggestion to set the end location.</p>
+                  )}
+                </div>
+              )}
             </div>
 
             <BudgetBar usedMinutes={usedMinutes} budgetMinutes={budgetMinutes} daysNeeded={daysNeeded} numDays={numDays} />
@@ -642,10 +802,41 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
           {/* ── 4. Itinerary ── */}
           <Card title="4. Your itinerary" subtitle="Timed stop order, with a Google Maps link for each day.">
             <div className="space-y-5">
-              {itinerary?.days.map((day, dayIdx) => (
+              {itinerary?.days.map((day, dayIdx) => {
+                const dayStopObjs = day.stops
+                  .map((s) => fullSequence.find((f) => f.id === s.id))
+                  .filter((s): s is Stop => !!s);
+                const firstStop = dayStopObjs[0];
+                const lastStopObj = dayStopObjs[dayStopObjs.length - 1];
+                const isLastDay = dayIdx === itinerary.days.length - 1;
+                const prevNight = dayIdx > 0 ? nightPoint(dayIdx - 1) : null;
+                const morningDrive =
+                  dayIdx === 0
+                    ? homePoint && firstStop
+                      ? homeLegDrive
+                      : null
+                    : prevNight && firstStop
+                      ? estimateDriveMinutes(prevNight, firstStop)
+                      : null;
+                const dayGroups = linksByDay[dayIdx] ?? [];
+                return (
                 <div key={day.dayIndex}>
                   {itinerary.days.length > 1 && (
                     <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Day {dayIdx + 1}</h3>
+                  )}
+                  {dayIdx === 0 && homePoint && morningDrive != null && (
+                    <p className="mb-2 flex items-center gap-1.5 text-xs text-slate-500">
+                      <Home className="h-3 w-3 text-slate-400" />
+                      Leave home → first stop, about {fmtDuration(morningDrive)} drive (before your start time).
+                    </p>
+                  )}
+                  {dayIdx > 0 && (
+                    <p className="mb-2 flex items-center gap-1.5 text-xs text-slate-500">
+                      <BedDouble className="h-3 w-3 text-violet-400" />
+                      {prevNight
+                        ? `Leave your overnight stop → first stop, about ${fmtDuration(morningDrive ?? 0)} drive.`
+                        : "Continue from where you stopped the night before."}
+                    </p>
                   )}
                   <ol className="space-y-2">
                     {day.stops.map((s) => {
@@ -698,7 +889,8 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                               {pickerOpen && (
                                 <ul className="mt-2 space-y-1 rounded-lg border border-slate-100 bg-slate-50 p-1.5">
                                   {stop.branches.map((br) => {
-                                    const dist = anchor ? haversineMiles(anchor, br) : 0;
+                                    const refPt = homePoint ?? (anchor ? { lat: anchor.lat, lng: anchor.lng } : null);
+                                    const dist = refPt ? haversineMiles(refPt, br) : 0;
                                     const selected = br.id === stop.branch.id;
                                     return (
                                       <li key={br.id}>
@@ -716,7 +908,9 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                                             {br.address}
                                             {br.mainOffice && <span className="ml-1.5 text-slate-400">(main office)</span>}
                                           </span>
-                                          <span className="shrink-0 text-slate-400">{dist.toFixed(1)}mi from start</span>
+                                          <span className="shrink-0 text-slate-400">
+                                            {dist.toFixed(1)}mi from {homePoint ? "home" : "start"}
+                                          </span>
                                         </button>
                                       </li>
                                     );
@@ -729,31 +923,65 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                       );
                     })}
                   </ol>
-                  {googleLinksByDay[dayIdx]?.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {googleLinksByDay[dayIdx].map((link, i) => (
-                        <a
-                          key={link}
-                          href={link}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          Day {dayIdx + 1}: Open in Google Maps{googleLinksByDay[dayIdx].length > 1 ? ` — leg ${i + 1}` : ""}
-                        </a>
-                      ))}
+
+                  {dayGroups.map((group) =>
+                    group.links.length > 0 ? (
+                      <div key={group.label} className="mt-2 flex flex-wrap items-center gap-2">
+                        {dayGroups.length > 1 && (
+                          <span className="text-xs font-medium text-slate-400">{group.label}:</span>
+                        )}
+                        {group.links.map((link, i) => (
+                          <a
+                            key={link}
+                            href={link}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            {itinerary.days.length > 1 ? `Day ${dayIdx + 1}` : "Open in Google Maps"}
+                            {group.links.length > 1 ? ` — leg ${i + 1}` : ""}
+                          </a>
+                        ))}
+                      </div>
+                    ) : null,
+                  )}
+
+                  {isLastDay && endPoint && lastStopObj && (
+                    <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
+                      <Flag className="h-3 w-3 text-slate-400" />
+                      {endMode === "home"
+                        ? "Drive home at the end of the trip"
+                        : endMode === "first_bank"
+                          ? `Drive back to ${anchor?.name} at the end of the trip`
+                          : "Drive to your end point"}
+                      : about {fmtDuration(endLegDrive)}.
+                    </p>
+                  )}
+
+                  {!isLastDay && (
+                    <div className="mt-3 rounded-lg border border-violet-100 bg-violet-50/60 px-3 py-2">
+                      <span className="mb-1 flex items-center gap-1.5 text-xs font-medium text-violet-700">
+                        <BedDouble className="h-3.5 w-3.5" />
+                        Overnight after Day {dayIdx + 1}
+                      </span>
+                      <AddressAutocomplete
+                        value={nightDrafts[String(dayIdx)]?.address ?? ""}
+                        onChange={(v) => setNight(dayIdx, { address: v, lat: null, lng: null })}
+                        onSelectCoords={(p) => setNight(dayIdx, { address: p.display, lat: p.lat, lng: p.lng })}
+                        placeholder="Hotel or address for this night (optional)…"
+                      />
+                      {nightPoint(dayIdx) && lastStopObj && (
+                        <p className="mt-1 text-xs text-slate-400">
+                          About {fmtDuration(estimateDriveMinutes(lastStopObj, nightPoint(dayIdx)!))} drive from the last stop.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
-            {roundTrip && anchor && fullSequence.length > 1 && (
-              <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
-                <Navigation className="h-3 w-3" />
-                Drive back to {anchor.name} at the end of the trip: ~{fmtDuration(roundTripDriveBack)}
-              </p>
-            )}
             {daysNeeded > numDays && (
               <p className="mt-3 flex items-center gap-1.5 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
@@ -775,6 +1003,33 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="mb-1 block text-xs font-medium text-slate-500">{label}</span>
       {children}
     </label>
+  );
+}
+
+function EndModeButton({
+  active,
+  disabled,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+        active
+          ? "border-blue-300 bg-blue-50 text-blue-700"
+          : "border-slate-200 text-slate-500 hover:bg-slate-50"
+      } ${disabled ? "cursor-not-allowed opacity-50 hover:bg-transparent" : ""}`}
+    >
+      {children}
+    </button>
   );
 }
 

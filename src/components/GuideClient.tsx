@@ -287,13 +287,17 @@ const TOPICS: Topic[] = [
     title: "Road trip planner",
     blurb: "Plan a driving day (or several) to open banks in person.",
     points: [
+      "Enter your home address to start from — the bank you start at uses whichever of its locations is closest to home, and the day starts at your chosen time there",
       "Pick the banks you must visit, then see every other tracked bank nearby, ranked by how much extra driving it adds",
       "Set a time window, minutes per bank, and how many days — the itinerary splits into days automatically",
+      "Choose how the trip ends: back home, back at the first bank, at the last stop, or at a different address like a hotel",
       "Ends in a timed stop-by-stop plan plus a Google Maps link for actual driving",
       "Save a trip to come back to later, or share it so anyone in the family can reuse it",
     ],
     tips: [
-      "If a bank has more than one nearby office, the planner picks the closest one by default — click \"N locations\" on any stop to choose a different branch.",
+      "When several banks each have more than one location, the planner automatically picks the combination of branches that are closest to each other, so you drive the least — click \"N locations\" on any stop to override its branch.",
+      "With a home address set, Day 1 gives you two Google Maps links: one starting from home, and one for just the bank-to-bank route.",
+      "On a multi-day trip, set where you sleep each night right in the itinerary — the drive to and from each overnight stop is included in the plan.",
       "Search \"Add more banks nearby\" for a specific bank by name to add it regardless of distance, not just from the ranked list.",
       "You can paste in a Google Maps link from a road trip you already took, and it'll try to match the stops back to your tracked banks automatically.",
       "A shared trip is read-only for everyone but the person who saved it — loading one just makes your own private copy.",

@@ -21,6 +21,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-07-16",
+    title: "Road trips start from home and pick the closest branches",
+    items: [
+      "You can now enter a home address in the road trip planner. The bank you start at automatically uses whichever of its locations is closest to home, and the day still starts at your chosen time at that branch.",
+      "When a trip covers several banks that each have multiple locations, the planner now picks the combination of branches that are closest to each other, so you drive the shortest route overall — not just each bank's nearest office on its own.",
+      "Choose how the trip ends: back home, back at the first bank, staying at the last stop, or at a different address like a hotel. For multi-day trips you can set where you sleep each night, and the drive to and from each overnight stop is worked into the plan.",
+      "Day 1 now gives you two Google Maps links — one starting from home and one for just the bank route — so you can navigate from your door or jump straight to the first stop.",
+    ],
+  },
+  {
     date: "2026-07-10",
     title: "Bank logos",
     items: [

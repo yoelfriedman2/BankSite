@@ -176,6 +176,58 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-16 (road trip: home-address start, joint branch selection, per-night stays, dual maps
+links)** — Feature request from chat: start a trip from a home address (start bank uses its branch
+closest to home; day still starts at the set time there), and for a multi-bank trip auto-pick the
+combination of branches that minimizes total driving. User then expanded scope to per-night overnight
+stops and two Day-1 map links, and explicitly chose a live-editing page over a step-by-step wizard.
+All UI + pure-logic; **no migration** (new fields ride the existing `road_trips.plan` jsonb blob and
+are all optional, so trips saved before this load unchanged).
+
+- **`src/lib/roadtrip.ts`**: new pure `chooseBranchesForRoute()` — coordinate descent (order stops →
+  re-pick each bank's branch for its real neighbours → repeat) that jointly picks one branch per bank
+  to minimize the route, respecting a `locked` map (manual overrides) and an optional `returnTo`
+  (trip end). Also changed `buildMultiDayItinerary()` so **every day now starts fresh at the daily
+  start time** with `driveMinutesFromPrev: 0` on each day's first stop (the home/overnight morning
+  drive is surfaced separately by the client, not baked into the banking-hours clock or
+  `totalDriveMinutes`). This is a deliberate behavior change from the old "day 2 first stop arrives at
+  start + drive-from-prev-day's-last-stop".
+- **`RoadTripPlan` (road-trip/actions.ts)** gained optional `homePlace`, `endMode`
+  (`home`/`first_bank`/`last_stop`/`custom`), `endPlace`, and `nightStops` (keyed by the 0-based day a
+  night follows). Legacy `roundTrip` boolean kept for back-compat: on load, `endMode ??= roundTrip ?
+  "first_bank" : "last_stop"`; on save, `roundTrip = endMode !== "last_stop"`. New `TripPlace`/
+  `TripEndMode` types exported.
+- **`AddressAutocomplete.tsx`** gained an optional `onSelectCoords(place)` callback surfacing the
+  picked Nominatim result's lat/lon (it previously kept only `display_name`). Non-breaking — the
+  Address Change page ignores it. **New convention: reuse `<AddressAutocomplete onSelectCoords=…>` to
+  geocode an address anywhere else** rather than wiring a second geocoder.
+- **`RoadTripClient.tsx`**: home-address field in Section 2; anchor branch = nearest home; a joint
+  `autoBranchByBank` (from the optimizer) feeding a `resolveStop()` that layers override > auto >
+  nearest-anchor; a 4-way "End the trip" selector (with a conditional custom-address input); per-night
+  overnight address inputs rendered inline in the itinerary between days; a per-day morning "leave
+  home/overnight → first stop ~Nmin" line and a final "drive to <end> ~Nmin" line; Day 1 renders **two**
+  Google Maps links ("From home" + "Bank route only") when a home address is set. Map (`RoadTripMap.tsx`)
+  got `home`/`lodging` marker roles and now draws the route line from home through stops to the end
+  point. The old `roundTrip` state was removed (superseded by `endMode`).
+- **New convention going forward**: any *new* outbound trip point that ends the day/night is a geocoded
+  `TripPlace`; branch selection defaults come from the optimizer, never hand-rolled per-bank
+  nearest-to-anchor loops again.
+
+Verified: `npm run build` clean (temp `xlsx`→registry swap, restored after — same sandbox workaround
+as every prior session). Standalone Node test (`node --experimental-strip-types`) of
+`chooseBranchesForRoute` (confirms it picks the mutually-closest branch pair, not the independent
+nearest-to-start one; respects `locked`) and `buildMultiDayItinerary` (each day starts 9:00 AM, 0
+inter-day drive). Full DEMO_MODE browser pass via a **hand-rolled Chrome DevTools Protocol driver** —
+Playwright/`playwright-core` are **blocked by this sandbox's npm security policy (403)**, so I launched
+the pre-installed `/opt/pw-browsers` Chromium with `--remote-debugging-port` and drove it over CDP with
+Node's global `WebSocket`, stubbing the Nominatim geocoder via an in-page `window.fetch` override
+(external network is blocked here too). 10/10 checks: home-address pick → "branch closest to here"
+hint, single-day 3-stop trip shows both Day-1 links, 2-day split shows the overnight input, "Back home"
+end mode → "Drive home" note, no console errors, no 375px overflow. Screenshots at desktop + mobile
+confirmed the layout. **If a future session needs to click-test the app, that CDP driver approach
+(`scratchpad/cdp.mjs` pattern) is the way — don't waste time re-attempting a `playwright` install, it
+403s.**
+
 **2026-07-12 (external bank/website links now escape the packaged Android app)** — User reported
 that, in the installed APK (the TWA built earlier), tapping a bank's website link kept them inside
 the app instead of handing off to a real browser. Every such link already used the correct web

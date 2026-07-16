@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 
-type Suggestion = { display_name: string };
+type Suggestion = { display_name: string; lat?: string; lon?: string };
+
+export type PickedPlace = { display: string; lat: number; lng: number };
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -15,11 +17,16 @@ export function AddressAutocomplete({
   id,
   value,
   onChange,
+  onSelectCoords,
   placeholder,
 }: {
   id?: string;
   value: string;
   onChange: (value: string) => void;
+  /** Fired when a suggestion is picked, with its resolved coordinates. Lets a
+   *  caller (e.g. the road-trip planner) geocode the address, not just capture
+   *  the text. Optional — the Address Change page ignores it. */
+  onSelectCoords?: (place: PickedPlace) => void;
   placeholder?: string;
 }) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -86,6 +93,11 @@ export function AddressAutocomplete({
                 className="block w-full truncate px-3 py-2 text-left text-slate-700 hover:bg-amber-50"
                 onClick={() => {
                   onChange(s.display_name);
+                  const lat = Number(s.lat);
+                  const lng = Number(s.lon);
+                  if (onSelectCoords && Number.isFinite(lat) && Number.isFinite(lng)) {
+                    onSelectCoords({ display: s.display_name, lat, lng });
+                  }
                   setOpen(false);
                 }}
               >

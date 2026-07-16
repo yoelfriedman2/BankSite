@@ -9,7 +9,7 @@ export type MapPoint = {
   name: string;
   lat: number;
   lng: number;
-  role: "anchor" | "must-visit" | "accepted" | "candidate";
+  role: "anchor" | "must-visit" | "accepted" | "candidate" | "home" | "lodging";
   addedMinutes?: number; // shown in the popup for candidates
 };
 
@@ -20,6 +20,10 @@ const ROLE_STYLE: Record<MapPoint["role"], { color: string; radius: number; fill
   // Was a muted gray that was genuinely hard to spot against the map tiles —
   // indigo with a darker outline stands out clearly at any zoom level.
   candidate: { color: "#6366f1", radius: 7, fillOpacity: 0.9, weight: 2 },
+  // Start address and overnight/end stops: dark near-black so they read as
+  // "where you sleep", distinct from the bank markers.
+  home: { color: "#0f172a", radius: 9, fillOpacity: 0.95, weight: 2 },
+  lodging: { color: "#7c3aed", radius: 8, fillOpacity: 0.95, weight: 2 },
 };
 
 /** No image assets (avoids the classic Leaflet-in-a-bundler broken-marker-icon

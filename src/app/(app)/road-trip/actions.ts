@@ -178,6 +178,20 @@ function uniqueStates(banks: RoadTripBank[]): string[] {
 // Saved / draft trips
 // ---------------------------------------------------------------------------
 
+/** A geocoded place (home, trip end, or an overnight stop). */
+export interface TripPlace {
+  address: string;
+  lat: number;
+  lng: number;
+}
+
+/** Where the whole trip finishes.
+ *  - "home"       → back at the start address
+ *  - "first_bank" → back at the starting bank's branch (the old round-trip default)
+ *  - "last_stop"  → wherever the last bank leaves you, no return leg
+ *  - "custom"     → a different address (e.g. a hotel), stored in `endPlace` */
+export type TripEndMode = "home" | "first_bank" | "last_stop" | "custom";
+
 /** The entire serializable planner state for one saved trip. */
 export interface RoadTripPlan {
   mustVisitIds: string[]; // order = user's add order (before route optimization)
@@ -186,10 +200,20 @@ export interface RoadTripPlan {
   endTime: string; // "HH:MM"
   minutesPerStop: number;
   radiusMiles: number;
-  roundTrip: boolean;
+  roundTrip: boolean; // legacy: kept so old saved trips still load; superseded by endMode
   numDays: number;
   extraIds: string[]; // accepted candidates, order added
   branchOverrides: Record<string, string>; // bankId -> chosen branch id
+  // ── Added 2026-07-16 (home address + per-night overnight stops). All optional
+  //    so trips saved before this still load unchanged. ──
+  /** The address you leave from; the start bank's branch is auto-picked nearest here. */
+  homePlace?: TripPlace | null;
+  endMode?: TripEndMode;
+  /** The address for endMode "custom". */
+  endPlace?: TripPlace | null;
+  /** Where you sleep each night of a multi-day trip, keyed by the 0-based day it
+   *  follows ("0" = the night after day 1). Absent = resume from the last stop. */
+  nightStops?: Record<string, TripPlace>;
 }
 
 export interface SavedTripSummary {

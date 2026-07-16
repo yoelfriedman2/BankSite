@@ -114,6 +114,92 @@ export function cheapestInsertion<T extends LatLng>(
   return best;
 }
 
+/** One bank and its candidate branch coordinates, for the branch optimizer. */
+export interface OptimizerBank<B extends LatLng & { id: string }> {
+  id: string;
+  branches: B[];
+}
+
+/**
+ * Jointly choose ONE branch per bank so the whole route is as short as possible.
+ *
+ * Picking each bank's nearest-to-the-anchor branch in isolation is greedy and
+ * misses the case the user actually cares about: "I want 3 banks, give me the
+ * locations closest to each other so I drive the least." This does coordinate
+ * descent — order the stops with the current branch picks, then re-pick each
+ * bank's branch for its real neighbours in that order, and repeat until nothing
+ * moves. Distances stand in for drive time (monotonic here), which keeps it a
+ * pure, dependency-free computation. Stop counts are a day's worth of banks, so
+ * a handful of passes is plenty and cheap.
+ *
+ * `start` is the fixed first point (the anchor bank's chosen branch, or home).
+ * `locked[bankId] = branchId` pins a bank to a specific branch (a manual
+ * override the user set), and `returnTo` — when the trip ends back at a fixed
+ * place (home / a hotel) — lets the last stop's branch account for that final
+ * drive too. Returns `{ bankId: branchId }` for every bank that has branches.
+ */
+export function chooseBranchesForRoute<B extends LatLng & { id: string }>(
+  start: LatLng,
+  banks: OptimizerBank<B>[],
+  opts: { returnTo?: LatLng | null; locked?: Record<string, string>; maxPasses?: number } = {},
+): Record<string, string> {
+  const locked = opts.locked ?? {};
+  const returnTo = opts.returnTo ?? null;
+  const maxPasses = opts.maxPasses ?? 4;
+
+  const nearestTo = (ref: LatLng, brs: B[]): B =>
+    brs.reduce((best, b) => (haversineMiles(ref, b) < haversineMiles(ref, best) ? b : best));
+
+  // Seed each bank with its locked branch (if any) or the branch nearest `start`.
+  const chosen: Record<string, B> = {};
+  for (const bank of banks) {
+    if (bank.branches.length === 0) continue;
+    const lockedBranch = locked[bank.id] ? bank.branches.find((b) => b.id === locked[bank.id]) : undefined;
+    chosen[bank.id] = lockedBranch ?? nearestTo(start, bank.branches);
+  }
+
+  for (let pass = 0; pass < maxPasses; pass++) {
+    const chosenPoints = banks
+      .filter((b) => chosen[b.id])
+      .map((b) => ({ ...chosen[b.id], bankId: b.id }));
+    // orderStops only reads lat/lng off `start`; cast so it keeps the bankId tag
+    // on the returned stops instead of widening the generic to a bare LatLng.
+    const ordered = orderStops(start as unknown as (typeof chosenPoints)[number], chosenPoints);
+    // seq[0] = start, ordered[i] sits at seq[i+1], optional returnTo closes it.
+    const seq: LatLng[] = [start, ...ordered, ...(returnTo ? [returnTo] : [])];
+
+    let changed = false;
+    ordered.forEach((o, i) => {
+      const bankId = o.bankId;
+      if (locked[bankId]) return;
+      const bank = banks.find((b) => b.id === bankId);
+      if (!bank) return;
+      const prev = seq[i];
+      const next: LatLng | undefined = seq[i + 2];
+      const cost = (br: LatLng) => haversineMiles(prev, br) + (next ? haversineMiles(br, next) : 0);
+      let best = chosen[bankId];
+      let bestCost = cost(best);
+      for (const br of bank.branches) {
+        const c = cost(br);
+        if (c < bestCost - 1e-9) {
+          bestCost = c;
+          best = br;
+        }
+      }
+      if (best.id !== chosen[bankId].id) {
+        chosen[bankId] = best;
+        seq[i + 1] = best; // keep the working sequence consistent within the pass
+        changed = true;
+      }
+    });
+    if (!changed) break;
+  }
+
+  const result: Record<string, string> = {};
+  for (const bank of banks) if (chosen[bank.id]) result[bank.id] = chosen[bank.id].id;
+  return result;
+}
+
 function fmtClock(minutesSinceMidnight: number): string {
   const m = Math.round(minutesSinceMidnight) % (24 * 60);
   const h24 = Math.floor(m / 60);
@@ -163,11 +249,17 @@ export function buildMultiDayItinerary(
   };
 
   stops.forEach((s, i) => {
-    const drive = i === 0 ? 0 : estimateDriveMinutes(prev, s);
-    if (dayStops.length > 0 && clock + drive + minutesPerStop > dailyEndMinutes) {
+    const driveFromPrev = i === 0 ? 0 : estimateDriveMinutes(prev, s);
+    const startsNewDay = dayStops.length > 0 && clock + driveFromPrev + minutesPerStop > dailyEndMinutes;
+    if (startsNewDay) {
       pushDay();
       clock = dailyStartMinutes;
     }
+    // The first stop of any day begins fresh at the daily start time. The drive
+    // from home (day 1) or the previous night's lodging (later days) happens
+    // off banking-hours and is surfaced separately by the caller, so it isn't
+    // charged against the day's window or counted here between-days.
+    const drive = i === 0 || startsNewDay ? 0 : driveFromPrev;
     clock += drive;
     totalDriveMinutes += drive;
     const arrive = fmtClock(clock);
