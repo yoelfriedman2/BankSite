@@ -14,7 +14,7 @@ import {
   getDemoAccounts,
   type AccountFields,
 } from "@/lib/demo";
-import type { Account, ActivityType } from "@/lib/types";
+import { AUTO_OPEN_FROM_STATUSES, type Account, type ActivityType } from "@/lib/types";
 import { skipCurrentMonthIfPast } from "@/lib/monthlyFee";
 import { stampOnRateChange } from "@/lib/interestAccrual";
 
@@ -151,8 +151,6 @@ function revalidate() {
   revalidatePath("/");
 }
 
-const PROMOTE_FROM = new Set<string>(["untracked", "want_to_open", "applied", "cannot_open"]);
-
 export async function upsertAccount(
   values: AccountFormValues,
 ): Promise<{ error?: string }> {
@@ -191,7 +189,7 @@ export async function upsertAccount(
         deleted_at: null,
       });
     }
-    if (demoBank && PROMOTE_FROM.has(demoBank.status)) {
+    if (demoBank && AUTO_OPEN_FROM_STATUSES.has(demoBank.status)) {
       updateDemoBank(values.bank_id, { status: "open" });
     }
     revalidate();
@@ -300,7 +298,7 @@ export async function upsertAccount(
     .select("status")
     .eq("id", values.bank_id)
     .maybeSingle();
-  if (bank && PROMOTE_FROM.has(bank.status)) {
+  if (bank && AUTO_OPEN_FROM_STATUSES.has(bank.status)) {
     await supabase
       .from("banks")
       .update({ status: "open" })
@@ -405,7 +403,7 @@ export async function duplicateAccount(
       interest_last_accrued_on: stampOnRateChange(source.interest_rate, new Date()),
       deleted_at: null,
     });
-    if (demoBank && PROMOTE_FROM.has(demoBank.status)) {
+    if (demoBank && AUTO_OPEN_FROM_STATUSES.has(demoBank.status)) {
       updateDemoBank(source.bank_id, { status: "open" });
     }
     revalidate();
@@ -442,7 +440,7 @@ export async function duplicateAccount(
     .select("status")
     .eq("id", bankId)
     .maybeSingle();
-  if (bank && PROMOTE_FROM.has(bank.status)) {
+  if (bank && AUTO_OPEN_FROM_STATUSES.has(bank.status)) {
     await supabase.from("banks").update({ status: "open" }).eq("id", bankId);
   }
 

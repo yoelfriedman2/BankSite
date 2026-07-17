@@ -176,6 +176,45 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-17 (bug fix: adding an account wasn't reliably promoting a bank's status to "open")** —
+User report: "when you add an account to a bank, the status automatically is supposed to change
+from untracked or can't open to open... it doesn't work," plus the same expectation for import.
+The server-side auto-promote logic in `upsertAccount` (`accounts/actions.ts`) was already correct
+and did write `status: "open"` to the DB — but **`BankForm.tsx`'s drawer never picked it up**: its
+`values` form state (which drives both the visible "My status" select and what a subsequent "Save
+bank" click would submit) is local `useState`, initialized once from the `initial` bank prop and
+never re-synced. Adding an account through the drawer's nested "+ Add account" triggers
+`onChanged()` → `router.refresh()`, which does hand `BankForm` a fresh `initial` prop with the new
+DB status — but nothing updated `values.status` to match, so the drawer kept showing the stale
+status (and a careless "Save bank" click right after would have silently written the stale status
+back over the real one). Fixed with a `useEffect` keyed on `initial?.status` that syncs
+`values.status` whenever the server-side value moves out from under the open drawer.
+
+Separately, **real-mode import (`importBanks` in `banks/actions.ts`) never had this auto-promote
+behavior at all** for an *existing* bank matched by an import row — only an explicit `status`
+column in the spreadsheet would change it; a row that just added an account to an already-tracked
+untracked/cannot_open/etc. bank left the status untouched. Added the same rule import-side: no
+explicit `row.status`, but the row carries account data → promote from
+untracked/want_to_open/applied/cannot_open to open (already-open variants like "Open · Add funds"
+are left alone). Demo-mode's `importDemoRows` had a *different*, over-aggressive version of this
+(unconditionally forced `status: "open"` whenever a row had account data, even flattening
+"Open · Add funds" back to plain "Open") — normalized to the same rule.
+
+The four-statuses set (untracked/want_to_open/applied/cannot_open → open) was previously a private,
+duplicated `PROMOTE_FROM` constant only inside `accounts/actions.ts`. Pulled out to
+`lib/types.ts`'s exported `AUTO_OPEN_FROM_STATUSES`, now the single shared source used by
+`accounts/actions.ts`, `banks/actions.ts`'s import, and `lib/demo.ts`'s import — so real-mode and
+demo-mode import can't drift apart on this rule again.
+
+Verified via `npm run build`/`tsc --noEmit` (temp `xlsx` swap, restored after) and a full DEMO_MODE
+Playwright pass (headless Chromium, this remote environment doesn't have the interactive preview
+tool): confirmed the drawer's own status select flips from untracked→open and cannot_open→open live
+right after adding an account, with no reopen needed and no console errors; confirmed a real
+spreadsheet upload through the actual Import dialog UI (not just the underlying function) promotes
+an existing untracked bank to open when the row adds an account; confirmed a truth-table of the
+shared promote/no-promote logic (including the "don't flatten open_add_funds" and "explicit row
+status always wins" cases). Bug fix only — no changelog/Guide entry per the features-only policy.
+
 **2026-07-16 (road trip: home-address start, joint branch selection, per-night stays, dual maps
 links)** — Feature request from chat: start a trip from a home address (start bank uses its branch
 closest to home; day still starts at the set time there), and for a multi-bank trip auto-pick the

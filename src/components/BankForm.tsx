@@ -275,6 +275,17 @@ export function BankForm({
     }
   }, [initial?.id]);
 
+  // Adding an account (via the nested AccountModal below) can auto-promote
+  // this bank's status to "open" server-side; onSaved refreshes the parent
+  // and hands this component a fresh `initial` prop, but `values` is local
+  // form state that otherwise wouldn't pick up that change. Keep the status
+  // field in sync with server truth whenever it moves out from under us.
+  useEffect(() => {
+    if (initial?.status) {
+      setValues((v) => (v.status === initial.status ? v : { ...v, status: initial.status }));
+    }
+  }, [initial?.status]);
+
   // Search for related banks as user types
   useEffect(() => {
     const cert = initial?.cert;
