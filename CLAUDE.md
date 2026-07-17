@@ -213,6 +213,23 @@ are all optional, so trips saved before this load unchanged).
   `TripPlace`; branch selection defaults come from the optimizer, never hand-rolled per-bank
   nearest-to-anchor loops again.
 
+**Follow-up same feature (from live feedback):** (1) **Reordered the sections** so the home address is
+its own top card ("1. Where do you start?") *before* must-visit banks — starting with a bank read as
+backwards. Day settings are now "3. Your day(s)" (home field removed from it), nearby "4.", itinerary
+"5.". The home card sits outside the `!anchor` gate so it shows before any bank is added. (2) **Start-time
+meaning is now a choice** (`TripStartMode = "arrive" | "leave"`, in `RoadTripPlan`, default `arrive`):
+"I'm at the first bank by then" vs. "I leave home then." Implemented by giving `buildMultiDayItinerary`
+an optional `leadMinutesForDay(dayIndex, firstStop)` callback — in `leave` mode it returns that day's
+morning drive (home on day 0, that night's lodging on later days), which pushes the day's first arrival
+back **and** shrinks how many banks fit (the lead is added to the day clock before the overflow check).
+Toggle only shows when a home address is set. (3) **End time = last bank, clarified**: it already meant
+"finish at the last bank by then" (the closing drive to home/hotel was always outside the banking window),
+so no logic change was needed — added copy saying so and an "(arrive around H:MM)" estimate on the
+end-of-trip line (`parseClock12` the last stop's depart + `endLegDrive`). Verified: build clean;
+standalone test extended (arrive vs. leave — day-1 arrival 9:00 → 9:45 with a 45-min lead, later days
+still fresh at 9:00); CDP browser pass now 13/13 (section order, start-time toggle flips the day-1
+morning line, end-of-trip "arrive around", no console errors, no 375px overflow).
+
 Verified: `npm run build` clean (temp `xlsx`→registry swap, restored after — same sandbox workaround
 as every prior session). Standalone Node test (`node --experimental-strip-types`) of
 `chooseBranchesForRoute` (confirms it picks the mutually-closest branch pair, not the independent

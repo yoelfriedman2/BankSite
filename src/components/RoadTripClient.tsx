@@ -26,6 +26,7 @@ import type {
   RoadTripPlan,
   BranchOption,
   TripEndMode,
+  TripStartMode,
   TripPlace,
 } from "@/app/(app)/road-trip/actions";
 import { refreshBranchLocations } from "@/app/(app)/fdic-sync/actions";
@@ -59,6 +60,28 @@ function fmtDuration(min: number): string {
   const m = total % 60;
   if (h === 0) return `${m}m`;
   return `${h}h ${m}m`;
+}
+/** minutes-since-midnight → "9:00 AM". */
+function minutesToClock(min: number): string {
+  const t = (((Math.round(min) % (24 * 60)) + 24 * 60) % (24 * 60));
+  const h24 = Math.floor(t / 60);
+  const mm = t % 60;
+  const ampm = h24 >= 12 ? "PM" : "AM";
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${String(mm).padStart(2, "0")} ${ampm}`;
+}
+/** "09:00" (24h field value) → "9:00 AM". */
+function to12h(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  return minutesToClock((h || 0) * 60 + (m || 0));
+}
+/** "9:00 AM" (an itinerary clock string) → minutes since midnight. */
+function parseClock12(s: string): number {
+  const m = s.match(/(\d+):(\d+)\s*(AM|PM)/i);
+  if (!m) return 0;
+  let h = Number(m[1]) % 12;
+  if (/pm/i.test(m[3])) h += 12;
+  return h * 60 + Number(m[2]);
 }
 
 /** A bank resolved to one specific branch for this trip — either the user's
@@ -107,6 +130,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
 
   // Where you leave from, how the trip ends, and where you sleep each night.
   const [homeDraft, setHomeDraft] = useState<PlaceDraft>({ ...EMPTY_DRAFT });
+  const [startMode, setStartMode] = useState<TripStartMode>("arrive"); // start time = "arrive" at first bank vs "leave" home
   const [endMode, setEndMode] = useState<TripEndMode>("first_bank");
   const [endDraft, setEndDraft] = useState<PlaceDraft>({ ...EMPTY_DRAFT }); // used when endMode === "custom"
   const [nightDrafts, setNightDrafts] = useState<Record<string, PlaceDraft>>({}); // key = 0-based day the night follows
@@ -239,11 +263,30 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
   const dailyBudgetMinutes = Math.max(0, endMinutes - startMinutes);
   const budgetMinutes = dailyBudgetMinutes * Math.max(1, numDays);
 
+  // Where each night is spent (a real geocoded stop, or null = resume from the
+  // previous day's last stop). Keyed by the 0-based day the night follows.
+  const nightPoint = useCallback(
+    (dayIdx: number): LatLng | null => draftPoint(nightDrafts[String(dayIdx)] ?? EMPTY_DRAFT),
+    [nightDrafts],
+  );
+  const setNight = useCallback((dayIdx: number, d: PlaceDraft) => {
+    setNightDrafts((cur) => ({ ...cur, [String(dayIdx)]: d }));
+  }, []);
+
+  // When the start time means "leave home/lodging then" (not "be at the first
+  // bank by then"), each day's first arrival is pushed back by that morning's
+  // drive — from home on day 1, from the night's lodging on later days.
+  const leadMinutesForDay = (dayIndex: number, firstStop: LatLng): number => {
+    if (startMode !== "leave") return 0;
+    if (dayIndex === 0) return homePoint ? estimateDriveMinutes(homePoint, firstStop) : 0;
+    const night = nightPoint(dayIndex - 1);
+    return night ? estimateDriveMinutes(night, firstStop) : 0;
+  };
+
   const itinerary = anchor
-    ? buildMultiDayItinerary(anchor, fullSequence, startMinutes, endMinutes, minutesPerStop)
+    ? buildMultiDayItinerary(anchor, fullSequence, startMinutes, endMinutes, minutesPerStop, leadMinutesForDay)
     : null;
-  // Drive from home to the first stop — shown as info, not charged to the day
-  // (you're assumed to be at the first bank when it opens, whatever time you left).
+  // Drive from home to the first stop — shown as info.
   const homeLegDrive = homePoint && fullSequence.length > 0 ? estimateDriveMinutes(homePoint, fullSequence[0]) : 0;
   // Closing leg back to home / the first bank / a custom end (nothing for "stay at last stop").
   const endLegDrive =
@@ -272,16 +315,6 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
       .sort((a, b) => a.totalCost - b.totalCost);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchor, candidatePool, routeAfterAnchor, minutesPerStop, remainingMinutes]);
-
-  // Where each night is spent (a real geocoded stop, or null = resume from the
-  // previous day's last stop). Keyed by the 0-based day the night follows.
-  const nightPoint = useCallback(
-    (dayIdx: number): LatLng | null => draftPoint(nightDrafts[String(dayIdx)] ?? EMPTY_DRAFT),
-    [nightDrafts],
-  );
-  const setNight = useCallback((dayIdx: number, d: PlaceDraft) => {
-    setNightDrafts((cur) => ({ ...cur, [String(dayIdx)]: d }));
-  }, []);
 
   // Google Maps links per day. Day 1 gets two — one starting from home, one
   // starting at the first bank — per the user's request. Later days start from
@@ -398,6 +431,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
     // New (all optional): home/end/overnight. Fall back to the legacy roundTrip
     // flag for the end mode so trips saved before this still load correctly.
     setHomeDraft(placeToDraft(plan.homePlace));
+    setStartMode(plan.startMode ?? "arrive");
     setEndMode(plan.endMode ?? (plan.roundTrip ? "first_bank" : "last_stop"));
     setEndDraft(placeToDraft(plan.endPlace));
     setNightDrafts(
@@ -421,6 +455,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
     extraIds,
     branchOverrides,
     homePlace: draftToPlace(homeDraft),
+    startMode,
     endMode,
     endPlace: draftToPlace(endDraft),
     nightStops: Object.fromEntries(
@@ -508,8 +543,24 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
         justAddedCert={mustVisitBanks[mustVisitBanks.length - 1]?.cert ?? null}
       />
 
-      {/* ── 1. Must-visit banks ── */}
-      <Card title="1. Must-visit banks" subtitle="Which banks does this trip need to cover?">
+      {/* ── 1. Where do you start? ── */}
+      <Card title="1. Where do you start?" subtitle="Your home address — the trip is built out from here.">
+        <AddressAutocomplete
+          value={homeDraft.address}
+          onChange={(v) => setHomeDraft({ address: v, lat: null, lng: null })}
+          onSelectCoords={(p) => setHomeDraft({ address: p.display, lat: p.lat, lng: p.lng })}
+          placeholder="Type your home address and pick a suggestion…"
+        />
+        <p className="mt-1.5 flex items-start gap-1.5 text-xs text-slate-400">
+          <Home className="mt-0.5 h-3 w-3 shrink-0" />
+          {homePoint
+            ? "The bank you start at will use whichever of its locations is closest to here."
+            : "Optional, but recommended — pick a suggestion so the starting bank uses the branch closest to home (and so the trip can end back here)."}
+        </p>
+      </Card>
+
+      {/* ── 2. Must-visit banks ── */}
+      <Card title="2. Must-visit banks" subtitle="Which banks does this trip need to cover?">
         <div className="relative mb-3">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -581,24 +632,8 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
         </div>
       ) : (
         <>
-          {/* ── 2. Your day(s) ── */}
-          <Card title="2. Your day(s)" subtitle="Where you start from, your hours, and how the trip ends.">
-            <div className="mb-4">
-              <span className="mb-1 block text-xs font-medium text-slate-500">Start from (home address)</span>
-              <AddressAutocomplete
-                value={homeDraft.address}
-                onChange={(v) => setHomeDraft({ address: v, lat: null, lng: null })}
-                onSelectCoords={(p) => setHomeDraft({ address: p.display, lat: p.lat, lng: p.lng })}
-                placeholder="Type your address and pick a suggestion…"
-              />
-              <p className="mt-1 flex items-start gap-1.5 text-xs text-slate-400">
-                <Home className="mt-0.5 h-3 w-3 shrink-0" />
-                {homePoint
-                  ? "The starting bank uses its branch closest to here. The day still starts at your start time — the drive from home happens before that."
-                  : "Optional — pick a suggestion so the starting bank uses the branch closest to home (and to end back here)."}
-              </p>
-            </div>
-
+          {/* ── 3. Your day(s) ── */}
+          <Card title="3. Your day(s)" subtitle="Your hours, how long at each bank, and how the trip ends.">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
               <Field label="Start time">
                 <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inputCls} />
@@ -641,9 +676,32 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
               <Info className="mt-0.5 h-3 w-3 shrink-0" />
               Detour radius: how far out of your way you&apos;re willing to drive to pick up an extra
               bank. Only affects the &quot;Add more banks nearby&quot; suggestions below — you can
-              always search for and add a specific bank regardless of distance. For a multi-day trip,
-              set where you sleep each night in the itinerary below.
+              always search for and add a specific bank regardless of distance. The end time is when
+              you finish at the <strong>last bank</strong> of the day; any drive home after that
+              happens on top of it. For a multi-day trip, set where you sleep each night in the
+              itinerary below.
             </p>
+
+            {homePoint && (
+              <div className="mt-4">
+                <span className="mb-1.5 block text-xs font-medium text-slate-500">
+                  Your start time ({startTime && to12h(startTime)}) means…
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <EndModeButton active={startMode === "arrive"} onClick={() => setStartMode("arrive")}>
+                    I&apos;m at the first bank by then
+                  </EndModeButton>
+                  <EndModeButton active={startMode === "leave"} onClick={() => setStartMode("leave")}>
+                    I leave home then
+                  </EndModeButton>
+                </div>
+                <p className="mt-1.5 text-xs text-slate-400">
+                  {startMode === "arrive"
+                    ? "You leave home early enough to be at the first bank at your start time."
+                    : "You pull out of your driveway at your start time; the first bank is however long the drive takes after that."}
+                </p>
+              </div>
+            )}
 
             <div className="mt-4">
               <span className="mb-1.5 block text-xs font-medium text-slate-500">End the trip</span>
@@ -683,7 +741,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
           </Card>
 
           {/* ── 3. Nearby candidates + map ── */}
-          <Card title="3. Add more banks nearby" subtitle={`Every tracked bank within ${radiusMiles} miles of your route, cheapest detour first.`}>
+          <Card title="4. Add more banks nearby" subtitle={`Every tracked bank within ${radiusMiles} miles of your route, cheapest detour first.`}>
             <div className="relative mb-3">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
@@ -799,8 +857,8 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
             </div>
           </Card>
 
-          {/* ── 4. Itinerary ── */}
-          <Card title="4. Your itinerary" subtitle="Timed stop order, with a Google Maps link for each day.">
+          {/* ── 5. Itinerary ── */}
+          <Card title="5. Your itinerary" subtitle="Timed stop order, with a Google Maps link for each day.">
             <div className="space-y-5">
               {itinerary?.days.map((day, dayIdx) => {
                 const dayStopObjs = day.stops
@@ -827,7 +885,9 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                   {dayIdx === 0 && homePoint && morningDrive != null && (
                     <p className="mb-2 flex items-center gap-1.5 text-xs text-slate-500">
                       <Home className="h-3 w-3 text-slate-400" />
-                      Leave home → first stop, about {fmtDuration(morningDrive)} drive (before your start time).
+                      {startMode === "leave"
+                        ? `Leave home at ${to12h(startTime)} → first stop is about ${fmtDuration(morningDrive)} away.`
+                        : `Leave home → first stop, about ${fmtDuration(morningDrive)} drive (before your ${to12h(startTime)} start).`}
                     </p>
                   )}
                   {dayIdx > 0 && (
@@ -951,11 +1011,18 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                     <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
                       <Flag className="h-3 w-3 text-slate-400" />
                       {endMode === "home"
-                        ? "Drive home at the end of the trip"
+                        ? "After the last bank, drive home"
                         : endMode === "first_bank"
-                          ? `Drive back to ${anchor?.name} at the end of the trip`
-                          : "Drive to your end point"}
-                      : about {fmtDuration(endLegDrive)}.
+                          ? `After the last bank, drive back to ${anchor?.name}`
+                          : "After the last bank, drive to your end point"}
+                      : about {fmtDuration(endLegDrive)}
+                      {(() => {
+                        const lastDepart = day.stops[day.stops.length - 1]?.depart;
+                        return lastDepart
+                          ? ` (arrive around ${minutesToClock(parseClock12(lastDepart) + endLegDrive)})`
+                          : "";
+                      })()}
+                      .
                     </p>
                   )}
 

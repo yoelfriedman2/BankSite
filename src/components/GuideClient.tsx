@@ -295,6 +295,7 @@ const TOPICS: Topic[] = [
       "Save a trip to come back to later, or share it so anyone in the family can reuse it",
     ],
     tips: [
+      "With a home address set, you can say whether your start time means \"I'm at the first bank by then\" or \"I leave home then.\" The end time is always when you finish at the last bank — the drive home is added after that, with a rough arrive-home time.",
       "When several banks each have more than one location, the planner automatically picks the combination of branches that are closest to each other, so you drive the least — click \"N locations\" on any stop to override its branch.",
       "With a home address set, Day 1 gives you two Google Maps links: one starting from home, and one for just the bank-to-bank route.",
       "On a multi-day trip, set where you sleep each night right in the itinerary — the drive to and from each overnight stop is included in the plan.",

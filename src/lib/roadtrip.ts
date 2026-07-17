@@ -236,9 +236,15 @@ export function buildMultiDayItinerary(
   dailyStartMinutes: number,
   dailyEndMinutes: number,
   minutesPerStop: number,
+  /** Optional "morning lead" per day: minutes to add before the day's first
+   *  arrival. Used when the start time means "leave home/lodging then" rather
+   *  than "be at the first bank then" — the morning drive delays (and shortens)
+   *  the banking day. Returns 0 (the default) for the "be there by then" case. */
+  leadMinutesForDay?: (dayIndex: number, firstStop: LatLng & { id: string; name: string }) => number,
 ): { days: DayPlan[]; totalDriveMinutes: number } {
   const days: DayPlan[] = [];
   let dayStops: ItineraryStop[] = [];
+  let dayIndex = 0;
   let clock = dailyStartMinutes;
   let prev: LatLng = start;
   let totalDriveMinutes = 0;
@@ -253,13 +259,19 @@ export function buildMultiDayItinerary(
     const startsNewDay = dayStops.length > 0 && clock + driveFromPrev + minutesPerStop > dailyEndMinutes;
     if (startsNewDay) {
       pushDay();
+      dayIndex++;
       clock = dailyStartMinutes;
     }
-    // The first stop of any day begins fresh at the daily start time. The drive
-    // from home (day 1) or the previous night's lodging (later days) happens
-    // off banking-hours and is surfaced separately by the caller, so it isn't
-    // charged against the day's window or counted here between-days.
-    const drive = i === 0 || startsNewDay ? 0 : driveFromPrev;
+    const isFirstOfDay = i === 0 || startsNewDay;
+    if (isFirstOfDay) {
+      // The first stop of any day begins fresh at the daily start time, plus an
+      // optional morning-drive lead. The drive from home (day 1) or the previous
+      // night's lodging (later days) is otherwise surfaced separately by the
+      // caller, so it isn't counted in totalDriveMinutes between days.
+      const lead = leadMinutesForDay ? Math.max(0, leadMinutesForDay(dayIndex, s)) : 0;
+      clock = dailyStartMinutes + lead;
+    }
+    const drive = isFirstOfDay ? 0 : driveFromPrev;
     clock += drive;
     totalDriveMinutes += drive;
     const arrive = fmtClock(clock);

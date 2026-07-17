@@ -192,6 +192,11 @@ export interface TripPlace {
  *  - "custom"     → a different address (e.g. a hotel), stored in `endPlace` */
 export type TripEndMode = "home" | "first_bank" | "last_stop" | "custom";
 
+/** What the daily start time means:
+ *  - "arrive" → you're AT the first bank by then (leave home earlier)
+ *  - "leave"  → you leave home/lodging then and arrive after the morning drive */
+export type TripStartMode = "arrive" | "leave";
+
 /** The entire serializable planner state for one saved trip. */
 export interface RoadTripPlan {
   mustVisitIds: string[]; // order = user's add order (before route optimization)
@@ -208,6 +213,8 @@ export interface RoadTripPlan {
   //    so trips saved before this still load unchanged. ──
   /** The address you leave from; the start bank's branch is auto-picked nearest here. */
   homePlace?: TripPlace | null;
+  /** Whether the start time is arrival-at-first-bank or departure-from-home. */
+  startMode?: TripStartMode;
   endMode?: TripEndMode;
   /** The address for endMode "custom". */
   endPlace?: TripPlace | null;
