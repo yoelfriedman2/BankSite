@@ -292,7 +292,11 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
   const endLegDrive =
     endPoint && fullSequence.length > 0 ? estimateDriveMinutes(fullSequence[fullSequence.length - 1], endPoint) : 0;
   const visitMinutesTotal = fullSequence.length * minutesPerStop;
-  const usedMinutes = (itinerary?.totalDriveMinutes ?? 0) + visitMinutesTotal + endLegDrive;
+  // The drive back home / to the end point happens AFTER the last bank, so it is
+  // deliberately NOT part of the day's time budget — changing where the trip
+  // ends must never make the day look fuller or push it over. It's used only for
+  // the Google Maps link and the "(arrive around …)" note.
+  const usedMinutes = (itinerary?.totalDriveMinutes ?? 0) + visitMinutesTotal;
   const remainingMinutes = budgetMinutes - usedMinutes;
   const daysNeeded = itinerary?.days.length ?? 0;
 
@@ -526,23 +530,8 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
   }
 
   return (
-    <div className="space-y-6">
-      {branchRefreshBar}
-
-      <RoadTripTrips
-        banks={data.banks}
-        currentPlan={currentPlan}
-        currentBankCerts={currentBankCerts}
-        activeTripId={activeTripId}
-        activeTripTitle={activeTripTitle}
-        onApplyPlan={applyPlan}
-        onSaved={(id, title) => {
-          setActiveTripId(id);
-          setActiveTripTitle(title);
-        }}
-        justAddedCert={mustVisitBanks[mustVisitBanks.length - 1]?.cert ?? null}
-      />
-
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
+      <div className="order-1 min-w-0 space-y-6">
       {/* ── 1. Where do you start? ── */}
       <Card title="1. Where do you start?" subtitle="Your home address — the trip is built out from here.">
         <AddressAutocomplete
@@ -1058,6 +1047,27 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
           </Card>
         </>
       )}
+      </div>
+
+      {/* Secondary tools tucked to the side (they stack under the planner on
+          smaller screens) so the main "start → banks → day → itinerary" flow
+          isn't buried under saved-trip and FDIC-sync controls. */}
+      <aside className="order-2 space-y-4">
+        <RoadTripTrips
+          banks={data.banks}
+          currentPlan={currentPlan}
+          currentBankCerts={currentBankCerts}
+          activeTripId={activeTripId}
+          activeTripTitle={activeTripTitle}
+          onApplyPlan={applyPlan}
+          onSaved={(id, title) => {
+            setActiveTripId(id);
+            setActiveTripTitle(title);
+          }}
+          justAddedCert={mustVisitBanks[mustVisitBanks.length - 1]?.cert ?? null}
+        />
+        {branchRefreshBar}
+      </aside>
     </div>
   );
 }

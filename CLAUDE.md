@@ -230,6 +230,19 @@ standalone test extended (arrive vs. leave — day-1 arrival 9:00 → 9:45 with 
 still fresh at 9:00); CDP browser pass now 13/13 (section order, start-time toggle flips the day-1
 morning line, end-of-trip "arrive around", no console errors, no 375px overflow).
 
+**Third round (two real fixes from live use):** (1) **`endLegDrive` was wrongly counted in `usedMinutes`**,
+so changing the end mode (back home / first bank / custom) inflated the "Trip so far" budget bar and turned
+it red — the drive home happens *after* the last bank and must never affect the day budget. Removed it from
+`usedMinutes` (`= totalDriveMinutes + visitMinutesTotal` only); `endLegDrive` now feeds *only* the Google
+Maps link and the "(arrive around …)" note. (2) **Decluttered the top**: `<RoadTripTrips>` (Saved trips) and
+the FDIC `branchRefreshBar` were stacked above the planner, overwhelming first-time users. Moved both into a
+right-side `<aside>` (page root is now `grid lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start`; `order-1`
+main column, `order-2` aside) — on desktop they sit in a narrow right rail, on mobile they stack *below* the
+planner. Verified via CDP (now **15/15**): the new "time budget identical across end modes" check confirms
+`lastStop == firstBank == home == 6h 0m` (home is MA, banks are NJ, so the old bug would have ballooned the
+`home` figure), plus the section-order/declutter check and no 375px overflow. Desktop + mobile screenshots
+confirmed the rail/stack layout.
+
 Verified: `npm run build` clean (temp `xlsx`→registry swap, restored after — same sandbox workaround
 as every prior session). Standalone Node test (`node --experimental-strip-types`) of
 `chooseBranchesForRoute` (confirms it picks the mutually-closest branch pair, not the independent
