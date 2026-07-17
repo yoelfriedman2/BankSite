@@ -9,7 +9,7 @@
 // every page render (Next can otherwise load this module more than once).
 // Changes persist only while the dev server runs.
 // ---------------------------------------------------------------------------
-import type { Account, Bank, BankComment, HoldingCompany, Profile } from "./types";
+import { AUTO_OPEN_FROM_STATUSES, type Account, type Bank, type BankComment, type HoldingCompany, type Profile } from "./types";
 import { BANKS_SEED } from "./banks-seed";
 import type { RoadTripPlan } from "@/app/(app)/road-trip/actions";
 
@@ -665,9 +665,19 @@ export function importDemoRows(rows: ImportRow[]): {
         : b.name.toLowerCase() === row.name.toLowerCase(),
     );
     const hasAccount = rowHasAccount(row);
+    // Same auto-promote rule as the account editor / real-mode import: a row
+    // carrying account data means the bank is actually held, so an
+    // untracked/cannot_open/etc. status is stale — but leave an already-open
+    // variant (e.g. "Open · Add funds") alone rather than flattening it.
     const status =
       row.status ??
-      (hasAccount ? "open" : existing ? existing.status : "untracked");
+      (existing
+        ? hasAccount && AUTO_OPEN_FROM_STATUSES.has(existing.status)
+          ? "open"
+          : existing.status
+        : hasAccount
+          ? "open"
+          : "untracked");
 
     let bankId: string;
     if (existing) {

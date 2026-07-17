@@ -246,6 +246,18 @@ export const ASSIGNABLE_STATUSES: BankStatus[] = [
   "cannot_open",
 ];
 
+/** Statuses that mean "not yet credited as actually holding an account
+ *  here" — the moment an account is added at a bank in one of these
+ *  states (via the account editor or an import), it should be auto-promoted
+ *  to "open". Already-open variants are left alone so a more specific state
+ *  like "Open · Add funds" doesn't get flattened back to plain "Open". */
+export const AUTO_OPEN_FROM_STATUSES = new Set<BankStatus>([
+  "untracked",
+  "want_to_open",
+  "applied",
+  "cannot_open",
+]);
+
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   checking: "Checking",
   savings: "Savings",

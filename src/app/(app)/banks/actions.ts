@@ -34,6 +34,7 @@ import {
   OPEN_METHOD_LABELS,
   ELIGIBILITY_LABELS,
   CONVERSION_STAGE_LABELS,
+  AUTO_OPEN_FROM_STATUSES,
 } from "@/lib/types";
 import type {
   BankStatus,
@@ -647,7 +648,14 @@ export async function importBanks(
       if (row.branch_location != null) upd.branch_location = row.branch_location;
       if (row.phone != null) upd.phone = row.phone;
       if (row.bank_notes != null) upd.notes = row.bank_notes;
-      if (row.status) upd.status = row.status;
+      if (row.status) {
+        upd.status = row.status;
+      } else if (acct && AUTO_OPEN_FROM_STATUSES.has(found.status as BankStatus)) {
+        // Same auto-promote rule as adding an account through the editor —
+        // a row that carries account data means this bank is now (or still)
+        // actually held, so an untracked/cannot_open/etc. status is stale.
+        upd.status = "open";
+      }
       if (row.conversion_stage != null) upd.conversion_stage = row.conversion_stage;
       if (row.min_to_open != null) upd.min_to_open = row.min_to_open;
       if (Object.keys(upd).length > 0) {
