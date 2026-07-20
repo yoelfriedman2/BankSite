@@ -198,8 +198,10 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
   // The starting bank's branch is the one nearest home (or the manual override).
   const anchor: Stop | null = anchorBank ? toStop(anchorBank, homePoint) : null;
 
-  // Where the whole trip finishes — feeds both the itinerary's closing leg and
-  // the branch optimizer (so the last stop's location accounts for it too).
+  // Where the whole trip finishes. This is used ONLY for the Google Maps link,
+  // the map route line, and the "(arrive around …)" note — never for branch
+  // selection or the day's time budget, so changing where the trip ends can't
+  // reshuffle the route or move the clock.
   const endPoint: LatLng | null = !anchor
     ? null
     : endMode === "home"
@@ -221,12 +223,14 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
       .map((id) => banksById.get(id))
       .filter((b): b is RoadTripBank => !!b)
       .map((b) => ({ id: b.id, branches: b.branches.map((br) => ({ id: br.id, lat: br.lat, lng: br.lng })) }));
+    // The trip's end point is deliberately NOT passed as `returnTo` here: where
+    // the trip ends must have no effect on which branches are chosen, or toggling
+    // "back home" would re-pick branches and quietly change the day's timing.
     return chooseBranchesForRoute({ lat: anchor.lat, lng: anchor.lng }, banks, {
-      returnTo: endPoint,
       locked: branchOverrides,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [anchor?.id, anchor?.lat, anchor?.lng, mustVisitIds.join(","), extraIds.join(","), branchOverrides, endPoint?.lat, endPoint?.lng]);
+  }, [anchor?.id, anchor?.lat, anchor?.lng, mustVisitIds.join(","), extraIds.join(","), branchOverrides]);
 
   /** A bank → the branch it should use on this trip: a manual override wins,
    *  else the optimizer's joint pick, else nearest to the anchor (for banks not

@@ -282,6 +282,19 @@ planner. Verified via CDP (now **15/15**): the new "time budget identical across
 `home` figure), plus the section-order/declutter check and no 375px overflow. Desktop + mobile screenshots
 confirmed the rail/stack layout.
 
+**Fourth round (the end-drive fix was incomplete):** removing `endLegDrive` from `usedMinutes` wasn't
+enough — the end point was still passed to the branch optimizer as `returnTo: endPoint`, so toggling the
+end mode could re-pick branches, reorder stops, and shift the intra-day drive times (and thus the budget).
+The 15/15 check above missed it because its 3 banks were far enough apart to each land on their own day
+(zero between-stop drives). **Removed `returnTo` from the `chooseBranchesForRoute` call entirely** (and
+`endPoint` from that memo's deps): the end point now feeds **only** the Google Maps link, the map route
+line, and the "(arrive around …)" note — never branch selection or the clock. `chooseBranchesForRoute`
+still accepts `returnTo` (kept + still unit-tested), it's just no longer used by the client. Re-verified
+17/17 with a **stronger** CDP check: a *single-day, 3-stop* scenario (real between-stop drives, asserted
+via a "has drives" guard) where the whole itinerary snapshot (stop order + branch addresses + arrive/leave/
+drive times) **and** the budget are byte-identical across last-stop / first-bank / home. Lesson: to test
+"end mode doesn't affect timing", the banks must share a day so between-stop drives actually exist.
+
 Verified: `npm run build` clean (temp `xlsx`→registry swap, restored after — same sandbox workaround
 as every prior session). Standalone Node test (`node --experimental-strip-types`) of
 `chooseBranchesForRoute` (confirms it picks the mutually-closest branch pair, not the independent
