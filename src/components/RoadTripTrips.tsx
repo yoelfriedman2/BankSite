@@ -186,7 +186,7 @@ export function RoadTripTrips({
   }, [trips, justAddedCert, activeTripId]);
 
   return (
-    <div className="mb-6">
+    <div>
       {suggestion && (
         <div className="mb-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
           <Lightbulb className="h-4 w-4 shrink-0" />
@@ -225,26 +225,28 @@ export function RoadTripTrips({
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
                 {activeTripId ? "Update this trip" : "Save this trip"}
               </p>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="space-y-2">
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="Trip title…"
-                  className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
                 />
-                <label className="flex shrink-0 items-center gap-1.5 text-xs text-slate-500">
-                  <input type="checkbox" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} />
-                  Share with everyone
-                </label>
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={!title.trim() || saveStatus === "saving"}
-                  className="flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {saveStatus === "saving" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                  {activeTripId ? "Update" : "Save"}
-                </button>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <input type="checkbox" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} />
+                    Share with everyone
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={!title.trim() || saveStatus === "saving"}
+                    className="flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {saveStatus === "saving" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    {activeTripId ? "Update" : "Save"}
+                  </button>
+                </div>
               </div>
               {saveError && <p className="mt-1 text-xs text-rose-600">{saveError}</p>}
             </div>
@@ -309,18 +311,18 @@ export function RoadTripTrips({
                 to match each stop back to a tracked bank by location. Links with plain coordinates
                 match reliably; ones built from place names might not match every stop.
               </p>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="space-y-2">
                 <input
                   value={importUrl}
                   onChange={(e) => setImportUrl(e.target.value)}
                   placeholder="https://www.google.com/maps/dir/…"
-                  className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none"
                 />
                 <button
                   type="button"
                   onClick={handleParseImport}
                   disabled={!importUrl.trim()}
-                  className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                 >
                   <Link2 className="h-3.5 w-3.5" />
                   Parse

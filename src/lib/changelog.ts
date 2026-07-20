@@ -21,6 +21,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-07-17",
+    title: "Find banks near any address",
+    items: [
+      "A new \"Nearby banks\" tool on the road trip planner lets you type any address — a hotel, a relative's place, anywhere you're traveling to — and see your tracked banks closest to it, ranked by distance, with each one's nearest office, phone, and website.",
+      "No trip planning required — it's a quick lookup for when you just want to know what's nearby, separate from building a full timed itinerary.",
+    ],
+  },
+  {
     date: "2026-07-16",
     title: "Road trips start from home and pick the closest branches",
     items: [

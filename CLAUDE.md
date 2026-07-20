@@ -176,6 +176,62 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-17 (road trip: "Nearby banks" lookup + real layout fixes to the side rail)** — Two pieces
+of live feedback on the road-trip planner, both real:
+
+1. **Layout complaint, confirmed and fixed.** The right-side rail (added last session to declutter
+   the top) "doesn't look right" — specifically the Saved-trips title field was "a tiny field." Root
+   cause: `RoadTripTrips.tsx`'s save row and import row used `flex flex-wrap` designed for a
+   full-width layout (title input + checkbox + button all sharing one row) — inside a 300px-wide
+   sidebar, the title input got squeezed down to a sliver. Fixed by stacking both rows (title input
+   full-width on its own line; checkbox + button below it; same pattern for the import-URL row).
+   Also widened the rail 300px → 340px and removed a redundant `mb-6` now that the parent aside
+   manages spacing via `space-y-4`. **Real mobile-overflow regression caught along the way**: the
+   `<aside>` grid item lacked `min-w-0` (the sibling `order-1` div already had it from when the
+   two-column grid was first built) — without it, a CSS Grid item's default `min-width: auto` lets
+   any non-wrapping content inside force the whole grid track (and thus the page) wider than the
+   viewport. This is the exact same "grid blowout" class of bug already fixed once for the other
+   column; **lesson: every direct grid-item child needs its own `min-w-0`, not just the first one
+   added.** Confirmed via a targeted script measuring `getBoundingClientRect()` at 375px before/after.
+2. **New feature, explicitly requested**: "sometimes a person just wants to know which banks are
+   near an address" without building a whole trip. New `src/components/NearbyBanksFinder.tsx` — a
+   self-contained, collapsible sidebar card (same expand/collapse pattern as Saved trips): type any
+   address, pick a suggestion (same `AddressAutocomplete onSelectCoords` convention as the home/end/
+   overnight fields), see every tracked bank ranked by distance to its nearest branch, with address/
+   phone/website inline. Deliberately has zero interaction with the planner's must-visit/route state
+   — pure lookup, per the user's explicit framing ("instead of building a road trip and all these
+   things"). Placed first in the aside (above Saved trips, above Branch locations).
+
+**Verification note — a real methodological lesson from this session, worth reading if you hit
+something similar**: the first several DEMO_MODE CDP verification passes after these changes came
+back with a confusing, large-scale failure cascade (10/24 checks, every click/type interaction
+appearing to do nothing). Chased through several wrong theories before finding the real causes,
+in order: (a) a genuinely dead dev-server process was still bound to port 3939 from an earlier
+restart attempt (`fuser -k 3939/tcp` found and killed it — `pkill -f "next dev"` had been silently
+failing to match the actual process name every time); (b) once restarted, the *first* request to
+`/road-trip` on a cold dev server took ~10-12s to compile — hitting it immediately after a bare
+"got a 200" check meant the very first real test run raced an unfinished compile; (c) once the
+server was properly warmed and verified healthy (confirmed via direct chunk-network-error checking,
+not just a 200 on the HTML), the **remaining** flakiness was a real bug in the *test script itself*:
+`setInput()` silently returns `false` and no-ops if the target element isn't in the DOM yet, and the
+"Nearby banks" panel takes a moment to open after the toggle click — the old fixed `sleep(300)`
+before typing wasn't reliably enough, and the failure this produced (typed nothing → no suggestion
+ever appears → every downstream check fails) looked exactly like "clicking does nothing," which sent
+the debugging down the wrong path for a while. Fixed with a `waitAndSetInput()` helper that polls for
+the element before typing and throws loudly instead of silently no-oping, plus a settle buffer after
+a successful type for the 400ms-debounced autocomplete to actually resolve before polling for its
+suggestion. **Lesson for next time this happens: when interactions that worked in a previous session
+suddenly all fail at once with no console errors, suspect the test harness/environment (dead server,
+race on first compile, a test helper silently swallowing a `false`) before suspecting the shipped
+code** — confirmed here by writing tiny standalone reproduction scripts that isolated each layer
+(chunk-loading health, React hydration state via `__reactFiber$`/`__reactProps$` keys, element
+presence vs. text-content matching) until the real, narrow root causes were pinned down. Final
+verified pass: 24/24 (Nearby banks opens/searches/sorts correctly, Saved trips title field
+confirmed wide via measured `getBoundingClientRect()` — not just eyeballing — home-address flow,
+start-time toggle, multi-day split, and the end-mode budget-invariance check from last session all
+still green), plus desktop and 375px mobile screenshots confirming the visual layout. `npm run build`
+clean.
+
 **2026-07-17 (bug fix: adding an account wasn't reliably promoting a bank's status to "open")** —
 User report: "when you add an account to a bank, the status automatically is supposed to change
 from untracked or can't open to open... it doesn't work," plus the same expectation for import.

@@ -44,6 +44,7 @@ import {
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import type { MapPoint } from "@/components/RoadTripMap";
 import { RoadTripTrips } from "@/components/RoadTripTrips";
+import { NearbyBanksFinder } from "@/components/NearbyBanksFinder";
 
 const RoadTripMap = dynamic(() => import("@/components/RoadTripMap").then((m) => m.RoadTripMap), {
   ssr: false,
@@ -475,7 +476,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
   const currentBankCerts = [...new Set(fullSequence.map((s) => s.cert))];
 
   const branchRefreshBar = canRefreshBranches && (
-    <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
       <div className="min-w-0">
         <p className="flex items-center gap-1.5 text-sm font-medium text-slate-800">
           <MapPin className="h-4 w-4 text-amber-500" />
@@ -505,7 +506,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
         type="button"
         onClick={runBranchRefresh}
         disabled={branchStatus === "running"}
-        className="flex shrink-0 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-60"
+        className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-60"
       >
         {branchStatus === "running" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
         {branchStatus === "running" ? "Refreshing…" : "Refresh branch locations"}
@@ -523,7 +524,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
 
   if (data.banks.length === 0) {
     return (
-      <div>
+      <div className="space-y-6">
         {branchRefreshBar}
         <div className="rounded-2xl border border-dashed border-slate-200 px-6 py-16 text-center text-sm text-slate-500">
           No banks have a synced branch location yet. Click{" "}
@@ -534,7 +535,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
       <div className="order-1 min-w-0 space-y-6">
       {/* ── 1. Where do you start? ── */}
       <Card title="1. Where do you start?" subtitle="Your home address — the trip is built out from here.">
@@ -1056,7 +1057,8 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
       {/* Secondary tools tucked to the side (they stack under the planner on
           smaller screens) so the main "start → banks → day → itinerary" flow
           isn't buried under saved-trip and FDIC-sync controls. */}
-      <aside className="order-2 space-y-4">
+      <aside className="order-2 min-w-0 space-y-4">
+        <NearbyBanksFinder banks={data.banks} />
         <RoadTripTrips
           banks={data.banks}
           currentPlan={currentPlan}

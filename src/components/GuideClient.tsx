@@ -293,6 +293,7 @@ const TOPICS: Topic[] = [
       "Choose how the trip ends: back home, back at the first bank, at the last stop, or at a different address like a hotel",
       "Ends in a timed stop-by-stop plan plus a Google Maps link for actual driving",
       "Save a trip to come back to later, or share it so anyone in the family can reuse it",
+      "Just want to know what's nearby — not planning a whole trip? Use the \"Nearby banks\" tool in the sidebar to type any address and see your tracked banks closest to it",
     ],
     tips: [
       "With a home address set, you can say whether your start time means \"I'm at the first bank by then\" or \"I leave home then.\" The end time is always when you finish at the last bank — the drive home is added after that, with a rough arrive-home time.",
