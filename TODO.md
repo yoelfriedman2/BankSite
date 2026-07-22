@@ -4,6 +4,17 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 
 ## One-time setup pending
 
+- **Run migration `0040_lock_privileged_profile_columns.sql`** — closes a Critical finding from the
+  external security audit (SEC-01): `profiles_update_own`'s RLS policy only checked row ownership,
+  never which *columns* could be changed, so any signed-in user could call the Supabase REST API
+  directly (no service-role key needed) and set their own `access_status = 'approved'` and
+  `is_fdic_admin = true` — fully bypassing the invite-only gate and self-granting the FDIC-admin
+  role. This migration revokes UPDATE on `access_status`/`is_fdic_admin`/`created_at` from the
+  `authenticated` role at the database level. Verified safe first: every real write to these columns
+  already goes through the service-role client (`setAccessStatus`, `setFdicAdminRole`,
+  `restoreUserFromBackup`), which this REVOKE doesn't affect — no existing feature depends on the
+  ordinary user-scoped client writing them. **Until this runs, SEC-01 is not actually closed** —
+  everything else fixed in this round is pure code, already effective on deploy.
 - ~~APK packaging~~ — **done.** The site is wrapped as an installable Android TWA. Real signed
   `.apk` generated via PWABuilder.com's "Google Play" tab (the "Other Android" tab looked like the
   obviously-right choice for a non-Play-Store app but is a dead end — it has no signing-key option

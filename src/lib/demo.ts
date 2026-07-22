@@ -13,12 +13,21 @@ import { AUTO_OPEN_FROM_STATUSES, type Account, type Bank, type BankComment, typ
 import { BANKS_SEED } from "./banks-seed";
 import type { RoadTripPlan } from "@/app/(app)/road-trip/actions";
 
-// Demo mode bypasses auth entirely, so it must never be active on the live
-// production deployment — even if DEMO_MODE=true is left set there by mistake.
-// Vercel sets VERCEL_ENV to "production" only for the production deployment;
-// preview deployments ("preview") and local dev (undefined) can still demo.
+// Demo mode bypasses auth entirely, so it must never be active on any
+// production-style run — even if DEMO_MODE=true is left set there by
+// mistake. Checked against NODE_ENV rather than Vercel's own VERCEL_ENV: an
+// earlier version only checked VERCEL_ENV !== "production", which correctly
+// blocked the live Vercel production deployment but left two real gaps — a
+// Vercel *preview* deployment (VERCEL_ENV === "preview", often
+// publicly reachable and sometimes pointed at real secrets/data) and any
+// self-hosted production deployment (VERCEL_ENV is simply unset there, same
+// as local dev). Next.js's own tooling always sets NODE_ENV=production for
+// `next build`/`next start` — which is how every one of those cases actually
+// runs — and always forces NODE_ENV=development for `next dev`, regardless
+// of host. That makes it a universal, host-independent signal instead of a
+// Vercel-specific one.
 export const DEMO_MODE =
-  process.env.DEMO_MODE === "true" && process.env.VERCEL_ENV !== "production";
+  process.env.DEMO_MODE === "true" && process.env.NODE_ENV !== "production";
 
 export const DEMO_USER = {
   id: "00000000-0000-0000-0000-000000000000",

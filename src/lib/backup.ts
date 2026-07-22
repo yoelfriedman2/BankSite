@@ -1,6 +1,7 @@
 // Server-only: builds a full-database backup zip for the weekly backup email.
 // data.json holds every table row-for-row (enough to fully restore); the xlsx
 // is a human-readable snapshot of the important sheets.
+import "server-only";
 import * as XLSX from "xlsx";
 import JSZip from "jszip";
 import { createAdminClient } from "@/lib/supabase/admin";

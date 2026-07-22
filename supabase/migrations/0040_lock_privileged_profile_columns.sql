@@ -1,0 +1,32 @@
+-- Closes a real vulnerability found by an external security audit (not
+-- self-discovered): "profiles_update_own" only checks ROW ownership
+-- (auth.uid() = id) — it never restricted which COLUMNS can be changed.
+-- access_status (migration 0036) and is_fdic_admin (migration 0026) were
+-- added to the same table with no column-level protection. That means any
+-- signed-in user could call the public Supabase REST API directly — no
+-- service-role key needed, bypassing the app's UI and server actions
+-- entirely — and set their OWN access_status = 'approved' and
+-- is_fdic_admin = true, fully defeating the invite-only gate and granting
+-- themselves the privileged FDIC-sync role.
+--
+-- RLS is a row-level control; it was never meant to make individual columns
+-- on your own row read-only. That needs a separate SQL privilege
+-- (GRANT/REVOKE), which is what this migration adds. See:
+-- https://supabase.com/docs/guides/database/postgres/column-level-security
+--
+-- Verified safe: every current write to these three columns already goes
+-- through the service-role (admin) client — setAccessStatus,
+-- setFdicAdminRole, and restoreUserFromBackup — which is a separate
+-- database role from `authenticated` and is unaffected by this REVOKE.
+-- Nothing in the app writes access_status, is_fdic_admin, or created_at via
+-- the ordinary user-scoped client (checked every profiles .update() call
+-- site in the codebase to confirm), so this closes the gap with zero impact
+-- on any existing feature.
+--
+-- created_at is included for the same reasoning even though it isn't a
+-- privilege flag: nothing ever updates it after the signup trigger sets it,
+-- so there's no reason a user should be able to backdate their own signup.
+--
+-- Run this in the Supabase SQL editor.
+
+revoke update (access_status, is_fdic_admin, created_at) on public.profiles from authenticated;

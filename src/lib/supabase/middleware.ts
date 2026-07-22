@@ -18,12 +18,15 @@ function isPublicPath(pathname: string) {
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
-  // Demo/preview mode: skip auth entirely. Never honored on the live production
-  // deployment (VERCEL_ENV==="production"), so a stray DEMO_MODE=true there
-  // can't disable authentication. Mirrors the guard in lib/demo.ts.
+  // Demo/preview mode: skip auth entirely. Never honored on a production-style
+  // run (NODE_ENV === "production", which covers Vercel production, Vercel
+  // previews, and any self-hosted production run alike — see lib/demo.ts for
+  // why this is checked against NODE_ENV rather than Vercel's own VERCEL_ENV),
+  // so a stray DEMO_MODE=true there can't disable authentication. Mirrors the
+  // guard in lib/demo.ts.
   if (
     process.env.DEMO_MODE === "true" &&
-    process.env.VERCEL_ENV !== "production"
+    process.env.NODE_ENV !== "production"
   ) {
     return supabaseResponse;
   }
@@ -31,8 +34,19 @@ export async function updateSession(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // If the project hasn't been configured yet, don't block the app.
+  // If the project hasn't been configured yet, there's no way to check for a
+  // session — fail the same way an unauthenticated request does (redirect
+  // protected paths to /login, let public paths through), rather than
+  // silently letting every request past the auth check. A previous version
+  // let everything through unconditionally here, which meant a deployment
+  // missing its Supabase config would serve protected pages to anyone.
   if (!url || !key) {
+    if (!isPublicPath(request.nextUrl.pathname)) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/login";
+      redirectUrl.searchParams.set("redirectedFrom", request.nextUrl.pathname);
+      return NextResponse.redirect(redirectUrl);
+    }
     return supabaseResponse;
   }
 

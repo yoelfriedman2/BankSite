@@ -1,3 +1,4 @@
+import "server-only";
 import { Resend } from "resend";
 
 const FROM = process.env.RESEND_FROM ?? "Bank Tracker <notifications@banktracker.app>";

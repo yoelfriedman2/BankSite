@@ -176,6 +176,101 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-22 (external audit — Part 1 Security fixes, round 1)** — A different AI ran a passive
+100-finding security/data/UX/reliability audit against this codebase; verified for legitimacy first
+(`EXTERNAL-AUDIT-VERIFICATION.md` — real and high-quality, 9 findings my own earlier 6-phase audit
+had missed entirely). User then asked to fix the security findings (Part 1, 22 items) specifically,
+with a trackable checklist (`EXTERNAL-AUDIT-TRACKER.md` — now the source of truth for all 100
+findings' fix status across every future round) and the usual "don't break anything" bar. This round
+fixed the 6 safely-fixable-without-a-user-decision items:
+
+- **SEC-01 (Critical) — self-approve / self-grant FDIC-admin.** `profiles_update_own`'s RLS policy
+  only checked row ownership, never which *columns* a user could change — `access_status` (0036) and
+  `is_fdic_admin` (0026) had zero column-level protection, so any signed-in user could hit the
+  Supabase REST API directly (no service-role key, bypassing the app/server-actions entirely) and set
+  their own `access_status = 'approved'` + `is_fdic_admin = true`, fully defeating the invite-only
+  gate. RLS is row-level only — it was never going to stop this; column-level protection needs a
+  separate SQL privilege. New migration **`0040_lock_privileged_profile_columns.sql`**:
+  `revoke update (access_status, is_fdic_admin, created_at) on public.profiles from authenticated`.
+  Verified safe first — every real write to these 3 columns already goes through the service-role
+  client (`setAccessStatus`, `setFdicAdminRole`, `restoreUserFromBackup`), a separate DB role this
+  REVOKE doesn't touch; grepped every other `profiles` `.update()` call site to confirm none of them
+  touch these columns. **Not yet run — SEC-01 isn't actually closed until it is; see TODO.md.**
+- **SEC-12 — OAuth redirect open-redirect bypass.** `auth/callback/route.ts`'s `next` param
+  same-origin check was a string check (`startsWith("/") && !startsWith("//")`) — but WHATWG URL
+  parsing treats a leading backslash as a path separator for special schemes, so `/\evil.example`
+  passed that check while `new URL()` resolves it to `https://evil.example/`. Now verifies the
+  actual parsed `.origin` matches, closing this and any similar string-pattern bypass at the root
+  instead of chasing individual cases. Verified via a standalone script (malicious payload blocked,
+  normal deep links like `/banks?cert=123` preserved).
+- **SEC-07/08 — Next.js version + transitive advisories.** Bumped `15.5.4` → `15.5.21`, past the
+  patched line for both `GHSA-m99w-x7hq-7vfj` (Server Action DoS) and `GHSA-955p-x3mx-jcvp` (Server
+  Action ID disclosure) — both confirmed via live GitHub advisory lookups during the verification
+  pass. `npm audit`'s remaining 5 transitive findings unchanged (all build-time-only, not
+  exploitable at runtime, same as previously noted — do not `npm audit fix --force`, it downgrades
+  Next).
+- **SEC-14 — middleware fails open with no Supabase config.** `updateSession()` in
+  `lib/supabase/middleware.ts` let every request through unconditionally when
+  `NEXT_PUBLIC_SUPABASE_URL`/`_ANON_KEY` were unset — a deployment missing its env config would
+  silently serve every protected page to anyone. Now fails the same way an unauthenticated request
+  does: redirect protected paths to `/login`, let public paths (`/login`, `/auth`, `/.well-known`)
+  through. Verified live (temporarily pointed a real dev server at deliberately-missing Supabase
+  config): `/banks` now 307s to `/login` instead of 200ing.
+- **SEC-18 — no `server-only` import guards.** Added `import "server-only"` (official Next.js/Vercel
+  package, new dependency) to the top of every module that pulls in the service-role client or a
+  secret-bearing SDK but was never explicitly guarded against accidental client-bundle inclusion:
+  `lib/supabase/admin.ts`, `lib/backup.ts`, `lib/audit.ts`, `lib/email.ts`. Each now throws at build
+  time instead of silently shipping a secret-adjacent module to the browser if a future edit ever
+  imports one from a client component by mistake.
+- **SEC-21 — demo-mode safety tied to a Vercel-specific env var.** `DEMO_MODE` (which bypasses auth
+  entirely) was gated on `VERCEL_ENV !== "production"` in both `lib/demo.ts` and
+  `lib/supabase/middleware.ts` — correctly blocked live Vercel production, but missed two real
+  cases: a Vercel *preview* deployment (`VERCEL_ENV === "preview"`, often publicly reachable) and
+  any self-hosted production run (`VERCEL_ENV` simply unset there, same as local dev). Switched both
+  to `NODE_ENV !== "production"` — Next's own tooling always sets `NODE_ENV=production` for any
+  `next build`/`next start` regardless of host, and always forces `development` for `next dev`, so
+  it's a universal signal instead of a Vercel-specific one.
+
+**Verification, since this round touches auth-adjacent middleware and a Next.js version bump —
+higher bar than usual**: `tsc --noEmit` and `npm run build` both clean (temp `xlsx` CDN→npm swap for
+the sandbox's install, restored after — same workaround as every prior round). One new build warning
+appeared after the Next.js bump (`@supabase/supabase-js`: "A Node.js API is used (process.version)
+... not supported in the Edge Runtime", surfaced through `lib/supabase/middleware.ts`'s import
+chain) — chased down before treating it as safe: confirmed `@supabase/ssr`/`@supabase/supabase-js`
+versions are byte-identical before/after this round's changes (so not caused by anything here);
+confirmed the flagged line only runs inside a `typeof process !== "undefined"` guard building a
+diagnostic header string (harmless if `process.version` is unavailable — no crash, just a slightly
+less detailed header); and confirmed directly by building against the *old* Next.js version with
+every other dependency identical that the warning is absent there — i.e. it's Next 15.5.21 itself
+having a stricter Edge Runtime scanner, not a regression from this round. Full DEMO_MODE dev-server
+smoke test (not just build compilation) across every major page (`/`, `/banks`, `/accounts`,
+`/up-next`, `/calendar`, `/settings`, `/guide`, `/road-trip`, `/holding-companies`, `/fdic-sync`,
+`/fees-interest`, `/documents`, `/checks`, `/money`, `/balances`, `/address-change`, `/trash`,
+`/updates`, `/login`, plus `/pending`/`/welcome`/`/admin`'s expected demo-mode redirects) — all 200
+(or the expected redirect), zero server errors in the log. Separately verified the SEC-14 fail-closed
+behavior live against genuinely-missing Supabase config (see above).
+
+**A real npm/lockfile lesson from this round, worth remembering**: bumping `next` via a full
+`rm package-lock.json && npm install` (rather than a targeted `npm install next@x server-only@x`)
+silently dropped several other packages' multi-platform optional dependency entries (`sharp`,
+`rollup`, `lightningcss`, `@tailwindcss/oxide`, `@sentry/cli`, `@napi-rs/canvas` — all only kept
+their Linux-x64 variant, losing Windows/macOS/other-Linux-arch entries the original lockfile had).
+Root cause unclear (likely an npm-version difference in how deeply it enumerates *transitive*
+optionalDependencies vs. ones a package declares directly, like `@next/swc-*`, which stayed
+complete either way) but the fix was straightforward once noticed: redo the dependency bump as a
+**targeted** `npm install next@... server-only@...` against the original lockfile instead of a full
+regen — confirmed this preserves every other package's existing multi-platform entries untouched,
+touching only the 2 packages actually being changed. **Lesson: prefer a targeted `npm install
+<pkg>@<version>` over `rm package-lock.json && npm install` when bumping one dependency in an
+existing lockfile** — the full regen re-resolves everything from scratch and can silently narrow
+already-correct multi-platform optional-dependency coverage.
+
+Security-only round, no user-visible feature — skipped changelog/Guide per the standing rule.
+`EXTERNAL-AUDIT-TRACKER.md` updated to reflect all 6 fixes; 9 more Part 1 items remain but each
+needs a decision from the user before fixing (accepted-risk tradeoffs, bigger-effort items like MFA/
+CSP, or genuinely low-priority). Parts 2–6 (78 more findings) not started this round — scope was
+explicitly "the security ones" first.
+
 **2026-07-17 (road trip: "Nearby banks" lookup + real layout fixes to the side rail)** — Two pieces
 of live feedback on the road-trip planner, both real:
 

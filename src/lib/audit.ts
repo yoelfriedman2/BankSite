@@ -1,6 +1,7 @@
 // Server-only: writes to the shared audit_log via the service-role client.
 // Only import this from "use server" action files — never from a client component
 // (it pulls in the admin client / service-role key).
+import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface AuditEntry {
