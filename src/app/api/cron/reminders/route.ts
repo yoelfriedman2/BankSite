@@ -20,6 +20,15 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminClient();
 
+  // sendEmail() itself skips sending (and returns { skipped: true }, checked
+  // below) when this isn't set — this single log line is so a misconfigured
+  // key is visible once per run instead of buried in N per-account warnings.
+  if (!process.env.RESEND_API_KEY) {
+    console.warn(
+      "[cron/reminders] RESEND_API_KEY not set — no reminder/backup emails will be sent this run",
+    );
+  }
+
   // Fetch all profiles that want email notifications
   const { data: profiles, error: profileErr } = await admin
     .from("profiles")
@@ -85,13 +94,16 @@ export async function GET(req: NextRequest) {
     if (!alerts.length) continue;
 
     const name = profile.display_name ?? "there";
-    const { error: sendErr } = await sendActivityReminderEmail(email, name, alerts);
+    const { error: sendErr, skipped } = await sendActivityReminderEmail(email, name, alerts);
     // Only stamp the cooldown if the email actually went out, so a transient
-    // send failure doesn't silently suppress the reminder for 30 days.
+    // send failure — or RESEND_API_KEY not being configured (skipped: true,
+    // already logged once above) — doesn't silently suppress the reminder
+    // for 30 days with nothing ever having been delivered.
     if (sendErr) {
       console.error(`[cron/reminders] activity email to ${email} failed:`, sendErr);
       continue;
     }
+    if (skipped) continue;
     if (remindedIds.length) {
       await admin
         .from("accounts")
@@ -140,8 +152,11 @@ export async function GET(req: NextRequest) {
     for (const [uid, g] of byUser) {
       const email = emailMap[uid];
       if (!email) continue;
-      const { error: sendErr } = await sendReminderDueEmail(email, nameMap.get(uid) ?? "there", g.items);
-      if (!sendErr) {
+      const { error: sendErr, skipped } = await sendReminderDueEmail(email, nameMap.get(uid) ?? "there", g.items);
+      // Same fix as the activity-reminder loop above: don't stamp emailed_at
+      // (which would suppress this reminder forever) when the send was
+      // skipped because RESEND_API_KEY isn't configured, not actually sent.
+      if (!sendErr && !skipped) {
         await admin
           .from("reminders")
           .update({ emailed_at: new Date().toISOString() })

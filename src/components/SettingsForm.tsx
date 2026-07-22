@@ -188,6 +188,12 @@ export function SettingsForm({
         toast.error(res.error);
         return;
       }
+      if (res.skipped) {
+        const skippedMsg = "Email isn't set up on this deployment — feedback wasn't sent.";
+        setFeedbackError(skippedMsg);
+        toast.error(skippedMsg);
+        return;
+      }
       setFeedback("");
       setFeedbackSent(true);
       toast.success("Feedback sent — thank you!");

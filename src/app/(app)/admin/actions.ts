@@ -159,6 +159,23 @@ export async function setAccessStatus(
     return { error: friendlyDbError(error.message) };
   }
 
+  // A denied/un-approved user must not keep a previously-granted FDIC-admin
+  // role — clear it in the same action that revokes their access, rather
+  // than leaving it to silently keep working if they're ever re-approved
+  // without anyone remembering to re-check it. Best-effort and separate from
+  // the update above: if migration 0026 hasn't run yet (is_fdic_admin
+  // doesn't exist), this silently no-ops instead of blocking the
+  // access-status change itself.
+  if (status !== "approved") {
+    const { error: fdicErr } = await admin
+      .from("profiles")
+      .update({ is_fdic_admin: false })
+      .eq("id", userId);
+    if (fdicErr) {
+      console.error("[setAccessStatus] failed to clear is_fdic_admin on deny:", fdicErr.message);
+    }
+  }
+
   if (status === "approved") {
     try {
       const [{ data: profile }, { data: authRes }] = await Promise.all([

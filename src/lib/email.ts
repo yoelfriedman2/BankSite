@@ -19,15 +19,22 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/** `skipped: true` means nothing was sent because RESEND_API_KEY isn't
+ *  configured — deliberately distinct from a plain success (`{}`) so a
+ *  caller that stamps a "this was sent" flag on success (last_reminded_at,
+ *  emailed_at, a "sent!" toast) can tell the two apart. Returning `{}` for
+ *  both used to mean a misconfigured/unset API key in production silently
+ *  marked every reminder as permanently sent, with nothing actually
+ *  delivered and no way to retry. */
 export async function sendEmail(
   to: string,
   subject: string,
   html: string,
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; skipped?: boolean }> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     console.warn("[email] RESEND_API_KEY not set — skipping send");
-    return {};
+    return { skipped: true };
   }
   const resend = new Resend(apiKey);
   const { error } = await resend.emails.send({ from: FROM, to, subject, html });
@@ -423,7 +430,7 @@ export async function sendFeedbackEmail(
   fromName: string,
   fromEmail: string,
   message: string,
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; skipped?: boolean }> {
   const adminEmail = process.env.ADMIN_EMAIL;
   if (!adminEmail) {
     console.warn("[email] ADMIN_EMAIL not set — skipping feedback email");

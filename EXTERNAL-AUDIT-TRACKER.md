@@ -36,16 +36,16 @@ decision or bigger effort before it can be safely fixed
 
 - [ ] DATA-01 — Shared bank data unsynchronized across users
 - [ ] DATA-02 — Balance history incomplete/non-atomic/nondeterministic
-- [ ] DATA-03 — Concurrent sweeps/returns can corrupt balances (no row lock)
+- [x] DATA-03 — Concurrent sweeps/returns can corrupt balances (no row lock) — fixed: migration 0041 adds `for update` row locks on the accounts row in both `sweep_accounts` and `return_sweep`, so two concurrent operations on the same account now serialize instead of racing.
 - [~] DATA-04 — Non-atomic cron fee/interest (already fixed)
 - [~] DATA-05 — Backup/restore incomplete (2 missing tables already fixed; rest open)
 - [ ] DATA-06 — Personal "full backup" export is silently partial
-- [ ] DATA-07 — FDIC closed-bank deletion fails open on count-query error
-- [ ] DATA-08 — Branch refresh can erase data on insert failure
+- [x] DATA-07 — FDIC closed-bank deletion fails open on count-query error — fixed: `deleteClosedBank` now treats a failed/null account count as "skip this bank" (fail closed) instead of silently reading it as zero accounts.
+- [x] DATA-08 — Branch refresh can erase data on insert failure — fixed: migration 0041's `refresh_bank_branches` does delete+insert inside one Postgres function call (one transaction), so an insert failure rolls the delete back instead of leaving that batch erased.
 - [ ] DATA-09 — Holding-company sync never unlinks stale relationships
 - [ ] DATA-10 — Child ownership not enforced against parent ownership
 - [ ] DATA-11 — Spreadsheet import date/status mapping bugs
-- [ ] DATA-12 — APY formula overstates actual annual yield
+- [x] DATA-12 — APY formula overstates actual annual yield — fixed: `monthlyInterestAmount` now derives the monthly periodic rate from the entered APY via `(1+APY)^(1/12)-1` instead of a naive `rate/12`, so 12 months of compounding lands on the labeled APY instead of overshooting it (verified: 4.5% now compounds to $10,449.99 on a $10,000 balance over a year, not the old $10,459.40 / 4.594% effective yield).
 - [ ] DATA-13 — Dormancy rules disagree across pages
 - [ ] DATA-14 — Address campaign/queue/check-number races
 - [ ] DATA-15 — Public road-trip plans can expose private locations
@@ -84,7 +84,7 @@ decision or bigger effort before it can be safely fixed
 
 ## Part 4 — Performance / Reliability / Ops (15)
 
-- [ ] REL-01 — Missing email config reported as successful delivery (confirmed, serious)
+- [x] REL-01 — Missing email config reported as successful delivery (confirmed, serious) — fixed: `sendEmail` now returns `{ skipped: true }` (distinct from success) when `RESEND_API_KEY` is unset; the cron reminders route and the settings feedback form both now check for it and correctly avoid marking something as "sent" when nothing was.
 - [ ] REL-02 — Cron is a non-durable monolith, can partially fail silently
 - [ ] OPS-01 — Schema deployment manual/undocumented, hidden by fallbacks
 - [ ] QA-01 — No automated regression suite or CI
@@ -102,8 +102,8 @@ decision or bigger effort before it can be safely fixed
 
 ## Part 5 — Integration / Edge Cases (12)
 
-- [ ] INT-01 — Denying access doesn't revoke session or FDIC-admin role (confirmed, connects to SEC-01)
-- [ ] INT-02 — Pending/denied users can receive protected note content by email (confirmed)
+- [x] INT-01 — Denying access doesn't revoke session or FDIC-admin role (confirmed, connects to SEC-01) — fixed: `canApplyFdicChanges` now also requires `access_status === "approved"` (not just `is_fdic_admin`), and `setAccessStatus` clears `is_fdic_admin` whenever a user is denied/un-approved. A true "kill the live session" primitive isn't available for an arbitrary user via the Supabase SDK, but `(app)/layout.tsx` already blocks all page navigation for a denied user on every request, and this closes the remaining gap (privileged server actions not independently re-checking approval).
+- [x] INT-02 — Pending/denied users can receive protected note content by email (confirmed) — fixed: the community-note broadcast in `addBankComment` now excludes pending/denied users from the recipient list before sending, closing the RLS-bypassing side channel.
 - [ ] INT-03 — FDIC cert used as mutable "identity" across subsystems
 - [ ] INT-04 — Active accounts can exist under a soft-deleted bank
 - [ ] INT-05 — Money-owed sweeps conflict with trash/permanent delete
@@ -127,27 +127,37 @@ decision or bigger effort before it can be safely fixed
 
 ---
 
-## Summary
+## Summary (cumulative across all rounds)
 
 | Status | Count |
 |---|---:|
-| Fixed this round | 6 (SEC-01, SEC-07, SEC-08, SEC-12, SEC-14, SEC-18, SEC-21 — see note below) |
-| Already fixed by an earlier round | 6 |
-| Open, needs a decision before fixing | 9 |
-| Still open | 79 |
+| Fixed (code-complete) | 14 |
+| Already fixed by an earlier (pre-audit) round | 6 |
+| Open, needs a decision before fixing | 11 |
+| Still open | 69 |
 
-*(This file is updated as work proceeds — counts above will move. Note: the "Fixed this round" list has
-7 IDs because SEC-14 moved from "already fixed by an earlier round" to "fully fixed" once this round
-closed its remaining half — see its entry above.)*
+**Round 1 (security, Part 1)**: SEC-01, SEC-07, SEC-08, SEC-12, SEC-14, SEC-18, SEC-21 (7 IDs — SEC-14
+moved from "already fixed" to "fully fixed" once this round closed its remaining half).
+**Round 2 (data-safety + access-control follow-through)**: INT-01, INT-02, DATA-03, DATA-07, DATA-08,
+DATA-12, REL-01 — the items my own verification report explicitly recommended tackling right after
+SEC-01, since INT-01/INT-02 directly compound the access-control fix and DATA-03/DATA-07/REL-01 are
+real money/data-safety/notification gaps, not judgment calls.
 
-## What's still pending after this round
+*(This file is updated as work proceeds — counts above will move.)*
 
-- **Migration 0040 needs to be run** (`supabase/migrations/0040_lock_privileged_profile_columns.sql`)
-  — SEC-01, the Critical finding, isn't actually closed until this runs in the Supabase SQL editor.
-  Everything else fixed this round is pure code and is already effective on deploy.
-- 9 more Part 1 (Security) findings are open but each needs a decision from the user before fixing —
+## What's still pending
+
+- **Migrations 0040 and 0041 both need to be run** in the Supabase SQL editor —
+  `0040_lock_privileged_profile_columns.sql` (SEC-01, Critical — not actually closed until run) and
+  `0041_sweep_row_locks_and_branch_refresh_atomicity.sql` (DATA-03/DATA-08 — the row-lock and
+  atomic-branch-refresh fixes only take effect once this runs; the app still works exactly as before
+  until then, just without the fix). Everything else fixed across both rounds is pure code, already
+  effective on deploy.
+- 11 more Part 1 (Security) findings are open but each needs a decision from the user before fixing —
   see the `[!]` items above (SEC-03, 05, 06, 09, 10, 11, 15, 16, 17, 20, 22 — several of these are
   genuinely low-priority or accepted-risk-by-design, not all equally urgent).
 - Parts 2–6 (Data Integrity, UX/Accessibility, Performance/Reliability, Integration/Edge Cases, Final
-  Gaps — 79 findings) haven't been started this round; this round's scope was Part 1 (Security) only,
-  per the explicit request to fix "the security ones" first.
+  Gaps) still have 69 open findings not yet started — the two rounds so far deliberately targeted the
+  highest-confidence, no-decision-needed items first (per my own verification report's explicit
+  recommendation). The next most valuable batch is likely Part 3 (UX/Accessibility, 22 findings) or
+  the rest of Part 2 (Data Integrity) — worth discussing scope/priority for round 3.

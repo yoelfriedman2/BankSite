@@ -108,7 +108,7 @@ const FEEDBACK_COOLDOWN_MS = 2 * 60 * 1000;
  *  own email cooldown. Fails open (never blocks sending) if migration 0039
  *  hasn't added profiles.last_feedback_at yet: a select on a missing column
  *  just leaves that field undefined, same as "never sent before". */
-export async function sendFeedback(message: string): Promise<{ error?: string }> {
+export async function sendFeedback(message: string): Promise<{ error?: string; skipped?: boolean }> {
   const text = message.trim();
   if (!text) return { error: "Please enter a message." };
   if (text.length > 4000) return { error: "Message is too long." };

@@ -1125,18 +1125,44 @@ export async function addBankComment(
         .neq("id", user.id);
 
       if (profiles?.length) {
-        const { data: authData } = await admin.auth.admin.listUsers({ perPage: 1000 });
-        const emailMap = Object.fromEntries(
-          (authData?.users ?? []).map((u) => [u.id, u.email ?? ""]),
+        // Exclude pending/denied users — this broadcast goes out through the
+        // service-role client, which bypasses the RLS that normally stops an
+        // un-approved user from reading community notes in the app itself.
+        // Without this check, a brand-new signup (default notify flags: true,
+        // access_status: pending) would receive full note content by email
+        // before ever being let in. Queried separately, same fail-open-on-
+        // missing-column pattern as elsewhere, so a migration-0036-not-run-yet
+        // deployment still sends normally instead of silently emailing no one.
+        const { data: statuses, error: statusErr } = await admin
+          .from("profiles")
+          .select("id, access_status")
+          .in(
+            "id",
+            profiles.map((p) => p.id),
+          );
+        const blocked = new Set(
+          statusErr
+            ? []
+            : (statuses ?? [])
+                .filter((s) => s.access_status && s.access_status !== "approved")
+                .map((s) => s.id),
         );
-        const label = bankName ?? `cert #${cert}`;
-        await Promise.all(
-          profiles.map((p) => {
-            const email = emailMap[p.id];
-            if (!email) return Promise.resolve();
-            return sendCommunityNoteEmail(email, authorName, label, text);
-          }),
-        );
+        const recipients = profiles.filter((p) => !blocked.has(p.id));
+
+        if (recipients.length) {
+          const { data: authData } = await admin.auth.admin.listUsers({ perPage: 1000 });
+          const emailMap = Object.fromEntries(
+            (authData?.users ?? []).map((u) => [u.id, u.email ?? ""]),
+          );
+          const label = bankName ?? `cert #${cert}`;
+          await Promise.all(
+            recipients.map((p) => {
+              const email = emailMap[p.id];
+              if (!email) return Promise.resolve();
+              return sendCommunityNoteEmail(email, authorName, label, text);
+            }),
+          );
+        }
       }
     } catch (err) {
       console.error("[addBankComment] email broadcast failed:", err);

@@ -10,15 +10,19 @@ export type InterestAccrualAccount = {
 };
 
 /** One month's interest for a given balance and annual APY, rounded to
- *  cents. Annual rate / 12 applied to the current balance — the same
- *  balance × rate / 100 the Fees & interest page already uses for its
- *  annual projection, just divided into twelve monthly credits. Because
- *  each month's credit is added to the balance before the next month's is
- *  computed, a year of these will sum to slightly more than that flat
- *  annual projection — real compounding, not a bug. */
-export function monthlyInterestAmount(balance: number, rate: number): number {
-  if (!Number.isFinite(balance) || !Number.isFinite(rate)) return 0;
-  return Number(((balance * rate) / 100 / 12).toFixed(2));
+ *  cents. "APY" (annual percentage YIELD) means the actual percentage a
+ *  balance grows over a year, compounding already included — that's what a
+ *  real bank advertises, and what the Fees & interest page's "$X/yr"
+ *  projection (balance × rate / 100) assumes. A naive rate/12 monthly credit
+ *  does NOT reproduce that: compounding it again on top of an already-
+ *  annual figure overshoots the labeled rate (12 months of "4.5%"/12 monthly
+ *  credits compounds to an effective 4.594% a year — more than promised).
+ *  Instead, derive the periodic monthly rate that makes twelve compounding
+ *  credits equal exactly the entered APY: (1 + APY)^(1/12) - 1. */
+export function monthlyInterestAmount(balance: number, apyPercent: number): number {
+  if (!Number.isFinite(balance) || !Number.isFinite(apyPercent)) return 0;
+  const monthlyRate = Math.pow(1 + apyPercent / 100, 1 / 12) - 1;
+  return Number((balance * monthlyRate).toFixed(2));
 }
 
 /** True when this account has a positive rate configured and hasn't been

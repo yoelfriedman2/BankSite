@@ -21,14 +21,28 @@ async function currentUser(): Promise<User | null> {
 }
 
 /** True if the current user may APPLY FDIC sync changes: the owner (ADMIN_EMAIL)
- *  always can; anyone else needs profiles.is_fdic_admin = true. */
+ *  always can; anyone else needs profiles.is_fdic_admin = true AND to still be
+ *  an approved user (migration 0036) — a role granted before someone was denied
+ *  access must not keep working after the denial. Queried as a separate call
+ *  from is_fdic_admin (same pattern as admin/actions.ts's user list) so a
+ *  missing access_status column (migration 0036 not run yet) fails OPEN on
+ *  just this check, instead of also breaking is_fdic_admin lookups. */
 async function canApplyFdicChanges(user: User | null): Promise<boolean> {
   if (!user) return false;
   const adminEmail = process.env.ADMIN_EMAIL;
   if (adminEmail && user.email?.toLowerCase() === adminEmail.toLowerCase()) return true;
   const admin = createAdminClient();
   const { data } = await admin.from("profiles").select("is_fdic_admin").eq("id", user.id).maybeSingle();
-  return !!data?.is_fdic_admin;
+  if (!data?.is_fdic_admin) return false;
+
+  const { data: access, error } = await admin
+    .from("profiles")
+    .select("access_status")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (error) return true; // column missing → fail open (migration not run yet)
+  if (access?.access_status && access.access_status !== "approved") return false;
+  return true;
 }
 
 /** For the page to show/hide Accept buttons. Real enforcement happens inside
@@ -342,12 +356,16 @@ export async function deleteClosedBank(
   const now = new Date().toISOString();
 
   for (const row of bankRows) {
-    const { count } = await admin
+    const { count, error: countErr } = await admin
       .from("accounts")
       .select("id", { count: "exact", head: true })
       .eq("bank_id", row.id as string)
       .is("deleted_at", null);
-    if (count && count > 0) {
+    // A failed count query must not be read as "zero accounts" — this
+    // function's whole safety invariant is "only delete for users who have
+    // no active accounts there", so a query error means we genuinely don't
+    // know and must skip (fail closed), not silently proceed to delete.
+    if (countErr || count == null || count > 0) {
       skipped++;
       continue;
     }
@@ -463,7 +481,10 @@ export async function refreshBranchLocations(): Promise<{
   // Delete + insert per cert-batch (not delete-everything-then-insert-in-
   // chunks) so a failure partway through only affects the batch in flight —
   // certs not yet reached keep their previous refresh's rows, matching the
-  // guarantee this function is documented to make.
+  // guarantee this function is documented to make. Both steps run inside one
+  // Postgres function call (migration 0041's refresh_bank_branches) so an
+  // insert failure rolls the delete back too, instead of leaving that one
+  // batch's branches erased with nothing restored.
   const byCert = new Map<number, typeof toInsert>();
   for (const row of toInsert) {
     if (!byCert.has(row.cert)) byCert.set(row.cert, []);
@@ -475,15 +496,24 @@ export async function refreshBranchLocations(): Promise<{
   let count = 0;
   for (let i = 0; i < certList.length; i += CERT_BATCH) {
     const certBatch = certList.slice(i, i + CERT_BATCH);
-    const { error: delErr } = await admin.from("bank_branches").delete().in("cert", certBatch);
-    if (delErr) return { error: delErr.message, count, certsChecked, rawRows, sampleRow };
-
     const rowsForBatch = certBatch.flatMap((cert) => byCert.get(cert) ?? []);
-    if (rowsForBatch.length) {
-      const { error: insErr } = await admin.from("bank_branches").insert(rowsForBatch);
-      if (insErr) return { error: insErr.message, count, certsChecked, rawRows, sampleRow };
-      count += rowsForBatch.length;
+    const { data: batchCount, error: rpcErr } = await admin.rpc("refresh_bank_branches", {
+      p_certs: certBatch,
+      p_rows: rowsForBatch,
+    });
+    if (rpcErr) {
+      if (/function .*refresh_bank_branches.* does not exist/i.test(rpcErr.message)) {
+        return {
+          error: "One-time setup needed: run migration 0041 in the Supabase SQL editor, then try again.",
+          count,
+          certsChecked,
+          rawRows,
+          sampleRow,
+        };
+      }
+      return { error: rpcErr.message, count, certsChecked, rawRows, sampleRow };
     }
+    count += batchCount ?? 0;
   }
   return { count, certsChecked, rawRows, sampleRow: count === 0 ? sampleRow : undefined };
 }

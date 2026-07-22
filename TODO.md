@@ -4,17 +4,23 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 
 ## One-time setup pending
 
-- **Run migration `0040_lock_privileged_profile_columns.sql`** — closes a Critical finding from the
-  external security audit (SEC-01): `profiles_update_own`'s RLS policy only checked row ownership,
-  never which *columns* could be changed, so any signed-in user could call the Supabase REST API
-  directly (no service-role key needed) and set their own `access_status = 'approved'` and
-  `is_fdic_admin = true` — fully bypassing the invite-only gate and self-granting the FDIC-admin
-  role. This migration revokes UPDATE on `access_status`/`is_fdic_admin`/`created_at` from the
-  `authenticated` role at the database level. Verified safe first: every real write to these columns
-  already goes through the service-role client (`setAccessStatus`, `setFdicAdminRole`,
-  `restoreUserFromBackup`), which this REVOKE doesn't affect — no existing feature depends on the
-  ordinary user-scoped client writing them. **Until this runs, SEC-01 is not actually closed** —
-  everything else fixed in this round is pure code, already effective on deploy.
+- **Run migration `0041_sweep_row_locks_and_branch_refresh_atomicity.sql`** — closes two data-safety
+  findings from the external audit. DATA-03: `sweep_accounts`/`return_sweep` (migration 0034) read an
+  account's balance with a plain `SELECT`, no lock — two concurrent sweep/return operations on the
+  same account could both read the same starting balance and each write a conflicting result,
+  silently losing part of a real money-move even though both audit-trail rows get inserted correctly.
+  Now both functions take a `for update` row lock on the account before reading its balance, so
+  concurrent calls serialize instead of racing. DATA-08: `refreshBranchLocations`'s per-batch delete
+  then insert were two separate, unwrapped calls — an insert failure right after a successful delete
+  left that batch's branch data erased with nothing restored. New `refresh_bank_branches` Postgres
+  function does both steps in one transaction, so a failure rolls back cleanly instead of leaving a
+  batch empty. **Until this runs**, the app works exactly as it does today (same code paths, same
+  behavior) — `refreshBranchLocations` in the app already has a friendly "run migration 0041" message
+  if it's called before this is applied, and sweep/return simply keep the small pre-existing race
+  window until the lock is in place.
+- ~~Run migration `0040_lock_privileged_profile_columns.sql`~~ — confirmed run. Closes SEC-01
+  (Critical): any signed-in user could previously call the Supabase REST API directly and grant
+  themselves approved access + the FDIC-admin role. Now locked at the database level.
 - ~~APK packaging~~ — **done.** The site is wrapped as an installable Android TWA. Real signed
   `.apk` generated via PWABuilder.com's "Google Play" tab (the "Other Android" tab looked like the
   obviously-right choice for a non-Play-Store app but is a dead end — it has no signing-key option

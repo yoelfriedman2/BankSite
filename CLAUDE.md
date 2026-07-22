@@ -176,6 +176,86 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-22 (external audit — round 2: access-control follow-through + data-safety fixes)** — Direct
+follow-up to round 1 (below): with SEC-01's migration confirmed run by the user, this round tackled
+the next batch my own verification report explicitly recommended — the items that directly compound
+SEC-01 (INT-01, INT-02) plus real money/data-safety/notification gaps (DATA-03, DATA-07, DATA-08,
+DATA-12, REL-01), none of which needed a product decision:
+
+- **INT-01 — a denied user could keep a previously-granted FDIC-admin role.** `canApplyFdicChanges`
+  only ever checked `is_fdic_admin`, never `access_status` — so someone denied/un-approved after
+  being granted the FDIC-admin role could still call the FDIC-sync apply actions directly (server
+  actions are directly-callable endpoints, not protected by page-level gating alone — the same lesson
+  as SEC-01). Now also requires `access_status === "approved"`, queried as a separate call (same
+  fail-open-on-missing-column pattern used elsewhere) so a missing migration can't also break
+  `is_fdic_admin` lookups. `setAccessStatus` also now clears `is_fdic_admin` whenever a user is
+  denied, as defense in depth. (A true "kill this user's live session" primitive isn't available for
+  an arbitrary user via the Supabase SDK — `admin.auth.admin.signOut` needs the session's own JWT,
+  not a user id — but `(app)/layout.tsx` already re-checks `access_status` on every navigation and
+  redirects a denied user to `/pending`, so the actual gap was narrower than "the whole app stays
+  reachable": specifically the FDIC-sync server actions not independently re-checking approval.)
+- **INT-02 — pending/denied users received full community-note content by email.** The broadcast in
+  `addBankComment` selected recipients by `notify_email`/`notify_new_comments` only, with no
+  `access_status` filter — since new signups default both flags `true` and start `pending`, every
+  brand-new (not-yet-approved) user got real note content by email, a side channel that bypasses the
+  RLS blocking them from reading it in the app. Now excludes pending/denied users from the recipient
+  list first.
+- **DATA-03 — concurrent money sweeps/returns could corrupt a balance.** `sweep_accounts`/
+  `return_sweep` (migration 0034) read an account's balance with a plain `SELECT`, no lock —
+  `return_sweep` already row-locked the *sweep* row (preventing a double-apply retry of the *same*
+  sweep) but never the *account* row, so two different concurrent operations on one account (two
+  sweeps, two returns, a sweep racing a return) could each read the same starting balance and
+  overwrite each other's result — real money silently unaccounted-for despite both audit-trail rows
+  inserting correctly. New migration **`0041_sweep_row_locks_and_branch_refresh_atomicity.sql`** adds
+  `for update` on the accounts row in both functions. **Not yet run — see TODO.md.**
+- **DATA-07 — a failed account-count check could let a bank get deleted while someone still had an
+  account there.** `deleteClosedBank`'s safety check (`if (count && count > 0) skip`) discarded the
+  count query's own `error` — a failed query silently became `count == null`, read as "zero
+  accounts," so the function proceeded to delete anyway. Now treats a failed/null count as "skip this
+  bank" (fail closed), matching the function's own documented invariant.
+- **DATA-08 — a failed branch-location insert could erase data with nothing restored.**
+  `refreshBranchLocations` deleted then inserted each cert-batch as two separate, unwrapped calls; an
+  insert failure right after a successful delete left that batch's `bank_branches` rows gone. New
+  `refresh_bank_branches` Postgres function (same migration 0041) does both steps in one transaction,
+  so a failure rolls the delete back too.
+- **DATA-12 — the "APY" field didn't actually deliver the labeled yield.** `monthlyInterestAmount`
+  credited `rate/12` every month — dividing a number labeled APY (a true annual percentage *yield*,
+  which by definition already includes compounding) into 12 nominal monthly credits and then
+  compounding *those* overshoots the labeled rate: 4.5% configured compounded to an effective 4.594%
+  actually credited over a year. Fixed the formula itself (not just the label) by deriving the
+  correct monthly periodic rate from the entered APY: `(1+APY)^(1/12) - 1` — twelve months of that
+  now compound to exactly the entered percentage. Verified with a standalone script: $10,000 at 4.5%
+  APY now lands on $10,449.99 after 12 months (was $10,459.40 before the fix). This only affects
+  *future* monthly credits (the cron's `interest_last_accrued_on` self-healing check) — no backfill,
+  no change to already-recorded balance history.
+- **REL-01 — a missing email API key was silently reported as a successful send.** `sendEmail`
+  returned `{}` (identical shape to success) when `RESEND_API_KEY` was unset — since the cron only
+  checked `if (sendErr)` before stamping `last_reminded_at`/`emailed_at`, a misconfigured or
+  accidentally-unset key in production would have permanently marked every reminder as sent with
+  nothing ever delivered and no way to retry. `sendEmail` now returns `{ skipped: true }` (distinct
+  from both success and a real error) in that case; the cron reminders route's two stamp-on-send
+  loops and the settings feedback form (which showed a false "Feedback sent!" toast in the same
+  situation) both now check for it and correctly withhold the "done" state.
+
+Skipped changelog/Guide — all bug fixes / data-safety hardening, no new user-visible feature, same
+policy as round 1. `EXTERNAL-AUDIT-TRACKER.md` updated: 14 of 100 findings now fixed across both
+rounds. Migrations 0040 (confirmed run by the user) and 0041 (pending — see TODO.md) are the only two
+outstanding one-time setup steps from either round; everything else is pure code, live on deploy.
+
+**Verification**: `tsc --noEmit` and `npm run build` both clean. DATA-12 verified via a standalone
+Node script simulating 12 months of compounding (confirms the fix lands on the labeled APY to the
+cent, and reproduces the old formula's 4.594%-overshoot bug for comparison). DATA-03/DATA-08's SQL
+changes can't be exercised in DEMO_MODE (no real concurrent-Postgres testing available in this
+sandbox) — verified by careful reading against the original migration 0034/`fdic-sync/actions.ts`
+logic, confirming the *only* semantic change is the added `for update` locks / the wrap into one
+transaction, everything else byte-identical. INT-01's `canApplyFdicChanges` change is also
+unreachable in DEMO_MODE (`holding-companies/actions.ts` and `fdic-sync/page.tsx` both special-case
+DEMO_MODE before ever calling it, same architecture as before this round) — verified by code reading
+and confirming it follows the exact fail-open-on-missing-column pattern already used elsewhere. Full
+DEMO_MODE dev-server smoke test across every page (`/`, `/banks`, `/accounts`, `/fdic-sync`,
+`/fees-interest`, `/money`, `/settings`, `/admin`, `/road-trip`, `/holding-companies`) — all 200 (or
+expected redirect), zero server errors.
+
 **2026-07-22 (external audit — Part 1 Security fixes, round 1)** — A different AI ran a passive
 100-finding security/data/UX/reliability audit against this codebase; verified for legitimacy first
 (`EXTERNAL-AUDIT-VERIFICATION.md` — real and high-quality, 9 findings my own earlier 6-phase audit
