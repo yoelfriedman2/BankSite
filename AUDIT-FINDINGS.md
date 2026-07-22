@@ -12,7 +12,15 @@ Status key: `[ ]` open · `[x]` fixed · `[~]` won't-fix / accepted risk
 
 ## Phase 1 — Security, auth & data isolation  *(reviewed 2026-07-22)*
 
-### 🟠 [ ] 1.1 — Invite-only gate bypassable on the shared-bank write path
+### 🟠 [x] 1.1 — Invite-only gate bypassable on the shared-bank write path — **FIXED 2026-07-22**
+> Swapped `supabase.auth.getUser()` for `getApprovedUser()` at the top of `upsertBank`'s
+> real-mode path (both `createAdminClient()` propagation calls sit after this guard, so
+> both are now covered). Fails open if migration 0036 isn't run — no behavior change until
+> then. Verified: `tsc --noEmit` + `npm run build` clean. Confirmed `setBankStatus` /
+> `importBanks` / `addBankComment` / `shareCannotOpen` don't have the same gap (status is a
+> private field with no admin-client propagation; comment inserts are already RLS-gated by
+> `is_approved()` from migration 0036, and `shareCannotOpen` short-circuits on that error
+> before reaching its own propagation step) — no other fix needed.
 - **Where:** `src/app/(app)/banks/actions.ts` → `upsertBank` (lines ~205–351)
 - **Problem:** The action authenticates with only `if (!user)` — it never checks
   approval. A signed-in but **pending or explicitly denied** user can POST
@@ -78,7 +86,12 @@ Status key: `[ ]` open · `[x]` fixed · `[~]` won't-fix / accepted risk
 
 ## Phase 2 — Money & data-integrity correctness  *(reviewed 2026-07-22)*
 
-### 🟡 [ ] 2.1 — `getBalanceAsOf` is nondeterministic for same-day history rows
+### 🟡 [x] 2.1 — `getBalanceAsOf` is nondeterministic for same-day history rows — **FIXED 2026-07-22**
+> Added `.order("created_at", { ascending: true })` as a secondary sort, mirroring
+> `getBalanceHistory`'s existing sort. `created_at` exists on `account_balance_history`
+> unconditionally since migration 0013 (not a gated/optional column), so this is safe on
+> every install. Verified: `tsc --noEmit` + `npm run build` clean (this function isn't
+> reachable in DEMO_MODE, so a build/type check is the correct level of verification here).
 - **Where:** `src/app/(app)/money/actions.ts` → `getBalanceAsOf` (lines ~259–266)
 - **Problem:** It fetches history rows `WHERE as_of_date <= date ORDER BY as_of_date ASC`
   and does `asOf.set(account_id, balance)` in a loop, relying on last-write-wins to
@@ -101,7 +114,13 @@ Status key: `[ ]` open · `[x]` fixed · `[~]` won't-fix / accepted risk
 - **Fix:** after the batch account insert, insert matching "opening balance" history
   rows for imported accounts that have a balance (batch insert).
 
-### 🟡 [ ] 2.3 — Monthly fee drives a null/zero balance negative
+### 🟡 [x] 2.3 — Monthly fee drives a null/zero balance negative — **FIXED 2026-07-22**
+> Added a guard mirroring the interest section right below it: when `a.balance == null`,
+> skip the charge but still stamp `monthly_fee_last_charged_on` (so the account isn't
+> re-evaluated every day for the rest of the month) and `continue`. A *known* balance can
+> still go below 0 from a fee, unchanged — only the null-balance fabrication is fixed, per
+> the finding's own scoping. Verified: `tsc --noEmit` + `npm run build` clean (cron-only
+> code, not exercised by DEMO_MODE, so build/type-check is the right verification level).
 - **Where:** `src/app/api/cron/reminders/route.ts` — monthly-fee section (~182–184)
 - **Problem:** `oldBalance = a.balance != null ? Number(a.balance) : 0` then
   `newBalance = oldBalance - fee`, always applied. An account whose balance is **null
@@ -156,7 +175,14 @@ Status key: `[ ]` open · `[x]` fixed · `[~]` won't-fix / accepted risk
 
 ## Phase 3 — Scheduled jobs, email & exports  *(reviewed 2026-07-22)*
 
-### 🟡 [ ] 3.1 — Backup omits `holding_companies` and `bank_branches` tables
+### 🟡 [x] 3.1 — Backup omits `holding_companies` and `bank_branches` tables — **FIXED 2026-07-22**
+> Added both to `lib/backup.ts`'s `TABLES` array. Confirmed neither table has a `user_id`
+> column (`bank_branches` is cert-keyed, `holding_companies` has no owner) so they're
+> correctly excluded from `restoreUserFromBackup`'s separate `USER_TABLES` walk — no
+> restore-side change needed or made. `dumpTable` already degrades to a warning (not a
+> hard failure) if a table doesn't exist yet, so a fresh install without migrations
+> 0030/0035 run still gets a complete backup of everything else. Verified: `tsc --noEmit`
+> + `npm run build` clean.
 - **Where:** `src/lib/backup.ts` → `TABLES` array (lines 8–24)
 - **Problem:** The backup dumps 15 tables + `auth_users`, and its README claims
   "every database table," but two are missing: **`holding_companies`** (migration 0035)
@@ -210,7 +236,21 @@ Status key: `[ ]` open · `[x]` fixed · `[~]` won't-fix / accepted risk
 
 ## Phase 4 — Core UI: Banks, Accounts, Dashboard  *(reviewed 2026-07-22)*
 
-### 🟡 [ ] 4.1 — Dashboard "Open banks" count vs. `?status=open` filter mismatch
+### 🟡 [x] 4.1 — Dashboard "Open banks" count vs. `?status=open` filter mismatch — **FIXED 2026-07-22**
+> Added a new virtual `"open_any"` value (`BankStatusFilter` type + `OPEN_STATUSES` const in
+> `lib/types.ts`) that matches all three open variants at once. Dashboard tile now links to
+> `/banks?status=open_any`; `BanksClient`'s filter branches on it separately from the
+> existing exact-match case, so plain `?status=open` and every other individual status
+> filter are **byte-identical to before** (same code path, same predicate — provably
+> unchanged, not just untested). Also added "Open (any)" as a real, user-facing option in
+> the status funnel dropdown (previously only reachable via the dashboard link), so anyone
+> can pick it directly too.
+> **Verified live, not just by inspection**: built + ran the app in `DEMO_MODE` (temporarily
+> flipped two demo banks to `open_add_account`/`open_add_funds`, reverted after), then
+> confirmed via curl: unfiltered `/banks` → 426 cards; `/banks?status=open` (old exact
+> match) → 2 cards (unchanged); `/banks?status=open_any` → 4 cards, matching the dashboard
+> tile's own rendered value of **4**. Mismatch fully closed. `tsc --noEmit` + `npm run
+> build` also clean.
 - **Where:** `src/app/(app)/page.tsx` (tile ~164–170, count ~112–125) →
   `src/components/BanksClient.tsx` (`statusFilter` exact match, ~418) +
   `src/app/(app)/banks/page.tsx` (`VALID_STATUSES` / `initialStatus`, ~19–40)
@@ -369,12 +409,22 @@ Status key: `[ ]` open · `[x]` fixed · `[~]` won't-fix / accepted risk
 All actionable items, most-impactful first. Nothing here is a live exploit or data-loss bug —
 the app is well-built; these are hardening + correctness polish.
 
-**Should fix**
-- [ ] **1.1 🟠** Gate `upsertBank` on `getApprovedUser()` — stop a pending/denied user writing shared bank data. *(1-line change; highest value.)*
-- [ ] **3.1 🟡** Add `holding_companies` + `bank_branches` to the backup `TABLES` (holding-company data is otherwise unrecoverable).
-- [ ] **2.1 🟡** Add a `created_at` tiebreak to `getBalanceAsOf` (same-day balance points can resolve wrong).
-- [ ] **4.1 🟡** Fix the dashboard "Open banks" count↔`?status=open` filter mismatch (add an "open (any)" filter value).
-- [ ] **2.3 🟡** Skip the monthly fee when balance is null (stop fabricating a negative balance).
+**Should fix — ✅ all 5 done, 2026-07-22**
+- [x] **1.1 🟠** Gate `upsertBank` on `getApprovedUser()` — stop a pending/denied user writing shared bank data.
+- [x] **3.1 🟡** Add `holding_companies` + `bank_branches` to the backup `TABLES`.
+- [x] **2.1 🟡** Add a `created_at` tiebreak to `getBalanceAsOf`.
+- [x] **4.1 🟡** Fix the dashboard "Open banks" count↔`?status=open` filter mismatch (added an "open (any)" filter value).
+- [x] **2.3 🟡** Skip the monthly fee when balance is null.
+
+All 5 verified via a clean `tsc --noEmit` + `npm run build` (temp `xlsx` CDN→registry swap,
+restored after — standard sandbox workaround). 4.1 additionally verified live in `DEMO_MODE`
+(temp demo-data tweak, reverted after): dashboard tile value and the `open_any`-filtered list
+count matched exactly (4 = 4), while the untouched `all` and exact-`open` filters rendered
+identically to before (426 and 2, respectively) — confirming no regression to existing filter
+behavior. See each item's entry above (search "FIXED 2026-07-22") for the full detail. Diff
+touches 8 files, all reviewed line-by-line: `banks/actions.ts`, `banks/page.tsx`, `page.tsx`
+(dashboard), `BanksClient.tsx`, `money/actions.ts`, `cron/reminders/route.ts`, `backup.ts`,
+`lib/types.ts`. Not yet committed — held for explicit review/push confirmation.
 
 **Nice to fix**
 - [ ] **2.2 🟡** Seed an opening-balance history row for imported accounts (so they show in Balance-by-date).

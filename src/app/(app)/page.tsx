@@ -166,7 +166,7 @@ export default async function DashboardPage() {
           value={counts.open}
           icon={<Landmark className="h-5 w-5 text-emerald-600" />}
           accent="bg-emerald-50"
-          href="/banks?status=open"
+          href="/banks?status=open_any"
         />
         <StatCard
           label="Accounts"

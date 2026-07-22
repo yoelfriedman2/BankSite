@@ -22,11 +22,13 @@ import {
   STATUS_LABELS,
   STATUS_ORDER,
   ASSIGNABLE_STATUSES,
+  OPEN_STATUSES,
   CONVERSION_STAGE_LABELS,
   CONVERSION_STAGE_ORDER,
   type Account,
   type Bank,
   type BankStatus,
+  type BankStatusFilter,
   type ConversionStage,
 } from "@/lib/types";
 import {
@@ -226,11 +228,14 @@ function StatusFilterOptions({
   value,
   onChange,
 }: {
-  value: BankStatus | "all";
-  onChange: (v: BankStatus | "all") => void;
+  value: BankStatusFilter;
+  onChange: (v: BankStatusFilter) => void;
 }) {
-  const options: Array<{ key: BankStatus | "all"; label: string }> = [
+  const options: Array<{ key: BankStatusFilter; label: string }> = [
     { key: "all", label: "All" },
+    // Matches all three "open" variants at once — same grouping the header
+    // tally and the dashboard's "Open banks" tile already use.
+    { key: "open_any", label: "Open (any)" },
     ...STATUS_ORDER.map((s) => ({ key: s, label: STATUS_LABELS[s] })),
   ];
   return (
@@ -352,7 +357,7 @@ export function BanksClient({
   currentUserId: string | null;
   unreadCerts: number[];
   relatedByCert: Record<number, RelatedRef[]>;
-  initialStatus?: BankStatus | "all";
+  initialStatus?: BankStatusFilter;
   initialQuery?: string;
   initialOpenCert?: number;
   isOwner?: boolean;
@@ -363,7 +368,7 @@ export function BanksClient({
     [unreadCerts, localReadCerts],
   );
   const router = useRouter();
-  const [statusFilter, setStatusFilter] = useState<BankStatus | "all">(
+  const [statusFilter, setStatusFilter] = useState<BankStatusFilter>(
     initialStatus ?? "all",
   );
   const [stateFilter, setStateFilter] = useState<string>("all");
@@ -415,7 +420,11 @@ export function BanksClient({
 
   const filtered = useMemo(() => {
     let list = banks;
-    if (statusFilter !== "all") list = list.filter((b) => b.status === statusFilter);
+    if (statusFilter === "open_any") {
+      list = list.filter((b) => (OPEN_STATUSES as string[]).includes(b.status));
+    } else if (statusFilter !== "all") {
+      list = list.filter((b) => b.status === statusFilter);
+    }
     if (stateFilter !== "all") list = list.filter((b) => b.state === stateFilter);
     if (stageFilter.size > 0) list = list.filter((b) => stageFilter.has(b.conversion_stage));
     const q = query.trim().toLowerCase();

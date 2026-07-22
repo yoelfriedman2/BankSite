@@ -21,6 +21,13 @@ const TABLES = [
   "address_campaigns",
   "address_campaign_items",
   "road_trips",
+  // Shared reference tables (no user_id — not part of any user's restore,
+  // see USER_TABLES below, but still real data this backup should cover).
+  // holding_companies in particular is only rebuildable by re-uploading the
+  // 3 NIC files by hand, so it's the one that actually matters if this
+  // backup is ever needed for real.
+  "holding_companies",
+  "bank_branches",
 ];
 
 type Row = Record<string, unknown>;

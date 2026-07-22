@@ -260,7 +260,12 @@ export async function getBalanceAsOf(date: string): Promise<BalanceAsOfRow[]> {
     .from("account_balance_history")
     .select("account_id, as_of_date, balance")
     .lte("as_of_date", date)
-    .order("as_of_date", { ascending: true });
+    .order("as_of_date", { ascending: true })
+    // Secondary sort so that when an account has more than one history row on
+    // the SAME as_of_date (e.g. a manual edit plus a same-day fee/interest
+    // credit), the last-write-wins loop below lands on the latest one rather
+    // than an arbitrary DB row order. Mirrors getBalanceHistory's own sort.
+    .order("created_at", { ascending: true });
 
   const asOf = new Map<string, number>();
   for (const h of hist ?? []) asOf.set(h.account_id as string, Number(h.balance));

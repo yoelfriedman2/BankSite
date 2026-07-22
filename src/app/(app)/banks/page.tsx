@@ -12,11 +12,11 @@ import {
 } from "@/lib/demo";
 import { seedBanks, getUnreadCommentCerts, getRelatedByCert } from "./actions";
 import { isOwnerEmail } from "@/lib/isOwner";
-import type { Account, Bank, BankStatus } from "@/lib/types";
+import type { Account, Bank, BankStatusFilter } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-const VALID_STATUSES: Array<BankStatus | "all"> = [
+const VALID_STATUSES: Array<BankStatusFilter> = [
   "all",
   "untracked",
   "want_to_open",
@@ -25,6 +25,10 @@ const VALID_STATUSES: Array<BankStatus | "all"> = [
   "open_add_account",
   "open_add_funds",
   "cannot_open",
+  // Virtual value: matches all three "open" variants at once. Used by the
+  // dashboard's "Open banks" tile link so its count (which already sums all
+  // three) and the filtered list it lands on agree — see lib/types.ts.
+  "open_any",
 ];
 
 export default async function BanksPage({
@@ -34,9 +38,9 @@ export default async function BanksPage({
 }) {
   const sp = await searchParams;
   const initialStatus = VALID_STATUSES.includes(
-    sp.status as BankStatus | "all",
+    sp.status as BankStatusFilter,
   )
-    ? (sp.status as BankStatus | "all")
+    ? (sp.status as BankStatusFilter)
     : undefined;
   const initialQuery = typeof sp.q === "string" ? sp.q : undefined;
   const certNum = sp.cert ? parseInt(sp.cert, 10) : NaN;

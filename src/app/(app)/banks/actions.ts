@@ -220,10 +220,16 @@ export async function upsertBank(
   }
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You are not signed in." };
+
+  // Invite-only guard (migration 0036): this action can propagate shared bank
+  // fields (city/state/assets/website/…) to every OTHER user's copy via the
+  // admin client below, so it must require an APPROVED user, not merely a
+  // signed-in one — same reasoning as fdicCheck/getAllBankComments, which also
+  // write/read shared data through the admin client. getApprovedUser() fails
+  // open (returns the user as-is) if migration 0036 hasn't been run yet, so
+  // this doesn't change behavior until the migration exists.
+  const user = await getApprovedUser();
+  if (!user) return { error: "Not authorized." };
 
   // Capture the OLD shared values before updating, so we can report what changed.
   let oldShared: Record<string, unknown> | null = null;

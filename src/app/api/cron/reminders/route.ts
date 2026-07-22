@@ -180,7 +180,17 @@ export async function GET(req: NextRequest) {
       if (!due) continue;
 
       const fee = Number(a.monthly_fee);
-      const oldBalance = a.balance != null ? Number(a.balance) : 0;
+      if (a.balance == null) {
+        // Unknown balance — don't fabricate a negative one out of nothing.
+        // Still stamp the month (same as the interest section below) so this
+        // account isn't re-evaluated every day for the rest of it.
+        await admin
+          .from("accounts")
+          .update({ monthly_fee_last_charged_on: todayStr })
+          .eq("id", a.id);
+        continue;
+      }
+      const oldBalance = Number(a.balance);
       const newBalance = Number((oldBalance - fee).toFixed(2));
 
       const { error: updateErr } = await admin

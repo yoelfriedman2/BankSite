@@ -235,6 +235,17 @@ export const STATUS_ORDER: BankStatus[] = [
   "untracked",
 ];
 
+/** Every "open" status variant, grouped as one concept for filters/tallies
+ *  that don't care which sub-variant a bank is in. */
+export const OPEN_STATUSES: BankStatus[] = ["open", "open_add_account", "open_add_funds"];
+
+/** Status filter value for the Banks page: a real status, "all", or the
+ *  virtual "open_any" value that matches every OPEN_STATUSES variant at
+ *  once — what the dashboard's "Open banks" tile links to, so its count
+ *  (which already sums all three variants) and the filtered list it lands
+ *  on always agree. */
+export type BankStatusFilter = BankStatus | "all" | "open_any";
+
 /** Order shown in the status picker inside the bank drawer. */
 export const ASSIGNABLE_STATUSES: BankStatus[] = [
   "untracked",
