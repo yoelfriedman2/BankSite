@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { DEMO_MODE, getDemoAccounts, getDemoBanks } from "@/lib/demo";
+import { friendlyDbError } from "@/lib/friendlyError";
 
 export type OutstandingSweep = {
   id: string;
@@ -149,7 +150,7 @@ export async function createSweepBatch(
       moved_out_at: i.movedOutAt,
     })),
   });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
   if (!data || (data as unknown[]).length === 0) {
     return { error: "Those accounts have no balance to move." };
   }
@@ -183,7 +184,7 @@ export async function returnSweep(sweepId: string): Promise<{ error?: string }> 
   // function), which also row-locks the sweep so a concurrent/retried call
   // can't apply the same return twice.
   const { error } = await supabase.rpc("return_sweep", { p_sweep_id: sweepId });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
 
   revalidate();
   return {};

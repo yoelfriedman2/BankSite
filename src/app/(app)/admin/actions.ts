@@ -13,6 +13,7 @@ import {
   restoreUserFromBackup,
   type BackupFile,
 } from "@/lib/backup";
+import { friendlyDbError } from "@/lib/friendlyError";
 
 /** Returns the current user only if they are the configured owner (ADMIN_EMAIL). */
 async function requireOwner(): Promise<User | null> {
@@ -64,7 +65,7 @@ export async function listUsersWithStats(): Promise<{
 
   const admin = createAdminClient();
   const { data: authData, error } = await admin.auth.admin.listUsers({ perPage: 1000 });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
   const authUsers = authData?.users ?? [];
 
   // is_fdic_admin (migration 0026) is queried separately from the core profile
@@ -155,7 +156,7 @@ export async function setAccessStatus(
     if (/access_status|column/.test(error.message)) {
       return { error: "One-time setup needed: run migration 0036 in the Supabase SQL editor, then try again." };
     }
-    return { error: error.message };
+    return { error: friendlyDbError(error.message) };
   }
 
   if (status === "approved") {
@@ -194,7 +195,7 @@ export async function setFdicAdminRole(
     if (/is_fdic_admin|column/.test(error.message)) {
       return { error: "One-time setup needed: run migration 0026 in the Supabase SQL editor, then try again." };
     }
-    return { error: error.message };
+    return { error: friendlyDbError(error.message) };
   }
   return {};
 }
@@ -221,7 +222,7 @@ export async function deleteUserById(userId: string): Promise<{ error?: string }
   }
 
   const { error } = await admin.auth.admin.deleteUser(userId);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
   return {};
 }
 

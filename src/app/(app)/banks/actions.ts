@@ -7,6 +7,7 @@ import { getApprovedUser } from "@/lib/access";
 import { formatAssets } from "@/lib/format";
 import { sendCommunityNoteEmail } from "@/lib/email";
 import { logAudit, type AuditEntry } from "@/lib/audit";
+import { friendlyDbError } from "@/lib/friendlyError";
 import type { User } from "@supabase/supabase-js";
 import {
   DEMO_MODE,
@@ -244,7 +245,7 @@ export async function upsertBank(
 
   if (values.id) {
     const { error } = await supabase.from("banks").update(patch).eq("id", values.id);
-    if (error) return { error: error.message };
+    if (error) return { error: friendlyDbError(error.message) };
     await autoQueueIfWantToOpen(values.id, patch.status!);
   } else {
     const { data: inserted, error } = await supabase
@@ -252,7 +253,7 @@ export async function upsertBank(
       .insert({ regulator: null, ...patch, user_id: user.id })
       .select("id")
       .single();
-    if (error) return { error: error.message };
+    if (error) return { error: friendlyDbError(error.message) };
     if (inserted) await autoQueueIfWantToOpen(inserted.id as string, patch.status!);
 
     // For a new bank with a cert, add it (as untracked) to every other user who doesn't have it yet.
@@ -379,7 +380,7 @@ export async function setBankStatus(
 
   const { error } = await supabase.from("banks").update({ status }).eq("id", id);
   if (!error) await autoQueueIfWantToOpen(id, status);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
 
   revalidate();
   return {};
@@ -404,7 +405,7 @@ export async function deleteBank(id: string): Promise<{ error?: string }> {
     .from("banks")
     .update({ deleted_at: now })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
 
   await supabase
     .from("accounts")
@@ -444,7 +445,7 @@ export async function restoreBank(id: string): Promise<{ error?: string }> {
     .from("banks")
     .update({ deleted_at: null })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
 
   if (trashedAt) {
     await supabase
@@ -475,7 +476,7 @@ export async function permanentlyDeleteBank(
   if (!user) return { error: "You are not signed in." };
 
   const { error } = await supabase.from("banks").delete().eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
 
   revalidate();
   return {};
@@ -669,7 +670,7 @@ export async function importBanks(
           .from("banks")
           .update(upd)
           .eq("id", bankId);
-        if (error) return { error: error.message };
+        if (error) return { error: friendlyDbError(error.message) };
       }
     } else {
       const { data, error } = await supabase
@@ -698,7 +699,7 @@ export async function importBanks(
         .select("id")
         .single();
       if (error || !data) {
-        return { error: error?.message ?? "Could not add a bank." };
+        return { error: friendlyDbError(error?.message) ?? "Could not add a bank." };
       }
       bankId = data.id as string;
       const entry: ExistingEntry = { id: bankId, cert: row.cert, status: "open" };
@@ -746,7 +747,7 @@ export async function importBanks(
             .update(upd)
             .eq("id", row.matched_account_id)
             .eq("bank_id", bankId);
-          if (error) return { error: error.message };
+          if (error) return { error: friendlyDbError(error.message) };
         }
         accountsUpdated++;
       } else {
@@ -770,8 +771,30 @@ export async function importBanks(
   }
 
   if (accountInserts.length) {
-    const { error } = await supabase.from("accounts").insert(accountInserts);
-    if (error) return { error: error.message };
+    const { data: insertedAccounts, error } = await supabase
+      .from("accounts")
+      .insert(accountInserts)
+      .select("id, balance");
+    if (error) return { error: friendlyDbError(error.message) };
+
+    // Seed an opening-balance history point for each newly-imported account
+    // that has a balance — same as upsertAccount's own insert path — so an
+    // imported account isn't invisible on Balance-by-date until it's later
+    // edited by hand. Best-effort: a history-write failure shouldn't undo an
+    // otherwise-successful import.
+    const today = new Date().toISOString().slice(0, 10);
+    const historyRows = (insertedAccounts ?? [])
+      .filter((a) => a.balance != null)
+      .map((a) => ({
+        user_id: user.id,
+        account_id: a.id as string,
+        as_of_date: today,
+        balance: a.balance,
+        reason: "opening balance",
+      }));
+    if (historyRows.length) {
+      await supabase.from("account_balance_history").insert(historyRows);
+    }
   }
 
   // Post community notes, skipping exact duplicates
@@ -906,7 +929,7 @@ export async function seedBanks(): Promise<{ seeded?: number; error?: string }> 
 
   if (payload.length > 0) {
     const { error } = await supabase.from("banks").insert(payload);
-    if (error) return { error: error.message };
+    if (error) return { error: friendlyDbError(error.message) };
   }
 
   // Default any UNTRACKED bank to cannot_open if the team already knows it can't be
@@ -1072,7 +1095,7 @@ export async function addBankComment(
   const { error } = await supabase
     .from("bank_comments")
     .insert({ cert, author_id: user.id, author_name: authorName, body: text });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
 
   await logAudit({
     actorId: user.id,
@@ -1168,7 +1191,7 @@ export async function shareCannotOpen(
       .neq("user_id", user.id)
       .not("status", "in", "(open,open_add_account,open_add_funds)")
       .is("deleted_at", null);
-    if (error) return { error: error.message };
+    if (error) return { error: friendlyDbError(error.message) };
 
     const name = await actorName(supabase, user);
     await logAudit({
@@ -1206,7 +1229,7 @@ export async function deleteBankComment(id: string): Promise<{ error?: string }>
     .maybeSingle();
 
   const { error } = await supabase.from("bank_comments").delete().eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
 
   const name = await actorName(supabase, user);
   await logAudit({
@@ -1547,7 +1570,7 @@ export async function addBankRelationship(
   const { error } = await supabase
     .from("bank_relationships")
     .upsert({ cert_a: lo, cert_b: hi, created_by: user.id }, { onConflict: "cert_a,cert_b" });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
 
   const [name, { data: bks }] = await Promise.all([
     actorName(supabase, user),
@@ -1586,7 +1609,7 @@ export async function removeBankRelationship(
     .delete()
     .eq("cert_a", lo)
     .eq("cert_b", hi);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
 
   const [name, { data: bks }] = await Promise.all([
     actorName(supabase, user),

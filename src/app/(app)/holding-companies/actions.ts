@@ -12,6 +12,7 @@ import {
   getDemoHoldingCompanies,
   applyDemoHoldingCompanyChanges,
 } from "@/lib/demo";
+import { friendlyDbError } from "@/lib/friendlyError";
 
 export type HoldingCompanyOverviewRow = {
   id: string;
@@ -165,7 +166,7 @@ export async function getBankRssdCrosswalk(): Promise<{
       .not("cert", "is", null)
       .is("deleted_at", null)
       .range(from, from + 999);
-    if (error) return { banks: [], error: error.message };
+    if (error) return { banks: [], error: friendlyDbError(error.message) };
     allBanks.push(...(data as typeof allBanks));
     if (!data || data.length < 1000) break;
   }

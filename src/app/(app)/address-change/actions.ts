@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { DEMO_MODE } from "@/lib/demo";
+import { friendlyDbError } from "@/lib/friendlyError";
 
 export interface AddressCampaign {
   id: string;
@@ -165,7 +166,7 @@ export async function startAddressChange(
     if (isMissingTable(error?.message)) {
       return { error: "One-time setup needed: run migration 0024 in the Supabase SQL editor." };
     }
-    return { error: error?.message ?? "Could not start." };
+    return { error: friendlyDbError(error?.message) ?? "Could not start." };
   }
 
   const { error: itemErr } = await supabase.from("address_campaign_items").insert(
@@ -196,7 +197,7 @@ export async function setAddressItemDone(
     .from("address_campaign_items")
     .update({ done_at: done ? new Date().toISOString() : null })
     .eq("id", itemId);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
   revalidatePath("/address-change");
   return {};
 }
@@ -211,7 +212,7 @@ export async function completeAddressChange(
     .from("address_campaigns")
     .update({ completed_at: new Date().toISOString() })
     .eq("id", campaignId);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
   revalidatePath("/address-change");
   return {};
 }
@@ -223,7 +224,7 @@ export async function cancelAddressChange(
   if (DEMO_MODE) return {};
   const supabase = await createClient();
   const { error } = await supabase.from("address_campaigns").delete().eq("id", campaignId);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
   revalidatePath("/address-change");
   return {};
 }

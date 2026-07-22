@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { seedBanks } from "@/app/(app)/banks/actions";
+import { friendlyDbError } from "@/lib/friendlyError";
 
 /** Saves the user's name and marks onboarding complete. */
 export async function completeOnboarding(name: string): Promise<{ error?: string }> {
@@ -22,7 +23,7 @@ export async function completeOnboarding(name: string): Promise<{ error?: string
     .from("profiles")
     .update({ display_name: trimmed, onboarded: true })
     .eq("id", user.id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
 
   // Seed the shared bank list now so the dashboard is populated the moment they
   // land on it. Best-effort: it's idempotent and gated by profiles.banks_seeded,

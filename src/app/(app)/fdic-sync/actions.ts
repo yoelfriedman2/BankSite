@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getApprovedUser } from "@/lib/access";
 import { formatAssets } from "@/lib/format";
+import { friendlyDbError } from "@/lib/friendlyError";
 
 /* FDIC sync: poll-and-propose only. The check is read-only and available to
    every signed-in user. Applying a change (rename/website/assets/city-state/
@@ -77,6 +78,29 @@ function cleanUrl(raw: string): string {
   return `https://${raw.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
 }
 
+/** True for localhost/loopback, RFC1918 private ranges, link-local (including
+ *  the 169.254.169.254 cloud metadata address), and their IPv6 equivalents.
+ *  Literal-hostname check only (not DNS-rebinding-proof) — proportionate to
+ *  this endpoint's actual risk: it's already gated to FDIC-admin users, and a
+ *  match only ever reveals an HTTP status code, never a response body. */
+function isPrivateHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  if (h === "localhost" || h.endsWith(".localhost") || h === "::1") return true;
+  const ipv4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4) {
+    const a = Number(ipv4[1]);
+    const b = Number(ipv4[2]);
+    if (a === 127) return true; // loopback
+    if (a === 10) return true; // 10.0.0.0/8
+    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+    if (a === 192 && b === 168) return true; // 192.168.0.0/16
+    if (a === 169 && b === 254) return true; // 169.254.0.0/16 (incl. cloud metadata)
+    if (a === 0) return true; // 0.0.0.0/8
+  }
+  if (/^f[cd][0-9a-f]{0,2}:/i.test(h) || /^fe80:/i.test(h)) return true; // IPv6 ULA/link-local
+  return false;
+}
+
 type FdicRow = {
   CERT: number; NAME: string; CITY: string | null; STALP: string | null;
   ASSET: number | string | null; WEBADDR: string | null; ACTIVE: number | string;
@@ -116,7 +140,7 @@ export async function fdicCheck(): Promise<FdicReport> {
       .not("cert", "is", null)
       .is("deleted_at", null)
       .range(from, from + 999);
-    if (error) return { ...EMPTY, error: error.message };
+    if (error) return { ...EMPTY, error: friendlyDbError(error.message) };
     allBanks.push(...(data as typeof allBanks));
     if (!data || data.length < 1000) break;
   }
@@ -199,7 +223,7 @@ export async function applyFdicRename(
     .update({ name: proposedName })
     .eq("cert", cert)
     .is("deleted_at", null);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
   return {};
 }
 
@@ -213,6 +237,16 @@ export async function applyFdicWebsite(
   if (!(await canApplyFdicChanges(user))) return { error: "Not authorized." };
 
   const clean = cleanUrl(url);
+  let hostname: string;
+  try {
+    hostname = new URL(clean).hostname;
+  } catch {
+    return { error: "That doesn't look like a valid website address." };
+  }
+  if (isPrivateHost(hostname)) {
+    return { error: "That address isn't a public website — not applied." };
+  }
+
   let ok = false;
   for (const candidate of [clean, clean.replace("https://", "http://")]) {
     try {
@@ -231,7 +265,7 @@ export async function applyFdicWebsite(
     .update({ website: clean })
     .eq("cert", cert)
     .is("deleted_at", null);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
   return {};
 }
 
@@ -275,7 +309,7 @@ export async function applyFdicCityState(
     .update(patch)
     .eq("cert", cert)
     .is("deleted_at", null);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
   return {};
 }
 
@@ -300,7 +334,7 @@ export async function deleteClosedBank(
     .select("id, user_id")
     .eq("cert", cert)
     .is("deleted_at", null);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
   if (!bankRows || bankRows.length === 0) return { deleted: 0, skipped: 0 };
 
   let deleted = 0;
@@ -385,7 +419,7 @@ export async function refreshBranchLocations(): Promise<{
       .not("cert", "is", null)
       .is("deleted_at", null)
       .range(from, from + 999);
-    if (error) return { error: error.message };
+    if (error) return { error: friendlyDbError(error.message) };
     for (const row of data ?? []) certs.add(row.cert as number);
     if (!data || data.length < 1000) break;
   }

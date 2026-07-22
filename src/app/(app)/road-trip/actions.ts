@@ -13,6 +13,7 @@ import {
   deleteDemoTrip,
 } from "@/lib/demo";
 import type { Bank, BankStatus, OpenMethod, Priority } from "@/lib/types";
+import { friendlyDbError } from "@/lib/friendlyError";
 
 /* Road trip planner: open to every signed-in user (was owner-only while
    testing — see CLAUDE.md history). */
@@ -253,7 +254,7 @@ export async function listTrips(): Promise<{ trips: SavedTripSummary[]; error?: 
     if (isMissingSchema(error.message)) {
       return { ...EMPTY_TRIPS, error: "One-time setup needed: run migration 0032 in the Supabase SQL editor." };
     }
-    return { ...EMPTY_TRIPS, error: error.message };
+    return { ...EMPTY_TRIPS, error: friendlyDbError(error.message) };
   }
   const trips = (data ?? []).map((t) => ({ ...summarize(t), mine: t.user_id === user.id }));
   return { trips };
@@ -288,7 +289,7 @@ export async function getTripPlan(id: string): Promise<{ plan?: RoadTripPlan; ti
 
   const supabase = await createClient();
   const { data, error } = await supabase.from("road_trips").select("plan, title").eq("id", id).maybeSingle();
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
   if (!data) return { error: "Trip not found." };
   return { plan: data.plan as RoadTripPlan, title: data.title as string };
 }
@@ -320,7 +321,7 @@ export async function saveTrip(input: {
       .from("road_trips")
       .update({ title: input.title, is_public: input.isPublic, plan: input.plan, bank_certs: input.bankCerts, updated_at: new Date().toISOString() })
       .eq("id", input.id);
-    if (error) return { error: error.message };
+    if (error) return { error: friendlyDbError(error.message) };
     revalidatePath("/road-trip");
     return { id: input.id };
   }
@@ -334,7 +335,7 @@ export async function saveTrip(input: {
     if (isMissingSchema(error.message)) {
       return { error: "One-time setup needed: run migration 0032 in the Supabase SQL editor." };
     }
-    return { error: error.message };
+    return { error: friendlyDbError(error.message) };
   }
   revalidatePath("/road-trip");
   return { id: data.id as string };
@@ -350,7 +351,7 @@ export async function deleteTrip(id: string): Promise<{ error?: string }> {
   if (!user) return { error: "Not authorized." };
   const supabase = await createClient();
   const { error } = await supabase.from("road_trips").delete().eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
   revalidatePath("/road-trip");
   return {};
 }

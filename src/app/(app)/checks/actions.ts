@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { DEMO_MODE } from "@/lib/demo";
+import { friendlyDbError } from "@/lib/friendlyError";
 
 export interface PrintedCheck {
   id: string;
@@ -67,7 +68,7 @@ export async function recordPrintedCheck(input: {
     })
     .select("*")
     .single();
-  if (error || !data) return { error: error?.message ?? "Could not log the check." };
+  if (error || !data) return { error: friendlyDbError(error?.message) ?? "Could not log the check." };
   return { check: rowToCheck(data) };
 }
 
@@ -115,6 +116,6 @@ export async function deletePrintedCheck(id: string): Promise<{ error?: string }
   const supabase = await createClient();
   // RLS restricts the delete to the check's owner.
   const { error } = await supabase.from("printed_checks").delete().eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
   return {};
 }

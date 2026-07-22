@@ -11,6 +11,7 @@ import {
   getDemoAccounts,
 } from "@/lib/demo";
 import type { Account, Bank } from "@/lib/types";
+import { friendlyDbError } from "@/lib/friendlyError";
 
 export async function updateSettings(values: {
   display_name: string;
@@ -89,7 +90,7 @@ export async function updateSettings(values: {
     if (/alert_no_activity|min_balance|column/.test(error.message)) {
       return { error: "One-time setup needed: run migration 0025 in the Supabase SQL editor, then save again." };
     }
-    return { error: error.message };
+    return { error: friendlyDbError(error.message) };
   }
 
   revalidatePath("/settings");
@@ -99,7 +100,14 @@ export async function updateSettings(values: {
   return {};
 }
 
-/** Emails the owner with a user's feedback / problem report. */
+/** Don't let a signed-in user loop this action to flood the owner's inbox. */
+const FEEDBACK_COOLDOWN_MS = 2 * 60 * 1000;
+
+/** Emails the owner with a user's feedback / problem report. Rate-limited
+ *  per user (see FEEDBACK_COOLDOWN_MS above) — same shape as requestAccess's
+ *  own email cooldown. Fails open (never blocks sending) if migration 0039
+ *  hasn't added profiles.last_feedback_at yet: a select on a missing column
+ *  just leaves that field undefined, same as "never sent before". */
 export async function sendFeedback(message: string): Promise<{ error?: string }> {
   const text = message.trim();
   if (!text) return { error: "Please enter a message." };
@@ -114,13 +122,25 @@ export async function sendFeedback(message: string): Promise<{ error?: string }>
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("display_name")
+    .select("display_name, last_feedback_at")
     .eq("id", user.id)
     .maybeSingle();
+
+  const lastFeedbackAt = profile?.last_feedback_at as string | null | undefined;
+  const lastSent = lastFeedbackAt ? new Date(lastFeedbackAt).getTime() : 0;
+  if (lastSent && Date.now() - lastSent < FEEDBACK_COOLDOWN_MS) {
+    return { error: "Please wait a moment before sending more feedback." };
+  }
+
   const name =
     (profile?.display_name as string | null) ||
     (user.user_metadata?.full_name as string | undefined) ||
     "";
+
+  // Stamp before sending so a rapid double-submit can't both slip through.
+  // Best-effort: if the column doesn't exist yet, this silently no-ops and
+  // the cooldown just never engages, rather than blocking the email itself.
+  await supabase.from("profiles").update({ last_feedback_at: new Date().toISOString() }).eq("id", user.id);
 
   return sendFeedbackEmail(name, user.email ?? "", text);
 }
@@ -130,7 +150,7 @@ export async function signOutEverywhere(): Promise<{ error?: string }> {
   if (DEMO_MODE) return {};
   const supabase = await createClient();
   const { error } = await supabase.auth.signOut({ scope: "global" });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
   return {};
 }
 
@@ -186,7 +206,7 @@ export async function deleteMyAccount(): Promise<{ error?: string }> {
   }
 
   const { error } = await admin.auth.admin.deleteUser(user.id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
 
   // The session is now invalid; clear the local cookie too.
   await supabase.auth.signOut();

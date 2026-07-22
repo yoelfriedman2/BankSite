@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { DEMO_MODE, getDemoBanks, updateDemoBank } from "@/lib/demo";
 import type { Bank, BankStatus } from "@/lib/types";
+import { friendlyDbError } from "@/lib/friendlyError";
 
 // Banks still worth deciding on / working toward. Once a bank is Open (any
 // variant) or Can't open, it's done — it drops out of the queue and out of
@@ -142,7 +143,7 @@ export async function addToQueue(bankId: string): Promise<{ error?: string }> {
     if (isMissingSchema(error.message)) {
       return { error: "One-time setup needed: run migration 0027 in the Supabase SQL editor." };
     }
-    return { error: error.message };
+    return { error: friendlyDbError(error.message) };
   }
 
   revalidatePath("/up-next");
@@ -163,7 +164,7 @@ export async function removeFromQueue(bankId: string): Promise<{ error?: string 
     .from("banks")
     .update({ queue_position: null })
     .eq("id", bankId);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
 
   revalidatePath("/up-next");
   revalidatePath("/");
@@ -194,11 +195,28 @@ export async function moveInQueue(
   }
 
   const supabase = await createClient();
+
+  // Atomic swap via RPC (migration 0039) — a single function body is one
+  // transaction, so this can't leave the two banks' positions half-swapped
+  // the way two independent UPDATEs could. Falls back to the old two-update
+  // approach for any RPC error (not deployed yet, or anything else), so this
+  // never regresses below what already worked.
+  const { error: rpcErr } = await supabase.rpc("swap_queue_positions", {
+    p_bank_a: a.id,
+    p_pos_a: a.queue_position,
+    p_bank_b: b.id,
+    p_pos_b: b.queue_position,
+  });
+  if (!rpcErr) {
+    revalidatePath("/up-next");
+    return {};
+  }
+
   const [{ error: err1 }, { error: err2 }] = await Promise.all([
     supabase.from("banks").update({ queue_position: b.queue_position }).eq("id", a.id),
     supabase.from("banks").update({ queue_position: a.queue_position }).eq("id", b.id),
   ]);
-  if (err1 || err2) return { error: err1?.message ?? err2?.message };
+  if (err1 || err2) return { error: friendlyDbError(err1?.message ?? err2?.message) };
 
   revalidatePath("/up-next");
   return {};

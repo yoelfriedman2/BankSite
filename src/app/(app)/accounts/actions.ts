@@ -17,6 +17,7 @@ import {
 import { AUTO_OPEN_FROM_STATUSES, type Account, type ActivityType } from "@/lib/types";
 import { skipCurrentMonthIfPast } from "@/lib/monthlyFee";
 import { stampOnRateChange } from "@/lib/interestAccrual";
+import { friendlyDbError } from "@/lib/friendlyError";
 
 export type AccountFormValues = {
   id?: string;
@@ -251,7 +252,7 @@ export async function upsertAccount(
       .from("accounts")
       .update(dbPatch)
       .eq("id", values.id);
-    if (error) return { error: error.message };
+    if (error) return { error: friendlyDbError(error.message) };
 
     if (patch.balance != null && patch.balance !== oldBalance) {
       await supabase.from("account_balance_history").insert({
@@ -279,7 +280,7 @@ export async function upsertAccount(
       })
       .select("id")
       .single();
-    if (error || !created) return { error: error?.message ?? "Could not add the account." };
+    if (error || !created) return { error: friendlyDbError(error?.message) ?? "Could not add the account." };
 
     if (patch.balance != null) {
       await supabase.from("account_balance_history").insert({
@@ -327,7 +328,7 @@ export async function deleteAccount(id: string): Promise<{ error?: string }> {
     .from("accounts")
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
 
   revalidate();
   return {};
@@ -350,7 +351,7 @@ export async function restoreAccount(id: string): Promise<{ error?: string }> {
     .from("accounts")
     .update({ deleted_at: null })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
 
   revalidate();
   return {};
@@ -373,7 +374,7 @@ export async function permanentlyDeleteAccount(
   if (!user) return { error: "You are not signed in." };
 
   const { error } = await supabase.from("accounts").delete().eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
 
   revalidate();
   return {};
@@ -433,7 +434,7 @@ export async function duplicateAccount(
     user_id: user.id,
     bank_id: bankId,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
 
   const { data: bank } = await supabase
     .from("banks")
@@ -496,7 +497,7 @@ export async function logActivityToday(
     .from("accounts")
     .update({ last_activity_date: today, activity_log: log })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error.message) };
 
   revalidate();
   return {};

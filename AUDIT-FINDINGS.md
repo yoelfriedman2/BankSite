@@ -46,7 +46,23 @@ Status key: `[ ]` open · `[x]` fixed · `[~]` won't-fix / accepted risk
   safe to ship before the migration. Verify no other admin-client propagation
   path (`importBanks`, `setBankStatus`) has the same gap.
 
-### 🟡 [ ] 1.2 — Raw database error strings returned to the client
+### 🟡 [x] 1.2 — Raw database error strings returned to the client — **FIXED 2026-07-22**
+> Added `src/lib/friendlyError.ts` (`friendlyDbError()`) — maps a small set of well-known raw
+> Postgres error signatures (RLS/permission-denied, unique/foreign-key/not-null/check
+> constraint violations, invalid-input-syntax, network/timeout) to short friendly text.
+> Anything that doesn't match a known signature — including the app's own hand-written
+> validation messages, and the "column ... does not exist" / "schema cache" text several
+> callers already pattern-match on themselves — passes through **unchanged**, so this is
+> purely additive and can only replace text that was already raw DB internals.
+> Applied at all 60 terminal `return { error: error.message }` / `error?.message ?? "..."`
+> sites across every server-action file (13 files). Carefully verified beforehand that the
+> literal substring `error: error.message` (colon before it) never collides with the
+> separate raw-message *inspection* calls some files already have (`isMissingSchema(error.message)`,
+> `.test(error.message)`, etc., used to detect "migration not run yet") — those read the
+> original message and are completely untouched, confirmed via grep before and after.
+> Verified: `tsc --noEmit` + `npm run build` clean. Not reachable via `DEMO_MODE` (no real DB
+> errors occur there), so verification is build/type-check + line-by-line diff review, not a
+> live click-test.
 - **Where:** many server actions across `banks/actions.ts`, `accounts/actions.ts`,
   `money/actions.ts`, etc. — pattern `return { error: error.message }`.
 - **Problem:** Surfaces Postgres/Supabase internal error text to the browser
@@ -54,7 +70,14 @@ Status key: `[ ]` open · `[x]` fixed · `[~]` won't-fix / accepted risk
 - **Fix:** Map DB errors to friendly messages; log the raw text server-side only.
   Low priority — do a sweep, don't rewrite every call site by hand.
 
-### 🟡 [ ] 1.3 — SSRF in `applyFdicWebsite`
+### 🟡 [x] 1.3 — SSRF in `applyFdicWebsite` — **FIXED 2026-07-22**
+> Added `isPrivateHost()` in `fdic-sync/actions.ts`: rejects localhost/loopback, RFC1918
+> private ranges, link-local (including the 169.254.169.254 cloud-metadata address), and
+> IPv6 equivalents, checked against the URL's hostname before the live-verify fetch runs.
+> Literal-hostname check, not DNS-rebinding-proof — proportionate to the actual risk (already
+> FDIC-admin-gated; a match only ever reveals an HTTP status, never a response body).
+> Verified: `tsc --noEmit` + `npm run build` clean. Not reachable via `DEMO_MODE` (this whole
+> file requires a real auth session), so verified by code review + build only.
 - **Where:** `src/app/(app)/fdic-sync/actions.ts` → `applyFdicWebsite` (~line 208)
 - **Problem:** Server-side `fetch` of an admin-supplied URL. Only leaks
   ok/status (not the body) and is gated to trusted FDIC-admins, so minor.
@@ -103,7 +126,14 @@ Status key: `[ ]` open · `[x]` fixed · `[~]` won't-fix / accepted risk
 - **Fix:** add `.order("created_at", { ascending: true })` as a secondary sort (the
   sibling `getBalanceHistory` already sorts by `created_at desc`, so mirror it).
 
-### 🟡 [ ] 2.2 — Imported accounts never seed a balance-history point
+### 🟡 [x] 2.2 — Imported accounts never seed a balance-history point — **FIXED 2026-07-22**
+> `importBanks`'s account-insert now selects back `id, balance` for the inserted rows and
+> writes a matching "opening balance" `account_balance_history` row for each one that has a
+> balance — same shape as `upsertAccount`'s own insert path. Best-effort (history-write
+> failure doesn't undo an otherwise-successful import). No migration needed — uses the
+> existing table/columns. Verified: `tsc --noEmit` + `npm run build` clean. Not reachable via
+> `DEMO_MODE` (demo import uses a separate `importDemoRows` code path), so verified by code
+> review + build only.
 - **Where:** `src/app/(app)/banks/actions.ts` → `importBanks` account insert (~747–769)
 - **Problem:** `upsertAccount`'s insert path records an "opening balance"
   `account_balance_history` row, but `importBanks` inserts accounts with balances and
@@ -131,7 +161,19 @@ Status key: `[ ]` open · `[x]` fixed · `[~]` won't-fix / accepted risk
   `a.balance == null`; decide deliberately whether a fee may ever push a *known*
   balance below 0.
 
-### 🟡 [ ] 2.4 — Fee/interest cron is a non-atomic read-modify-write on balance
+### 🟡 [x] 2.4 — Fee/interest cron is a non-atomic read-modify-write on balance — **FIXED 2026-07-22, needs migration 0039**
+> Added `charge_monthly_fee()` / `credit_monthly_interest()` — Postgres functions
+> (migration 0039) that do a single guarded `UPDATE ... RETURNING balance` (atomic by
+> construction; the guard also blocks a hypothetical concurrent double-charge within the
+> same day). The cron calls the RPC first; on **any** RPC error — not just "not deployed
+> yet" — it falls back to the exact previous JS-computed update, so this can never regress
+> below what already worked, whether the migration hasn't been run or the RPC has an issue.
+> **This is the one fix in this batch I could not test end-to-end** — there's no live
+> Postgres in this sandbox to actually invoke the new RPC against. Verified by: careful
+> manual SQL review, `tsc --noEmit` + `npm run build` clean, and the fallback-on-any-error
+> design specifically chosen so a subtle RPC bug degrades to "acts exactly like before,"
+> never a broken cron run. **Needs migration 0039 run in the Supabase SQL editor** before
+> the atomic path takes effect (behavior is unchanged, using the old method, until then).
 - **Where:** `src/app/api/cron/reminders/route.ts` — fee (~160–203) & interest (~212–264)
 - **Problem:** Each section does a batch `SELECT` of balances, then loops updating each
   account with `oldBalance ± amount` computed from that snapshot. A concurrent user
@@ -196,7 +238,15 @@ Status key: `[ ]` open · `[x]` fixed · `[~]` won't-fix / accepted risk
   (correctly ignored by the per-user `restoreUserFromBackup`, which only walks
   `USER_TABLES`) — no restore-side change needed.
 
-### 🟡 [ ] 3.2 — Feedback email has no rate limit
+### 🟡 [x] 3.2 — Feedback email has no rate limit — **FIXED 2026-07-22, needs migration 0039**
+> Added `profiles.last_feedback_at` (migration 0039) + a 2-minute cooldown in `sendFeedback`,
+> same shape as `requestAccess`'s existing 6h cooldown. Fails open by construction (not by an
+> explicit "column missing" check): a select on a not-yet-existing column just leaves the
+> field `undefined`, which the cooldown logic already treats as "never sent before," so
+> feedback sending is never blocked before the migration runs. The stamp-write is
+> best-effort/unchecked, so even a failed stamp never blocks the actual email. Verified:
+> `tsc --noEmit` + `npm run build` clean. Not reachable via `DEMO_MODE` (`sendFeedback`
+> returns immediately in demo mode), so verified by code review + build only.
 - **Where:** `src/app/(app)/settings/actions.ts` → `sendFeedback` (102–126)
 - **Problem:** Authenticated and length-capped (4000 chars), but a signed-in user can
   loop the action to flood the owner's inbox. Goes only to `ADMIN_EMAIL` (not an
@@ -299,7 +349,20 @@ Status key: `[ ]` open · `[x]` fixed · `[~]` won't-fix / accepted risk
 
 ## Phase 5 — Feature tools  *(reviewed 2026-07-22)*
 
-### 🟡 [ ] 5.1 — Up-next queue positions aren't unique and the swap isn't atomic
+### 🟡 [x] 5.1 — Up-next queue positions aren't unique and the swap isn't atomic — **PARTIALLY FIXED 2026-07-22, needs migration 0039**
+> Added `swap_queue_positions()` RPC (migration 0039): a single function body is one
+> transaction, so the two banks' positions can no longer end up half-swapped by one UPDATE
+> succeeding and the other failing. `security invoker` + explicit `user_id = auth.uid()`
+> checks mean it can only ever touch the caller's own rows. `moveInQueue` calls the RPC
+> first and falls back to the old two-update approach on any error, so this can't regress.
+> **Scope note**: this fixes the swap specifically (the more impactful half of the finding).
+> The separate `addToQueue` `max(existing)+1` race (positions not globally unique) was left
+> as accepted low residual risk, per the finding's own "Impact: Low" — a real fix there would
+> need a uniqueness constraint, which risks failing on any pre-existing duplicate data I can't
+> inspect from this sandbox; not worth that risk for a low-severity, single-user-scoped edge
+> case. Verified: `tsc --noEmit` + `npm run build` clean. Not reachable via `DEMO_MODE`
+> (`moveInQueue`'s demo branch bypasses this code entirely), so verified by code review +
+> build only.
 - **Where:** `src/app/(app)/up-next/actions.ts` → `addToQueue` (~131–140),
   `moveInQueue` (~186–201); also `autoQueueIfWantToOpen` in `banks/actions.ts`
 - **Problem:** Queue positions are assigned as `max(existing)+1` via a read-then-write, so
@@ -424,14 +487,32 @@ identically to before (426 and 2, respectively) — confirming no regression to 
 behavior. See each item's entry above (search "FIXED 2026-07-22") for the full detail. Diff
 touches 8 files, all reviewed line-by-line: `banks/actions.ts`, `banks/page.tsx`, `page.tsx`
 (dashboard), `BanksClient.tsx`, `money/actions.ts`, `cron/reminders/route.ts`, `backup.ts`,
-`lib/types.ts`. Not yet committed — held for explicit review/push confirmation.
+`lib/types.ts`. **Committed (`821aadb`) and pushed directly to `main`** (a clean fast-forward
+— `main` had zero divergence from this branch at push time), per explicit user go-ahead.
 
-**Nice to fix**
-- [ ] **2.2 🟡** Seed an opening-balance history row for imported accounts (so they show in Balance-by-date).
-- [ ] **2.4 🟡** Make the fee/interest cron balance update atomic (SQL delta / RPC).
-- [ ] **3.2 🟡** Rate-limit the feedback email.
-- [ ] **1.2 🟡** Map raw DB errors to friendly messages (also cleans up 6.3).
-- [ ] **5.1 🟡** Make the up-next queue swap atomic / positions unique.
-- [ ] **1.3 🟡** Restrict `applyFdicWebsite` fetch to public hosts (SSRF hardening).
+**Nice to fix — ✅ all 6 done, 2026-07-22**
+- [x] **2.2 🟡** Seed an opening-balance history row for imported accounts.
+- [x] **2.4 🟡** Make the fee/interest cron balance update atomic (RPC + fallback-on-any-error).
+- [x] **3.2 🟡** Rate-limit the feedback email.
+- [x] **1.2 🟡** Map raw DB errors to friendly messages.
+- [x] **5.1 🟡** Make the up-next queue swap atomic (RPC + fallback). `addToQueue`'s separate
+  low-severity position-uniqueness race intentionally left as-is — see 5.1's own entry above.
+- [x] **1.3 🟡** Restrict `applyFdicWebsite` fetch to public hosts (SSRF hardening).
+
+**⚠️ Needs a migration before 3 of these take effect**: run
+**`supabase/migrations/0039_atomic_updates_and_feedback_cooldown.sql`** in the Supabase SQL
+editor to activate 2.4 (atomic fee/interest RPCs), 5.1 (atomic queue-swap RPC), and 3.2
+(feedback cooldown column). All three degrade gracefully and are functionally unchanged from
+before this batch until it's run — this is a genuine improvement, not a required step to
+avoid breakage. 1.2, 1.3, and 2.2 need no migration and are already fully active.
+
+Verified via a clean `tsc --noEmit` + `npm run build` (temp `xlsx` swap, restored after).
+**None of these 6 are reachable via `DEMO_MODE`** (each hits its own demo early-return, or —
+for `applyFdicWebsite` — the whole file requires a real auth session), so verification for
+this batch is build/type-check + careful line-by-line diff review, not a live click-test.
+The one item I could not test end-to-end at all is 2.4's new RPC functions — no live Postgres
+in this sandbox to invoke them against — mitigated by the fallback-on-any-error design (a bug
+in the RPC degrades to "acts exactly like the pre-fix code," never a broken cron run). Not yet
+committed — held for explicit review/push confirmation, same as last round.
 
 **Optional / info** — 1.4 (CSP), 2.5, 2.6, 4.2 (live 375px pass), 5.2, 5.3, 5.4, 5.5, 3.3 (plaintext creds — by design), 6.1 (env docs), 6.2 (xlsx CDN), 6.3 (Sentry scrubbing).
