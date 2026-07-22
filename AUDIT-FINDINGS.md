@@ -151,3 +151,57 @@ Status key: `[ ]` open · `[x]` fixed · `[~]` won't-fix / accepted risk
 - `importBanks` writes only the caller's own rows (no cross-user propagation → no Phase-1
   gap here); matched-bank updates never blank fields absent from the file; note dedup works.
 - `last_activity_date` correctly derived as max(field, newest activity-log entry).
+
+---
+
+## Phase 3 — Scheduled jobs, email & exports  *(reviewed 2026-07-22)*
+
+### 🟡 [ ] 3.1 — Backup omits `holding_companies` and `bank_branches` tables
+- **Where:** `src/lib/backup.ts` → `TABLES` array (lines 8–24)
+- **Problem:** The backup dumps 15 tables + `auth_users`, and its README claims
+  "every database table," but two are missing: **`holding_companies`** (migration 0035)
+  and **`bank_branches`** (0030). `holding_companies` is the meaningful gap — it holds
+  the NIC-derived holding-company data (name, consolidated assets, RSSD) that's only
+  rebuildable by re-uploading the 3 NIC files, so in the "Supabase project is lost"
+  scenario the backup is explicitly for, that data is unrecoverable. `bank_branches`
+  is re-derivable from FDIC (the refresh button), so lower concern — but still counts
+  as incomplete.
+- **Fix:** add both to `TABLES`. They have no `user_id`, so they're backup-only
+  (correctly ignored by the per-user `restoreUserFromBackup`, which only walks
+  `USER_TABLES`) — no restore-side change needed.
+
+### 🟡 [ ] 3.2 — Feedback email has no rate limit
+- **Where:** `src/app/(app)/settings/actions.ts` → `sendFeedback` (102–126)
+- **Problem:** Authenticated and length-capped (4000 chars), but a signed-in user can
+  loop the action to flood the owner's inbox. Goes only to `ADMIN_EMAIL` (not an
+  arbitrary recipient), so it's inbox-spam, not an open relay. Already noted as known
+  in CLAUDE.md.
+- **Fix:** throttle per user (e.g. store `last_feedback_at`, reject within N minutes),
+  same pattern as `requestAccess`'s 6h cooldown.
+
+### ⚪ [ ] 3.3 — Account login credentials stored/exported in plaintext (by design)
+- **Where:** `accounts.username` / `accounts.password` (text columns); surfaced in
+  `lib/export.ts`, `/api/export/full`, and `lib/backup.ts`.
+- **Problem:** Saved bank logins are stored and exported/backed-up in plaintext. This is
+  inherent to the app being a shared family credential vault, and it's RLS-protected at
+  rest + the backup README warns about it — so it's an *accepted* risk, not a bug.
+  Flagging it so it stays a conscious decision.
+- **Fix (only if appetite):** app-level encryption with a server-held key — a large
+  change with real key-management tradeoffs (breaks cross-user shared access, backup
+  portability). Likely leave as-is.
+
+---
+
+### Verified clean in Phase 3 (no action needed)
+- Cron auth: `/api/cron/reminders` and `/api/keepalive` both require `Bearer CRON_SECRET`
+  and **fail closed** when it's unset; the `?backup=1` force path is behind the same gate.
+- Email: every user-controlled value is run through `escapeHtml` before HTML
+  interpolation; recipient addresses always come from trusted sources (`ADMIN_EMAIL`,
+  `auth.users` emails, or the caller's own email) — no arbitrary-recipient or
+  header-injection vector (Resend's JSON API, not raw SMTP).
+- `/api/export/full`: authenticates (401 if not), reads only via the RLS client
+  (own data), and gates the full Banks sheet to the owner.
+- Backups: private bucket, service-role only (no RLS policy → app users can't reach it),
+  pruned to last 8; restore is owner-gated; the id-remap is sound — banks merge into the
+  seeded rows by cert, accounts/children keep their ids so `account_id` refs stay valid,
+  and `bank_id` is remapped through `bankIdMap`.
