@@ -314,3 +314,74 @@ Status key: `[ ]` open · `[x]` fixed · `[~]` won't-fix / accepted risk
 - **Geocoding:** `AddressAutocomplete` hits Nominatim from the browser (client-side) → no
   server-side SSRF surface.
 - FDIC-sync write gating already verified in Phase 1.
+
+---
+
+## Phase 6 — Cross-cutting & platform  *(reviewed 2026-07-22)*
+
+### ⚪ [ ] 6.1 — `.env.local.example` documents only 2 of ~9 required env vars
+- **Where:** `.env.local.example`
+- **Problem:** Lists only `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY`. The app also relies on
+  `SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_EMAIL`, `CRON_SECRET`, `RESEND_API_KEY`, `RESEND_FROM`,
+  `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SENTRY_DSN`, and `DEMO_MODE`. Omitting the *values* is
+  correct (they're secrets), but omitting the *names* is an onboarding/self-host footgun —
+  e.g. an unset `ADMIN_EMAIL` silently means "no owner" (every `isOwnerEmail` is false), and
+  several features degrade quietly.
+- **Fix:** list every var name with a blank/placeholder value and a one-line comment. Docs-only.
+
+### ⚪ [ ] 6.2 — xlsx is pinned to the SheetJS CDN, outside `npm audit` coverage
+- **Where:** `package.json` → `"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/…"`
+- **Problem:** Because it's a CDN tarball, not a registry dep, `npm audit` can't scan it, so
+  automated vuln monitoring is blind to it. **0.20.3 is currently patched** for the known
+  SheetJS CVEs (prototype pollution CVE-2023-30533 → 0.19.3; ReDoS CVE-2024-22363 → 0.20.2).
+  This is the vendor-recommended install method — not a vuln — just note it and watch SheetJS
+  advisories manually.
+
+### ⚪ [ ] 6.3 — Sentry has no `beforeSend` scrubbing (low risk)
+- **Where:** `src/sentry.server.config.ts`, `src/instrumentation-client.ts`
+- **Problem:** No explicit PII scrubbing. Mitigated by `sendDefaultPii` being off (Sentry won't
+  attach IP/cookies/bodies by default) and `tracesSampleRate: 0`. DB error strings thrown as
+  `error.message` (see 1.2) still reach Sentry, but those are low-PII. Fine as-is; flagging for
+  awareness. (Ties to 1.2 — mapping DB errors to friendly text also cleans this up.)
+
+> 6.x note: the missing CSP (1.4) is the other platform-level gap — logged under Phase 1.
+
+---
+
+### Verified clean in Phase 6 (no action needed)
+- `strict: true`; only **one** real `any` in the codebase (`AccountDocuments.tsx:90`, a known
+  pdfjs render-typing cast); **no** `@ts-ignore`/`@ts-expect-error`; the 13 `eslint-disable`
+  lines are all benign `react-hooks/exhaustive-deps`.
+- Full error-boundary coverage: `app/error.tsx`, `app/(app)/error.tsx`, `app/global-error.tsx`,
+  `app/not-found.tsx`.
+- Dependencies on patched versions: next 15.5.19, pdfjs-dist 6.1.200, @sentry/nextjs 10.62.0,
+  xlsx 0.20.3 (past all known SheetJS CVEs).
+- Service worker is a deliberate no-op pass-through (caches **no** authenticated content → no
+  stale/leak risk) and is correctly registered from the root layout.
+- `manifest.ts` has valid PNG icons; `assetlinks.json` carries a real cert fingerprint;
+  `themeColor` set; Next injects the default responsive viewport meta automatically.
+- `IdleTimeout` logs out after 30 min inactivity (server signout + redirect).
+
+---
+
+# Master fix list (roll-up)
+
+All actionable items, most-impactful first. Nothing here is a live exploit or data-loss bug —
+the app is well-built; these are hardening + correctness polish.
+
+**Should fix**
+- [ ] **1.1 🟠** Gate `upsertBank` on `getApprovedUser()` — stop a pending/denied user writing shared bank data. *(1-line change; highest value.)*
+- [ ] **3.1 🟡** Add `holding_companies` + `bank_branches` to the backup `TABLES` (holding-company data is otherwise unrecoverable).
+- [ ] **2.1 🟡** Add a `created_at` tiebreak to `getBalanceAsOf` (same-day balance points can resolve wrong).
+- [ ] **4.1 🟡** Fix the dashboard "Open banks" count↔`?status=open` filter mismatch (add an "open (any)" filter value).
+- [ ] **2.3 🟡** Skip the monthly fee when balance is null (stop fabricating a negative balance).
+
+**Nice to fix**
+- [ ] **2.2 🟡** Seed an opening-balance history row for imported accounts (so they show in Balance-by-date).
+- [ ] **2.4 🟡** Make the fee/interest cron balance update atomic (SQL delta / RPC).
+- [ ] **3.2 🟡** Rate-limit the feedback email.
+- [ ] **1.2 🟡** Map raw DB errors to friendly messages (also cleans up 6.3).
+- [ ] **5.1 🟡** Make the up-next queue swap atomic / positions unique.
+- [ ] **1.3 🟡** Restrict `applyFdicWebsite` fetch to public hosts (SSRF hardening).
+
+**Optional / info** — 1.4 (CSP), 2.5, 2.6, 4.2 (live 375px pass), 5.2, 5.3, 5.4, 5.5, 3.3 (plaintext creds — by design), 6.1 (env docs), 6.2 (xlsx CDN), 6.3 (Sentry scrubbing).
