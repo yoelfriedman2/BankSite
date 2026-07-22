@@ -205,3 +205,52 @@ Status key: `[ ]` open · `[x]` fixed · `[~]` won't-fix / accepted risk
   pruned to last 8; restore is owner-gated; the id-remap is sound — banks merge into the
   seeded rows by cert, accounts/children keep their ids so `account_id` refs stay valid,
   and `bank_id` is remapped through `bankIdMap`.
+
+---
+
+## Phase 4 — Core UI: Banks, Accounts, Dashboard  *(reviewed 2026-07-22)*
+
+### 🟡 [ ] 4.1 — Dashboard "Open banks" count vs. `?status=open` filter mismatch
+- **Where:** `src/app/(app)/page.tsx` (tile ~164–170, count ~112–125) →
+  `src/components/BanksClient.tsx` (`statusFilter` exact match, ~418) +
+  `src/app/(app)/banks/page.tsx` (`VALID_STATUSES` / `initialStatus`, ~19–40)
+- **Problem:** The dashboard "Open banks" tile counts **all three** open variants
+  (`open`, `open_add_account`, `open_add_funds`) — and the Banks page header tally does
+  too (`counts.open + counts.open_add_account + counts.open_add_funds`, BanksClient ~615).
+  But the tile links to `/banks?status=open`, which sets `statusFilter="open"` and filters
+  **exactly** `b.status === "open"`. The `StatusFilterOptions` list also treats each
+  variant separately (no "any open" option). So a user who has any "Open · Add account/funds"
+  banks sees e.g. "Open banks: 12" on the dashboard, clicks it, and lands on a list showing
+  only 9 — and the Banks header right above still says 12. Confusing count/destination
+  mismatch.
+- **Fix:** give the status filter an "open (any)" value the dashboard links to (e.g.
+  `?status=open_any` mapped to a filter that matches all three variants), or drop the
+  `status` param on the tile link. Keep the tile's all-variants count — it's the correct
+  business meaning; it's the *filter* that's too narrow.
+
+### ⚪ [ ] 4.2 — Live 375px mobile pass still owed (verification gap, not a defect)
+- **What:** CLAUDE.md requires every touched UI screen to be checked at 375px. This review
+  did a **static** layout audit only (see below) — a live browser pass at mobile width was
+  not run (Playwright is 403-blocked here; needs the CDP harness + xlsx-swap build).
+- **Statically verified sound:** both big tables are wrapped in `overflow-x-auto` and
+  swapped for card layouts under `md:` (no table overflow on phones); Accounts holder-totals
+  use `grid grid-cols-2 sm:flex`; the Banks search/filters row is `flex-col sm:flex-row`;
+  the Accounts attention+search row is 2 elements with `shrink-0`/`flex-1`; both desktop
+  tables use `table-fixed` + a `<colgroup>` whose widths sum to 100%.
+- **Fix-phase step:** run the `document.body.scrollWidth > documentElement.clientWidth`
+  check at 375px on `/`, `/banks`, `/accounts`, the bank drawer, and both account modals
+  once we're in the fix pass (and after any UI change we make).
+
+---
+
+### Verified clean in Phase 4 (no action needed)
+- `AccountsClient` / `BanksClient` sort comparators are correct and stable (bank-name
+  tiebreak; nulls-last handled explicitly for balance/assets/last-activity/priority).
+- `getAttentionReasons` is the single source of truth for both the dashboard "Need
+  attention" count and the Accounts page — they can't diverge.
+- `badges.tsx` `STATUS_STYLES` / `CONVERSION_STYLES` cover every enum value (no
+  `undefined` className).
+- `BankForm` is keyed `key={editingBankId}` (remounts per bank ⇒ no stale form) and has
+  the `initial?.status` sync `useEffect` (the previously-reported stale-status bug is fixed).
+- `AccountModal` maps all fields (incl. money) from `initial` and only shows for one
+  account at a time; deep-link `/banks?cert=` and `VALID_STATUSES` param parsing are guarded.
