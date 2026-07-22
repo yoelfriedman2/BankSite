@@ -426,15 +426,32 @@ export async function duplicateAccount(
 
   const copy = fieldsFromAccount(source as Account);
   const bankId = (source as Account).bank_id;
-  const { error } = await supabase.from("accounts").insert({
-    ...copy,
-    account_number: null,
-    activity_log: [],
-    interest_last_accrued_on: stampOnRateChange((source as Account).interest_rate, new Date()),
-    user_id: user.id,
-    bank_id: bankId,
-  });
-  if (error) return { error: friendlyDbError(error.message) };
+  const { data: created, error } = await supabase
+    .from("accounts")
+    .insert({
+      ...copy,
+      account_number: null,
+      activity_log: [],
+      interest_last_accrued_on: stampOnRateChange((source as Account).interest_rate, new Date()),
+      user_id: user.id,
+      bank_id: bankId,
+    })
+    .select("id")
+    .single();
+  if (error || !created) return { error: friendlyDbError(error?.message) ?? "Could not duplicate the account." };
+
+  // Seed an opening-balance history point, same as every other account-insert
+  // path (upsertAccount, importBanks) — otherwise a duplicated account is
+  // invisible on Balance-by-date until it's later edited by hand.
+  if (copy.balance != null) {
+    await supabase.from("account_balance_history").insert({
+      user_id: user.id,
+      account_id: created.id,
+      as_of_date: new Date().toISOString().slice(0, 10),
+      balance: copy.balance,
+      reason: "opening balance",
+    });
+  }
 
   const { data: bank } = await supabase
     .from("banks")

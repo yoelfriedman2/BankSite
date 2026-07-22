@@ -193,7 +193,10 @@ Status key: `[ ]` open · `[x]` fixed · `[~]` won't-fix / accepted risk
   missed day within the same month. Daily cron makes this unlikely.
 - **Fix (optional):** loop the accrual until caught up, or accept it and document.
 
-### ⚪ [ ] 2.6 — `duplicateAccount` (real path) skips the opening-balance history row
+### ⚪ [x] 2.6 — `duplicateAccount` (real path) skips the opening-balance history row — **FIXED 2026-07-22**
+> Same fix pattern as 2.2/import: `.select("id").single()` on the insert, then seed an
+> "opening balance" `account_balance_history` row when the duplicated account has a
+> balance. No migration needed. Verified: `tsc --noEmit` + `npm run build` clean.
 - **Where:** `src/app/(app)/accounts/actions.ts` → `duplicateAccount` (~428–435)
 - **Problem:** Inserts a copy carrying the source balance but never seeds an
   `account_balance_history` point, unlike the normal insert path. Minor consistency gap
@@ -374,7 +377,12 @@ Status key: `[ ]` open · `[x]` fixed · `[~]` won't-fix / accepted risk
 - **Fix:** do the swap in one transaction/RPC (like the sweep functions), and/or reindex
   positions to be contiguous on write.
 
-### ⚪ [ ] 5.2 — `recordPrintedCheck` doesn't verify account ownership
+### ⚪ [x] 5.2 — `recordPrintedCheck` doesn't verify account ownership — **FIXED 2026-07-22**
+> Added the same RLS-select ownership check `uploadDocument` already uses. Confirmed the
+> caller (`CheckPrintModal.tsx`) fires this fire-and-forget *after* the browser print action
+> already happened, and only branches on `res?.check` in its `.then()` — so an error here
+> can never block printing, matching the function's own "best-effort" contract. No migration
+> needed. Verified: `tsc --noEmit` + `npm run build` clean.
 - **Where:** `src/app/(app)/checks/actions.ts` → `recordPrintedCheck` (~42–72)
 - **Problem:** Inserts a check-log row with a client-supplied `accountId` without checking
   the account is the caller's. **Not exploitable** — RLS forces `user_id` to the caller and
@@ -389,7 +397,13 @@ Status key: `[ ]` open · `[x]` fixed · `[~]` won't-fix / accepted risk
   entries on the *same date with no note* still render as two identical "Bank: activity"
   badges. Cosmetic only.
 
-### ⚪ [ ] 5.4 — `parseGoogleMapsLink` accepts out-of-range coordinates
+### ⚪ [x] 5.4 — `parseGoogleMapsLink` accepts out-of-range coordinates — **FIXED 2026-07-22**
+> Added an explicit lat ∈ [-90,90] / lng ∈ [-180,180] range check in `coordFromSegment`,
+> after the existing shape regex. An out-of-range "coordinate" now falls into
+> `unmatchedSegments` (same as an unparseable place name) instead of being used as a bogus
+> point. Verified via a standalone script exercising both boundaries and the exact `500,600`
+> example from the finding — all 7 cases (valid, out-of-range, boundary-inclusive,
+> non-numeric) passed. `tsc --noEmit` + `npm run build` clean.
 - **Where:** `src/lib/roadtrip.ts` → `COORD_RE` (~322)
 - **Problem:** Regex allows up to 3 integer digits, so `500,600` parses as a "coordinate."
   A malformed pasted Maps link could inject a bogus point. User's own import → low.
@@ -422,7 +436,14 @@ Status key: `[ ]` open · `[x]` fixed · `[~]` won't-fix / accepted risk
 
 ## Phase 6 — Cross-cutting & platform  *(reviewed 2026-07-22)*
 
-### ⚪ [ ] 6.1 — `.env.local.example` documents only 2 of ~9 required env vars
+### ⚪ [x] 6.1 — `.env.local.example` documents only 2 of ~9 required env vars — **FIXED 2026-07-22**
+> Rewrote the file to list all 9 configurable vars (`NEXT_PUBLIC_SUPABASE_URL/ANON_KEY`,
+> `SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_EMAIL`, `CRON_SECRET`, `RESEND_API_KEY/FROM`,
+> `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SENTRY_DSN`, `DEMO_MODE`), each with a one-line comment
+> on what it does and whether it's required. Cross-checked exhaustively via
+> `grep -rhoE "process\.env\.[A-Z_]+"` across `src` to make sure nothing was missed (also
+> confirmed `NODE_ENV`/`VERCEL_ENV`/`NEXT_PUBLIC_VERCEL_ENV`/`NEXT_RUNTIME` are
+> platform-auto-set, not something to add here). Docs-only, no code change.
 - **Where:** `.env.local.example`
 - **Problem:** Lists only `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY`. The app also relies on
   `SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_EMAIL`, `CRON_SECRET`, `RESEND_API_KEY`, `RESEND_FROM`,
@@ -515,4 +536,27 @@ in this sandbox to invoke them against — mitigated by the fallback-on-any-erro
 in the RPC degrades to "acts exactly like the pre-fix code," never a broken cron run). Not yet
 committed — held for explicit review/push confirmation, same as last round.
 
-**Optional / info** — 1.4 (CSP), 2.5, 2.6, 4.2 (live 375px pass), 5.2, 5.3, 5.4, 5.5, 3.3 (plaintext creds — by design), 6.1 (env docs), 6.2 (xlsx CDN), 6.3 (Sentry scrubbing).
+**Optional batch — ✅ 4 done, 2026-07-22** (the cheap/no-migration/no-risk subset)
+- [x] **6.1 ⚪** Document all 9 env vars in `.env.local.example`.
+- [x] **2.6 ⚪** Seed a balance-history row in `duplicateAccount`.
+- [x] **5.4 ⚪** Range-check lat/lng in `parseGoogleMapsLink`.
+- [x] **5.2 ⚪** Ownership-check `recordPrintedCheck`'s `accountId`.
+
+Verified via `tsc --noEmit` + `npm run build` (clean) plus a standalone script for 5.4's
+range logic (7/7 cases pass, incl. the exact `500,600` example from the finding). No
+migration needed for any of these 4. Not yet committed — held for explicit review/push
+confirmation, same pattern as the two prior batches.
+
+**Deliberately left alone** — 1.4 (CSP: real effort, no live XSS surface to justify it),
+2.5 (multi-month cron gap: daily cron makes this practically unreachable), 3.3 (plaintext
+creds: by design, real fix needs a bigger key-management architecture), 5.3 (calendar
+duplicate badges: cosmetic, rare), 5.5 (NIC parser fragility: already defensively coded,
+revisit only if a real file breaks it), 6.2 (xlsx via CDN: not fixable without abandoning
+the vendor's own recommended install method — monitoring note only), 6.3 (Sentry scrubbing:
+mostly already addressed as a side effect of 1.2's friendly-error mapping; what's left —
+thrown exceptions in `documents.ts` — is low enough value to fold into a future pass rather
+than do standalone).
+
+**Still open, not code** — 4.2, the live 375px mobile pass. Static review found nothing;
+a real browser check at mobile width was never run (Playwright blocked in this sandbox).
+Offered as a separate task since it's verification time, not a diff.

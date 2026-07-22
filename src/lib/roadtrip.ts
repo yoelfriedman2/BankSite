@@ -326,6 +326,10 @@ function coordFromSegment(raw: string): LatLng | null {
   if (!COORD_RE.test(s)) return null;
   const [lat, lng] = s.split(",").map(Number);
   if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
+  // The regex only checks shape (up to 3 integer digits), not real-world
+  // range — reject anything outside valid lat/lng so a malformed pasted link
+  // can't inject a bogus point into the route/map.
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
   return { lat, lng };
 }
 

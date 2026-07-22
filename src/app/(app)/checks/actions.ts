@@ -55,6 +55,14 @@ export async function recordPrintedCheck(input: {
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
+  // Ownership check: RLS returns a row only if this account is the caller's
+  // own — same pattern as uploadDocument's own check. Not exploitable today
+  // (RLS already scopes the insert's own user_id to the caller), but a check
+  // logged against someone else's account_id would otherwise silently write
+  // a row that renders as "—" in the caller's own log.
+  const { data: owned } = await supabase.from("accounts").select("id").eq("id", input.accountId).maybeSingle();
+  if (!owned) return { error: "Account not found." };
+
   const { data, error } = await supabase
     .from("printed_checks")
     .insert({
