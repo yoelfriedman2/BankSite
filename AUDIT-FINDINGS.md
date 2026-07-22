@@ -254,3 +254,63 @@ Status key: `[ ]` open · `[x]` fixed · `[~]` won't-fix / accepted risk
   the `initial?.status` sync `useEffect` (the previously-reported stale-status bug is fixed).
 - `AccountModal` maps all fields (incl. money) from `initial` and only shows for one
   account at a time; deep-link `/banks?cert=` and `VALID_STATUSES` param parsing are guarded.
+
+---
+
+## Phase 5 — Feature tools  *(reviewed 2026-07-22)*
+
+### 🟡 [ ] 5.1 — Up-next queue positions aren't unique and the swap isn't atomic
+- **Where:** `src/app/(app)/up-next/actions.ts` → `addToQueue` (~131–140),
+  `moveInQueue` (~186–201); also `autoQueueIfWantToOpen` in `banks/actions.ts`
+- **Problem:** Queue positions are assigned as `max(existing)+1` via a read-then-write, so
+  two positions can collide if adds race (or an auto-queue flip races a manual add), and
+  `moveInQueue` swaps two banks' positions with **two independent, non-atomic** UPDATEs — if
+  one succeeds and the other fails, the positions corrupt/collide and the queue order breaks.
+  `computeQueue` then sorts by a non-unique key, so a collision yields an arbitrary order.
+- **Impact:** Low — sequential single-user use rarely collides; mainly a robustness gap.
+- **Fix:** do the swap in one transaction/RPC (like the sweep functions), and/or reindex
+  positions to be contiguous on write.
+
+### ⚪ [ ] 5.2 — `recordPrintedCheck` doesn't verify account ownership
+- **Where:** `src/app/(app)/checks/actions.ts` → `recordPrintedCheck` (~42–72)
+- **Problem:** Inserts a check-log row with a client-supplied `accountId` without checking
+  the account is the caller's. **Not exploitable** — RLS forces `user_id` to the caller and
+  the display join hides other users' account/bank data (a foreign id just renders "—" in the
+  caller's own log). Purely self-inflicted data quality.
+- **Fix (optional):** mirror `uploadDocument`'s pattern — RLS-select the account first, reject
+  if not owned.
+
+### ⚪ [ ] 5.3 — Calendar can show duplicate same-day activity badges
+- **Where:** `src/app/(app)/calendar/page.tsx` (~96–108)
+- **Problem:** The fixed last-activity/activity-log dedup is in place, but two activity-log
+  entries on the *same date with no note* still render as two identical "Bank: activity"
+  badges. Cosmetic only.
+
+### ⚪ [ ] 5.4 — `parseGoogleMapsLink` accepts out-of-range coordinates
+- **Where:** `src/lib/roadtrip.ts` → `COORD_RE` (~322)
+- **Problem:** Regex allows up to 3 integer digits, so `500,600` parses as a "coordinate."
+  A malformed pasted Maps link could inject a bogus point. User's own import → low.
+- **Fix (optional):** range-check lat ∈ [-90,90], lng ∈ [-180,180].
+
+### ⚪ [ ] 5.5 — NIC parser column-detection remains best-effort (known)
+- **Where:** `src/lib/nicParse.ts` (column detection throughout)
+- **Problem:** Detection is heuristic and could mis-map columns if NIC changes file formats.
+  Already flagged in CLAUDE.md/TODO; surfaced safely via clear errors + the "what we matched"
+  diagnostic rather than silent wrong data. No change needed unless a real file breaks it.
+
+---
+
+### Verified clean in Phase 5 (no action needed)
+- **NIC parser:** delimiter sniffing (caret vs. comma), the 5-code `2170` asset-column
+  priority, relationship open-ended/most-recent selection, and exclude-token RSSD-id
+  detection are all correct and defensively coded.
+- **Road trip:** haversine, nearest-neighbor + 2-opt, cheapest-insertion, the joint
+  branch optimizer (coordinate descent), multi-day splitting (≥1 stop/day, no inter-day
+  drive double-counted), and Maps-link chunking are all sound (matches CLAUDE.md's
+  standalone tests).
+- **Checks:** record/get/delete are RLS-scoped; logging is best-effort and never blocks printing.
+- **Address change:** per-(bank,holder) items, graceful pre-0024/0028 degradation, dangling-
+  campaign cleanup on item-insert failure, RLS-scoped mutations.
+- **Geocoding:** `AddressAutocomplete` hits Nominatim from the browser (client-side) → no
+  server-side SSRF surface.
+- FDIC-sync write gating already verified in Phase 1.
