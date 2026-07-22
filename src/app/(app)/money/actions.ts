@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { DEMO_MODE, getDemoAccounts, getDemoBanks } from "@/lib/demo";
 import { friendlyDbError } from "@/lib/friendlyError";
+import { formatCurrency } from "@/lib/format";
 
 export type OutstandingSweep = {
   id: string;
@@ -151,11 +152,34 @@ export async function createSweepBatch(
     })),
   });
   if (error) return { error: friendlyDbError(error.message) };
-  if (!data || (data as unknown[]).length === 0) {
+  const rows = (data ?? []) as { account_id: string; amount: number }[];
+  if (rows.length === 0) {
     return { error: "Those accounts have no balance to move." };
   }
 
+  // sweep_accounts silently caps each account's amount to its available
+  // balance and skips accounts that don't exist, aren't owned, or have
+  // nothing to move — so a nonempty result here doesn't guarantee the full
+  // requested batch went through exactly as entered. The UI states a total/
+  // account-count as confirmed; check the actual result against what was
+  // requested so a shortfall is reported honestly instead of a blanket
+  // success, since real money already moved for the accounts that DID apply
+  // and can't be silently "corrected" after the fact.
+  const appliedByAccount = new Map(rows.map((row) => [row.account_id, row.amount]));
+  let shortfall = false;
+  for (const item of valid) {
+    const applied = appliedByAccount.get(item.accountId) ?? 0;
+    if (applied < item.amount - 0.005) shortfall = true;
+  }
+
   revalidate();
+  if (shortfall) {
+    const totalApplied = rows.reduce((s, row) => s + row.amount, 0);
+    const totalRequested = valid.reduce((s, item) => s + item.amount, 0);
+    return {
+      error: `Only ${formatCurrency(totalApplied)} of the requested ${formatCurrency(totalRequested)} was moved (across ${rows.length} of ${valid.length} accounts) — one or more balances were lower than expected. Check Money moved for what actually went through.`,
+    };
+  }
   return {};
 }
 

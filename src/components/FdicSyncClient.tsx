@@ -115,7 +115,20 @@ export function FdicSyncClient({ canApply }: { canApply: boolean }) {
     for (const a of todo) setRowStatus(`assets:${a.cert}`, "applying");
     startTransition(async () => {
       const res = await applyFdicAssets(todo.map((a) => ({ cert: a.cert, assets: a.proposed })));
-      for (const a of todo) setRowStatus(`assets:${a.cert}`, res.error ? "error" : "done", res.error);
+      // Mark each row by whether ITS cert actually succeeded, not by the
+      // batch's overall error — a partial failure (some certs applied, some
+      // didn't) has no top-level error at all, so checking only res.error
+      // here previously marked every row "done" even when some silently
+      // failed to apply.
+      const appliedSet = new Set(res.appliedCerts ?? []);
+      for (const a of todo) {
+        const ok = !res.error && appliedSet.has(a.cert);
+        setRowStatus(
+          `assets:${a.cert}`,
+          ok ? "done" : "error",
+          res.error ?? (ok ? undefined : "Failed to apply."),
+        );
+      }
     });
   }
 

@@ -27,13 +27,18 @@ export async function logAudit(entry: {
 }): Promise<void> {
   try {
     const admin = createAdminClient();
-    await admin.from("audit_log").insert({
+    // A Supabase insert failure resolves to { error }, it doesn't throw — so
+    // the catch block below alone never sees it. Without checking it too, a
+    // database-level failure (RLS, a constraint, connectivity) silently left
+    // no trace anywhere, not even a log line, that an audit entry was lost.
+    const { error } = await admin.from("audit_log").insert({
       actor_id: entry.actorId,
       actor_name: entry.actorName,
       action: entry.action,
       summary: entry.summary,
       cert: entry.cert ?? null,
     });
+    if (error) console.error("[audit] insert failed:", error.message);
   } catch (err) {
     console.error("[audit] failed to record entry:", err);
   }

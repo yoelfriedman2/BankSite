@@ -11,6 +11,7 @@ import {
 } from "@/app/(app)/banks/actions";
 import { restoreAccount, permanentlyDeleteAccount } from "@/app/(app)/accounts/actions";
 import { ACCOUNT_TYPE_LABELS, type Account } from "@/lib/types";
+import { useToast } from "@/components/Toast";
 
 type Props = {
   banks: TrashedBank[];
@@ -19,6 +20,7 @@ type Props = {
 
 export function TrashClient({ banks, accounts }: Props) {
   const router = useRouter();
+  const toast = useToast();
   const [, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -41,7 +43,8 @@ export function TrashClient({ banks, accounts }: Props) {
       return;
     setBusyId(id);
     startTransition(async () => {
-      await permanentlyDeleteBank(id);
+      const res = await permanentlyDeleteBank(id);
+      if (res.error) toast.error(res.error);
       setBusyId(null);
       router.refresh();
     });
@@ -64,7 +67,8 @@ export function TrashClient({ banks, accounts }: Props) {
       return;
     setBusyId(id);
     startTransition(async () => {
-      await permanentlyDeleteAccount(id);
+      const res = await permanentlyDeleteAccount(id);
+      if (res.error) toast.error(res.error);
       setBusyId(null);
       router.refresh();
     });

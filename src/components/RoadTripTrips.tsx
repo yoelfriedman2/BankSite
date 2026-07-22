@@ -136,7 +136,19 @@ export function RoadTripTrips({
   function handleParseImport() {
     setImportError(null);
     setImportResult(null);
-    const { points, unmatchedSegments } = parseGoogleMapsLink(importUrl.trim());
+    // parseGoogleMapsLink shouldn't throw for malformed input (it reports
+    // unparseable pieces via unmatchedSegments instead), but this is a
+    // click handler acting on pasted, possibly hand-edited text — a defensive
+    // try/catch here means a parser edge case shows the normal "couldn't
+    // read that" message instead of silently doing nothing.
+    let points: { lat: number; lng: number }[];
+    let unmatchedSegments: string[];
+    try {
+      ({ points, unmatchedSegments } = parseGoogleMapsLink(importUrl.trim()));
+    } catch {
+      setImportError("Couldn't read that as a Google Maps link.");
+      return;
+    }
     if (points.length === 0 && unmatchedSegments.length === 0) {
       setImportError("Couldn't read that as a Google Maps link.");
       return;

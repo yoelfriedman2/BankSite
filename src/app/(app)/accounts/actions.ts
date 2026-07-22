@@ -218,9 +218,18 @@ export async function upsertAccount(
     // "balance as of date" history stays accurate.
     const { data: prev } = await supabase
       .from("accounts")
-      .select("balance, monthly_fee, monthly_fee_day, interest_rate")
+      .select("balance, monthly_fee, monthly_fee_day, interest_rate, bank_id")
       .eq("id", values.id)
       .maybeSingle();
+    if (!prev) return { error: "Account not found." };
+    // values.bank_id was only checked above for OWNERSHIP ("is this my
+    // bank"), never that it's actually this account's real parent. Server
+    // Actions are directly callable — a stale or crafted request with a
+    // mismatched (id, bank_id) pair could otherwise edit this account while
+    // later auto-promoting an unrelated owned bank's status to "open" below.
+    if (prev.bank_id !== values.bank_id) {
+      return { error: "That account doesn't belong to this bank." };
+    }
     const oldBalance = prev?.balance != null ? Number(prev.balance) : null;
 
     // Only touch monthly_fee_last_charged_on when the fee amount/day actually
@@ -373,8 +382,20 @@ export async function permanentlyDeleteAccount(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
-  const { error } = await supabase.from("accounts").delete().eq("id", id);
+  // Only ever hard-delete an account that's already in Trash — same guard as
+  // permanentlyDeleteBank, for the same reason: this Server Action is
+  // directly callable, not just reachable through the Trash page's confirm
+  // dialog. .select() distinguishes "deleted" from "nothing matched".
+  const { data, error } = await supabase
+    .from("accounts")
+    .delete()
+    .eq("id", id)
+    .not("deleted_at", "is", null)
+    .select("id");
   if (error) return { error: friendlyDbError(error.message) };
+  if (!data || data.length === 0) {
+    return { error: "That account isn't in Trash (or was already removed)." };
+  }
 
   revalidate();
   return {};

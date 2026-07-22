@@ -286,23 +286,31 @@ export async function applyFdicWebsite(
 /** Accept all asset updates at once (fresh quarterly figures; low risk). */
 export async function applyFdicAssets(
   pairs: { cert: number; assets: number }[],
-): Promise<{ applied?: number; error?: string }> {
+): Promise<{ applied?: number; appliedCerts?: number[]; error?: string }> {
   const user = await currentUser();
   if (!(await canApplyFdicChanges(user))) return { error: "Not authorized." };
   const admin = createAdminClient();
 
-  let applied = 0;
+  // Report exactly which certs succeeded, not just a count — the bulk
+  // "Accept all" caller previously had no way to tell "some of these failed"
+  // from "all of these succeeded" (a plain count with no top-level error
+  // looks identical to full success), so a partial batch failure silently
+  // got marked as fully applied on every row in the UI.
+  const appliedCerts: number[] = [];
   // Parallel in small batches — one update per cert.
   for (let i = 0; i < pairs.length; i += 15) {
     const batch = pairs.slice(i, i + 15);
     const results = await Promise.all(
-      batch.map((p) =>
-        admin.from("banks").update({ assets: p.assets }).eq("cert", p.cert).is("deleted_at", null),
-      ),
+      batch.map(async (p) => ({
+        cert: p.cert,
+        error: (
+          await admin.from("banks").update({ assets: p.assets }).eq("cert", p.cert).is("deleted_at", null)
+        ).error,
+      })),
     );
-    applied += results.filter((r) => !r.error).length;
+    for (const r of results) if (!r.error) appliedCerts.push(r.cert);
   }
-  return { applied };
+  return { applied: appliedCerts.length, appliedCerts };
 }
 
 /** Accept a city/state correction for every user's copy. */

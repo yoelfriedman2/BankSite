@@ -49,12 +49,12 @@ decision or bigger effort before it can be safely fixed
 - [ ] DATA-13 — Dormancy rules disagree across pages
 - [ ] DATA-14 — Address campaign/queue/check-number races
 - [ ] DATA-15 — Public road-trip plans can expose private locations
-- [ ] DATA-16 — Audit log doesn't check insert errors
+- [x] DATA-16 — Audit log doesn't check insert errors — fixed: `logAudit` now checks the insert's own `{ error }` result (not just thrown exceptions) and logs it, so a failed audit write leaves a trace instead of vanishing silently.
 - [ ] DATA-17 — Document metadata/storage can desync
 - [ ] DATA-18 — Unpaginated reads silently truncate data
 - [ ] DATA-19 — Missing affected-row/value validation
 - [ ] DATA-20 — Activity log read-modify-write loses concurrent entries
-- [ ] DATA-21 — Permanent delete bypasses Trash state requirement
+- [x] DATA-21 — Permanent delete bypasses Trash state requirement — fixed: `permanentlyDeleteBank`/`permanentlyDeleteAccount` now require the row to already be soft-deleted (`deleted_at is not null`) and check the actual affected row before reporting success, instead of hard-deleting an active bank/account on a direct/stale request.
 - [ ] DATA-22 — Comment/read-marker edge cases
 
 ## Part 3 — UX / Accessibility (22)
@@ -108,9 +108,9 @@ decision or bigger effort before it can be safely fixed
 - [ ] INT-04 — Active accounts can exist under a soft-deleted bank
 - [ ] INT-05 — Money-owed sweeps conflict with trash/permanent delete
 - [ ] INT-06 — Duplicate account copies live balance/credentials as template
-- [ ] INT-07 — Money-move batch can silently move less than confirmed
+- [x] INT-07 — Money-move batch can silently move less than confirmed — fixed: `createSweepBatch` now compares what `sweep_accounts` actually applied per account against what was requested, and reports an honest partial-success message (with the real total moved) instead of a blanket success when a balance was lower than expected.
 - [ ] INT-08 — Trashed bank's reminders stay active/emailable
-- [ ] INT-09 — Account edit validates one bank ID, mutates another's account
+- [x] INT-09 — Account edit validates one bank ID, mutates another's account — fixed: `upsertAccount` now verifies the account's actual `bank_id` matches the supplied one before proceeding, instead of only checking that the supplied bank is owned by the caller (which let a stale/crafted request edit one account while auto-promoting a different, unrelated bank's status).
 - [ ] INT-10 — Missing-profile / owner-bypass false-success states
 - [ ] INT-11 — Notification-default migration can't tell opt-out from untouched
 - [ ] INT-12 — Demo mode shares mutable state across visitors
@@ -120,8 +120,8 @@ decision or bigger effort before it can be safely fixed
 - [ ] GAP-01 — Deep links discarded during OAuth sign-in
 - [ ] GAP-02 — Exact addresses sent to public Nominatim against its own policy
 - [ ] GAP-03 — Road-trip candidate/budget/map models disagree
-- [ ] GAP-04 — Malformed percent-escape crashes Maps-link import (confirmed reproducible)
-- [ ] GAP-05 — FDIC "Accept all" reports failures as success (confirmed)
+- [x] GAP-04 — Malformed percent-escape crashes Maps-link import (confirmed reproducible) — fixed: `parseGoogleMapsLink` now catches a `decodeURIComponent` failure per-segment and reports it as unmatched instead of throwing out of the import click handler (plus a defensive try/catch at the call site). Verified with the audit's exact reproduction case.
+- [x] GAP-05 — FDIC "Accept all" reports failures as success (confirmed) — fixed: `applyFdicAssets` now returns exactly which certs succeeded, and the bulk-accept UI marks each row by whether its own cert actually applied instead of treating "no top-level error" as "every row succeeded."
 - [ ] GAP-06 — Stale holding-company selection survives a new sync run
 - [ ] GAP-07 — Changelog unread state shared across users on one browser
 
@@ -131,10 +131,10 @@ decision or bigger effort before it can be safely fixed
 
 | Status | Count |
 |---|---:|
-| Fixed (code-complete) | 14 |
+| Fixed (code-complete) | 20 |
 | Already fixed by an earlier (pre-audit) round | 6 |
 | Open, needs a decision before fixing | 11 |
-| Still open | 69 |
+| Still open | 63 |
 
 **Round 1 (security, Part 1)**: SEC-01, SEC-07, SEC-08, SEC-12, SEC-14, SEC-18, SEC-21 (7 IDs — SEC-14
 moved from "already fixed" to "fully fixed" once this round closed its remaining half).
@@ -142,6 +142,13 @@ moved from "already fixed" to "fully fixed" once this round closed its remaining
 DATA-12, REL-01 — the items my own verification report explicitly recommended tackling right after
 SEC-01, since INT-01/INT-02 directly compound the access-control fix and DATA-03/DATA-07/REL-01 are
 real money/data-safety/notification gaps, not judgment calls.
+**Round 3 (concrete no-decision bugs across Data Integrity/Integration/Final Gaps)**: DATA-16,
+DATA-21, INT-07, INT-09, GAP-04, GAP-05 — picked for having one clear, objectively correct fix each
+(no product/UX tradeoff to weigh), spanning false-success reporting (GAP-05, INT-07 — same class of
+bug as REL-01), a directly-callable-Server-Action gap (DATA-21, INT-09 — same class as SEC-01/INT-01),
+a swallowed-error gap (DATA-16 — same class as DATA-07), and a confirmed-reproducible crash (GAP-04).
+Deliberately left broader, more systemic findings (DATA-18/19, INT-04/05/06, most of Part 3) for a
+dedicated future round rather than a partial fix — see below.
 
 *(This file is updated as work proceeds — counts above will move.)*
 
@@ -156,8 +163,12 @@ real money/data-safety/notification gaps, not judgment calls.
 - 11 more Part 1 (Security) findings are open but each needs a decision from the user before fixing —
   see the `[!]` items above (SEC-03, 05, 06, 09, 10, 11, 15, 16, 17, 20, 22 — several of these are
   genuinely low-priority or accepted-risk-by-design, not all equally urgent).
-- Parts 2–6 (Data Integrity, UX/Accessibility, Performance/Reliability, Integration/Edge Cases, Final
-  Gaps) still have 69 open findings not yet started — the two rounds so far deliberately targeted the
-  highest-confidence, no-decision-needed items first (per my own verification report's explicit
-  recommendation). The next most valuable batch is likely Part 3 (UX/Accessibility, 22 findings) or
-  the rest of Part 2 (Data Integrity) — worth discussing scope/priority for round 3.
+- 63 findings remain open. Most of what's left is broader/systemic rather than a single clean fix:
+  DATA-18/DATA-19 (pagination + validation patterns spanning "most Server Actions" — needs a scoping
+  decision, not just code), INT-04/INT-05/INT-06 (soft-delete-state consistency across many call
+  sites — real design questions about desired restore/cascade behavior, not pure bugs), and most of
+  Part 3 (UX/Accessibility, 22 findings — several need a design decision, e.g. which new colors fix
+  the contrast failures, but some like UX-04/UX-05/UX-10 look like plain bugs worth a closer look).
+  Part 4 (Performance/Reliability/Ops, 15 findings) is mostly bigger-effort infrastructure work
+  (CI, monitoring, query tuning) rather than quick fixes. Worth a dedicated round to scope out the
+  next no-decision-needed batch from these once this round is reviewed.

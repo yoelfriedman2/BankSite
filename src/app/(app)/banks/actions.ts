@@ -475,8 +475,22 @@ export async function permanentlyDeleteBank(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
-  const { error } = await supabase.from("banks").delete().eq("id", id);
+  // Only ever hard-delete a bank that's already in Trash. This Server Action
+  // is directly callable, not just reachable through the Trash page's
+  // confirm dialog — without this guard, a stale/adversarial request could
+  // permanently erase an active bank with no soft-delete step at all.
+  // .select() lets us tell "deleted" from "nothing matched" (wrong id,
+  // already gone, or not actually trashed) instead of reporting success either way.
+  const { data, error } = await supabase
+    .from("banks")
+    .delete()
+    .eq("id", id)
+    .not("deleted_at", "is", null)
+    .select("id");
   if (error) return { error: friendlyDbError(error.message) };
+  if (!data || data.length === 0) {
+    return { error: "That bank isn't in Trash (or was already removed)." };
+  }
 
   revalidate();
   return {};

@@ -176,6 +176,71 @@ the code:
 
 ## Current state (update this — most recent first)
 
+**2026-07-22 (external audit — round 3: concrete no-decision bugs across Data Integrity/Integration/
+Final Gaps)** — Continuing the same tracked-checklist pattern, explicitly scoped to items with one
+clear, objectively correct fix — no product/UX tradeoff to weigh, per the user's "continue with the
+next batch that does not need decision making" instruction. Picked 6 items spanning three already-
+familiar bug classes from the earlier rounds:
+
+- **GAP-05 — FDIC "Accept all" reported failed asset updates as successfully applied.**
+  `applyFdicAssets` counted only successful per-cert updates and returned `{ applied: n }` with no
+  per-cert detail — if 17 of 18 updates succeeded, the caller got a plain count and no top-level
+  error, and the bulk-accept UI (unlike the single-row button, which already checked `!res.applied`)
+  marked every row "done" regardless. Now returns `appliedCerts: number[]`, and the UI marks each row
+  by whether its own cert is in that list.
+- **INT-07 — a money-move batch could silently move less than the confirmed amount.**
+  `sweep_accounts` (by design) caps each account's swept amount to its actual available balance and
+  skips accounts with nothing to move — but `createSweepBatch` treated any nonempty result as full
+  success, so "Moving $200 across 3 accounts" could actually move less with no indication. Now
+  compares what was actually applied per account against what was requested and reports an honest
+  partial-success message (real total moved, real account count) instead of blanket success.
+- **DATA-21 — permanently deleting a bank/account didn't require it to be in Trash first.**
+  `permanentlyDeleteBank`/`permanentlyDeleteAccount` are directly-callable Server Actions (the SEC-01/
+  INT-01 lesson again) that deleted by ID with no `deleted_at is not null` guard — the Trash
+  workflow's "soft-delete first" step was only a UI convention, not enforced server-side. Now requires
+  the row to already be soft-deleted, and checks the actual deleted row (via `.select()`) instead of
+  reporting success on a no-op. `TrashClient.tsx` also now surfaces a real error via toast instead of
+  ignoring the action's result entirely.
+- **INT-09 — editing an account only checked that the supplied bank was owned, never that it was
+  actually that account's parent.** `upsertAccount` verified `bank_id` ownership but never compared it
+  against the account's real `bank_id` before updating — and the account edit's own auto-promote-to-
+  "open" logic runs against the *supplied* bank afterward. A stale or crafted request with a
+  mismatched (account id, bank id) pair could edit one account while promoting an unrelated bank's
+  status. Now fetches the account's real `bank_id` alongside its other previous values (already being
+  read for the balance-history comparison) and rejects a mismatch before proceeding.
+- **DATA-16 — a failed audit-log write left no trace anywhere.** `logAudit`'s `try/catch` only ever
+  catches a *thrown* exception, but a Supabase insert failure resolves to `{ error }` instead of
+  throwing — so a real DB-level failure (RLS, a constraint, connectivity) silently vanished with
+  nothing in the logs. Now checks and logs that `error` too. Still best-effort by design (never blocks
+  the action that triggered it) — this only adds visibility when it silently fails.
+- **GAP-04 — a malformed pasted Google Maps link could crash the import click handler.**
+  `parseGoogleMapsLink`'s path-style link parsing called `decodeURIComponent` per segment with no
+  guard; a malformed percent-escape (confirmed reproducible: `decodeURIComponent('%E0%A4%A')` throws
+  `URIError`) escaped the function's own error handling (which only wrapped the initial `new URL()`
+  call) and the click handler's own missing try/catch. Now catches the decode failure per-segment and
+  reports it as an unmatched segment — the same "can't resolve this piece" path already used for
+  place-name segments — instead of throwing. Added a defensive try/catch at the `RoadTripTrips.tsx`
+  call site too, as a safety net.
+
+No migration this round — every fix is pure application code, effective immediately on deploy.
+Skipped changelog/Guide — all bug fixes, no new user-visible feature, same policy as rounds 1–2.
+`EXTERNAL-AUDIT-TRACKER.md` updated: 20 of 100 findings now fixed across three rounds. Deliberately
+left broader/systemic findings (DATA-18/19's project-wide validation/pagination patterns, INT-04/05/06's
+soft-delete-state consistency across many call sites, most of Part 3's UX/Accessibility items) for a
+dedicated future round rather than rushing a partial fix — these need more scoping than "one clear fix."
+
+**Verification**: `tsc --noEmit` and `npm run build` both clean. GAP-04 verified with a standalone
+script reproducing the audit's exact `decodeURIComponent('%E0%A4%A')` case — confirmed no throw after
+the fix, confirmed normal well-formed links still decode correctly. INT-07/GAP-05/DATA-21/INT-09's
+logic is real-mode-only (their whole point is a check that only matters against real Supabase/RLS —
+DEMO_MODE branches around every one of them unchanged, same architecture as prior rounds' real-auth-
+dependent fixes) — verified by careful reading against the original code, confirming each change is
+additive (a new guard/check) with no alteration to the existing success path when nothing's wrong.
+Full DEMO_MODE dev-server smoke test across every touched page (`/`, `/trash`, `/fdic-sync`,
+`/road-trip`, `/money`, `/accounts`, `/banks`) — all 200, zero server errors; confirmed the Trash page
+still renders real demo trashed-item content (restore/delete buttons present) with the new toast
+wiring intact.
+
 **2026-07-22 (external audit — round 2: access-control follow-through + data-safety fixes)** — Direct
 follow-up to round 1 (below): with SEC-01's migration confirmed run by the user, this round tackled
 the next batch my own verification report explicitly recommended — the items that directly compound

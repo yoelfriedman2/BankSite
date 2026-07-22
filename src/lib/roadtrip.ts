@@ -373,7 +373,18 @@ export function parseGoogleMapsLink(rawUrl: string): ParsedMapsLink {
   if (dirMatch) {
     for (const seg of dirMatch[1].split("/").filter(Boolean)) {
       if (seg.startsWith("@")) continue; // map view center, not a stop
-      addSegment(decodeURIComponent(seg.replace(/\+/g, " ")));
+      // decodeURIComponent throws URIError on a malformed percent-escape
+      // (truncated/edited-by-hand/copied-through-another-app links can have
+      // one) — treat that the same as an unresolvable segment instead of
+      // letting it escape as an uncaught exception from a normal import.
+      let decoded: string | null;
+      try {
+        decoded = decodeURIComponent(seg.replace(/\+/g, " "));
+      } catch {
+        decoded = null;
+        unmatchedSegments.push(seg);
+      }
+      if (decoded != null) addSegment(decoded);
     }
   }
 
