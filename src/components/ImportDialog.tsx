@@ -31,7 +31,12 @@ function parseDate(v: unknown): string | null {
 function parseStatus(v: unknown): ImportRow["status"] {
   const t = toText(v)?.toLowerCase();
   if (!t) return null;
-  if (t.includes("can")) return "cannot_open";
+  // Match the actual negative phrasing ("cannot"/"can't"/"unable"), not the
+  // bare substring "can" — a plain "Can open" (a positive value) contains
+  // "can" too and was wrongly classified as cannot_open before this check
+  // ran ahead of the "open" check below.
+  if (t.includes("cannot") || t.includes("can't") || t.includes("cant ") || t.includes("unable"))
+    return "cannot_open";
   if (t.includes("appl")) return "applied";
   if (t.includes("want")) return "want_to_open";
   if (t.includes("open")) return "open";

@@ -601,16 +601,23 @@ export async function importBanks(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
+  // Includes soft-deleted (trashed) banks too — a row matching a trashed
+  // bank by cert/name needs to restore that row, not insert a brand-new one
+  // with the same (user_id, cert), which the unique constraint rejects.
   const { data: existingData } = await supabase
     .from("banks")
-    .select("id, cert, name, status")
-    .is("deleted_at", null);
-  type ExistingEntry = { id: string; cert: number | null; status: string };
+    .select("id, cert, name, status, deleted_at");
+  type ExistingEntry = { id: string; cert: number | null; status: string; deletedAt: string | null };
   const byCert = new Map<number, ExistingEntry>();
   const byName = new Map<string, ExistingEntry>();
   const byId = new Map<string, ExistingEntry>();
   for (const b of existingData ?? []) {
-    const entry: ExistingEntry = { id: b.id as string, cert: b.cert as number | null, status: b.status as string };
+    const entry: ExistingEntry = {
+      id: b.id as string,
+      cert: b.cert as number | null,
+      status: b.status as string,
+      deletedAt: b.deleted_at as string | null,
+    };
     if (b.cert != null) byCert.set(b.cert as number, entry);
     byName.set((b.name as string).toLowerCase(), entry);
     byId.set(b.id as string, entry);
@@ -656,6 +663,10 @@ export async function importBanks(
       bankId = found.id;
       bankCert = found.cert ?? row.cert;
       const upd: Record<string, unknown> = {};
+      // A row matching a trashed bank restores it, rather than falling
+      // through to the insert branch below and hitting the unique
+      // (user_id, cert) constraint the trashed row still occupies.
+      if (found.deletedAt) upd.deleted_at = null;
       // Don't overwrite the matched bank's name — it's the canonical identifier.
       // Only update descriptive/informational fields.
       if (row.cert != null && found.cert == null) upd.cert = row.cert; // fill in missing cert
@@ -716,7 +727,7 @@ export async function importBanks(
         return { error: friendlyDbError(error?.message) ?? "Could not add a bank." };
       }
       bankId = data.id as string;
-      const entry: ExistingEntry = { id: bankId, cert: row.cert, status: "open" };
+      const entry: ExistingEntry = { id: bankId, cert: row.cert, status: "open", deletedAt: null };
       if (row.cert != null) byCert.set(row.cert, entry);
       byName.set(row.name.toLowerCase(), entry);
       if (row.matched_bank_id === "CREATE_NEW") {

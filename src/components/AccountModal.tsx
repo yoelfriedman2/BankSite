@@ -15,6 +15,7 @@ import { useUnsavedChanges, confirmDiscard } from "@/components/useUnsavedChange
 import { Box, BoxHeader } from "@/components/DetailBox";
 import { getActivityLevel, daysUntil } from "@/lib/dormancy";
 import { ActivityDot } from "@/components/badges";
+import { todayLocalStr } from "@/lib/date";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -87,9 +88,7 @@ export function AccountModal({
   const [onlineAccessOpen, setOnlineAccessOpen] = useState(() =>
     !!(initial?.online_url || initial?.username || initial?.password),
   );
-  const [newDate, setNewDate] = useState(() =>
-    new Date().toISOString().slice(0, 10),
-  );
+  const [newDate, setNewDate] = useState(() => todayLocalStr());
   const [newNote, setNewNote] = useState("");
   const [newType, setNewType] = useState<ActivityType | "">("");
   // Purely a UI toggle — the "add an entry" row is hidden until asked for so
@@ -269,7 +268,10 @@ export function AccountModal({
                   id="balance"
                   type="number"
                   step="0.01"
-                  min="0"
+                  // No min="0" here on purpose: a scheduled monthly fee can
+                  // legitimately drive a balance negative. A native min
+                  // would fail HTML5 validation and block saving an
+                  // unrelated edit on an account that's already negative.
                   className={inputClass}
                   value={values.balance}
                   onChange={(e) => set("balance", e.target.value)}

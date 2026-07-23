@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { DateInput } from "@/components/DateInput";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { todayLocalStr } from "@/lib/date";
 import {
   createSweepBatch,
   returnSweep,
@@ -22,7 +23,7 @@ import {
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+const todayStr = todayLocalStr;
 
 export function MoneyClient({
   sweeps,

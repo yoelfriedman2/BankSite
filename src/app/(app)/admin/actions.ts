@@ -148,15 +148,19 @@ export async function setAccessStatus(
   }
 
   const admin = createAdminClient();
-  const { error } = await admin
+  const { data: updated, error } = await admin
     .from("profiles")
     .update({ access_status: status })
-    .eq("id", userId);
+    .eq("id", userId)
+    .select("id");
   if (error) {
     if (/access_status|column/.test(error.message)) {
       return { error: "One-time setup needed: run migration 0036 in the Supabase SQL editor, then try again." };
     }
     return { error: friendlyDbError(error.message) };
+  }
+  if (!updated || updated.length === 0) {
+    return { error: "No matching user profile found." };
   }
 
   // A denied/un-approved user must not keep a previously-granted FDIC-admin

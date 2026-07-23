@@ -22,11 +22,20 @@ export async function requestAccess(): Promise<{ ok?: boolean; approved?: boolea
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileErr } = await supabase
     .from("profiles")
     .select("display_name, access_status, access_requested_at")
     .eq("id", user.id)
     .maybeSingle();
+
+  // A missing profile (signup trigger failed or was deleted) would otherwise
+  // fall through to the update-and-email path below, which updates zero rows
+  // with no error, still emails the owner about a request tied to no real
+  // profile, and reports success — leaving the user stuck with nothing
+  // actually tracked and no explanation.
+  if (profileErr || !profile) {
+    return { error: "We couldn't find your account profile. Please contact the owner for help." };
+  }
 
   // Already approved (e.g. approved in another tab) — tell the client to move on.
   if (profile?.access_status === "approved") return { ok: true, approved: true };

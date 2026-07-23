@@ -1,25 +1,11 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { safeRedirectPath } from "@/lib/safeRedirect";
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-
-  // Only allow same-origin relative paths to prevent open redirect attacks.
-  // A string check alone (rejecting a leading "//") isn't sufficient — WHATWG
-  // URL parsing treats a leading backslash as a path separator for special
-  // schemes, so "/\evil.example" passes that check but new URL() resolves it
-  // to https://evil.example/. Verifying the actual parsed origin closes this
-  // bypass and any similar one, instead of chasing individual string patterns.
-  const rawNext = searchParams.get("next") ?? "/";
-  let next = "/";
-  if (rawNext.startsWith("/") && !rawNext.startsWith("//")) {
-    try {
-      if (new URL(rawNext, origin).origin === origin) next = rawNext;
-    } catch {
-      /* malformed — fall back to "/" */
-    }
-  }
+  const next = safeRedirectPath(searchParams.get("next"), origin);
   const providerError =
     searchParams.get("error_description") || searchParams.get("error");
 

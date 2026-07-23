@@ -27,6 +27,7 @@ import { BankLogo } from "@/components/BankLogo";
 import { AccountModal } from "@/components/AccountModal";
 import { CheckPrintModal } from "@/components/CheckPrintModal";
 import { DateInput } from "@/components/DateInput";
+import { todayLocalStr } from "@/lib/date";
 import {
   upsertBank,
   getBankComments,
@@ -215,7 +216,7 @@ export function BankForm({
   }
 
   // Private reminders (per-bank, never shared)
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalStr();
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [reminderNote, setReminderNote] = useState("");
   const [reminderDate, setReminderDate] = useState("");

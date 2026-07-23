@@ -44,9 +44,9 @@ decision or bigger effort before it can be safely fixed
 - [x] DATA-08 — Branch refresh can erase data on insert failure — fixed: migration 0041's `refresh_bank_branches` does delete+insert inside one Postgres function call (one transaction), so an insert failure rolls the delete back instead of leaving that batch erased.
 - [ ] DATA-09 — Holding-company sync never unlinks stale relationships
 - [ ] DATA-10 — Child ownership not enforced against parent ownership
-- [ ] DATA-11 — Spreadsheet import date/status mapping bugs
+- [x] DATA-11 — Spreadsheet import date/status mapping bugs — partially fixed (the two narrowest, clearest bugs): `parseStatus` matched the bare substring "can" ahead of "open", so a plain "Can open" became `cannot_open` — now matches the actual negative phrasing ("cannot"/"can't"/"unable") instead. A row matching a *trashed* existing bank by cert/name fell through to the insert path and hit the unique `(user_id, cert)` constraint the trashed row still occupied — now restores the trashed bank instead (real-mode and demo-mode both). The broader per-row-non-atomic-apply and column-mapping-ambiguity parts of this finding are unaddressed — see notes below.
 - [x] DATA-12 — APY formula overstates actual annual yield — fixed: `monthlyInterestAmount` now derives the monthly periodic rate from the entered APY via `(1+APY)^(1/12)-1` instead of a naive `rate/12`, so 12 months of compounding lands on the labeled APY instead of overshooting it (verified: 4.5% now compounds to $10,449.99 on a $10,000 balance over a year, not the old $10,459.40 / 4.594% effective yield).
-- [ ] DATA-13 — Dormancy rules disagree across pages
+- [x] DATA-13 — Dormancy rules disagree across pages — fixed: `getAttentionReasons` added its standard "No activity in N months" warning unconditionally, ignoring `alertNoActivity` (the preference only ever gated a *different*, missing-date reason) — now gated the same way. The dormancy-window floor silently clamped to 3 months even though Settings validates and accepts as low as 1 — now floors at 1, matching what Settings actually allows. The calendar's `Date.setMonth` end-of-month rollover (Jan 31 + 1 month silently becoming March 3) also fixed with clamped, timezone-independent Y/M/D arithmetic. Account-type-exemption and cron-boundary disagreements noted in the finding are unaddressed.
 - [ ] DATA-14 — Address campaign/queue/check-number races
 - [ ] DATA-15 — Public road-trip plans can expose private locations
 - [x] DATA-16 — Audit log doesn't check insert errors — fixed: `logAudit` now checks the insert's own `{ error }` result (not just thrown exceptions) and logs it, so a failed audit write leaves a trace instead of vanishing silently.
@@ -62,19 +62,19 @@ decision or bigger effort before it can be safely fixed
 - [ ] UX-01 — Modals lack dialog focus behavior
 - [ ] UX-02 — Inconsistent keyboard interaction on list cards
 - [ ] UX-03 — Color contrast fails WCAG minimum (confirmed via exact math)
-- [ ] UX-04 — DateInput can silently discard input, unstyled in places
+- [x] UX-04 — DateInput can silently discard input, unstyled in places — partially fixed (the 3 narrowest bugs): Enter committed the typed date but didn't `preventDefault()`, so a parent `<form>` could submit in the same event before the new value propagated — now prevented. Omitting `className` produced a borderless, unstyled field (2 call sites the audit named, plus 2 more found the same way) — `DateInput` now defaults to the app's standard input styling instead of empty. `AccountModal`'s balance field had a native `min="0"` that could fail HTML5 validation and block saving on an account a monthly fee had legitimately driven negative — removed. The silent-revert-on-invalid-input (no error state) and the hidden-fallback-picker parts of this finding are unaddressed.
 - [ ] UX-05 — Import "Cancel" doesn't stop the server-side import
 - [ ] UX-06 — Check printing allows invalid checks, hides failures
 - [ ] UX-07 — Search/autocomplete missing semantics, stale results possible
 - [ ] UX-08 — Search URL changes don't sync existing client list state
-- [ ] UX-09 — Rapid balance-date changes can show wrong date's rows
+- [x] UX-09 — Rapid balance-date changes can show wrong date's rows — fixed: `BalancesClient` now versions each date-change request and ignores a slower, older response that resolves after a newer one (previously the last response to arrive won, regardless of which date it was for). A selected holder that doesn't exist in the new date's rows now resets to "all" instead of silently producing an empty list.
 - [ ] UX-10 — Async actions ignore failures / can stay stuck busy
 - [ ] UX-11 — Missing form labels, icon names, live regions, target sizes
 - [ ] UX-12 — Health/activity conveyed by color-only dot
 - [ ] UX-13 — No skip link; closed mobile drawer still focusable
 - [ ] UX-14 — Settings can lose unsaved changes; tabs not real tabs
 - [ ] UX-15 — Document viewer can fail silently / get popup-blocked
-- [ ] UX-16 — UTC/local-date mixing (confirmed via exact reproduction)
+- [x] UX-16 — UTC/local-date mixing (confirmed via exact reproduction) — fixed at every client-side "today" default: new shared `lib/date.ts#todayLocalStr()` (local Y/M/D getters, not `toISOString()`, which is always UTC and can be a full day off near midnight) now used in AccountModal, BankForm, DashboardReminders, and MoneyClient. `balances/page.tsx`'s server-guessed "today" is corrected client-side on mount if the browser's real local date differs. Server-side "today" values (cron timestamps, backup/export filenames) intentionally left as UTC — a scheduled job has no single user timezone to reference.
 - [ ] UX-17 — Website links inconsistent, scheme-less values break
 - [ ] UX-18 — Onboarding walkthrough inaccessible, can target offscreen element
 - [ ] UX-19 — Calendar/map lack non-visual equivalents
@@ -111,13 +111,13 @@ decision or bigger effort before it can be safely fixed
 - [x] INT-07 — Money-move batch can silently move less than confirmed — fixed: `createSweepBatch` now compares what `sweep_accounts` actually applied per account against what was requested, and reports an honest partial-success message (with the real total moved) instead of a blanket success when a balance was lower than expected.
 - [ ] INT-08 — Trashed bank's reminders stay active/emailable
 - [x] INT-09 — Account edit validates one bank ID, mutates another's account — fixed: `upsertAccount` now verifies the account's actual `bank_id` matches the supplied one before proceeding, instead of only checking that the supplied bank is owned by the caller (which let a stale/crafted request edit one account while auto-promoting a different, unrelated bank's status).
-- [ ] INT-10 — Missing-profile / owner-bypass false-success states
+- [x] INT-10 — Missing-profile / owner-bypass false-success states — fixed: `completeOnboarding`, `requestAccess`, and admin's `setAccessStatus` all now check whether their update actually matched a row (via `.select()`) instead of reporting success on zero-rows-affected — a missing profile (signup trigger failure) previously bounced the user Welcome→/→Welcome forever with no explanation. `/welcome` now also applies the same owner-bypass exception `(app)/layout.tsx` already has, so a newly configured owner with a pending/not-onboarded profile can't get stuck Welcome→Pending with no path to Admin.
 - [ ] INT-11 — Notification-default migration can't tell opt-out from untouched
 - [ ] INT-12 — Demo mode shares mutable state across visitors
 
 ## Part 6 — Final Gaps (7)
 
-- [ ] GAP-01 — Deep links discarded during OAuth sign-in
+- [x] GAP-01 — Deep links discarded during OAuth sign-in — fixed: middleware now captures the full path+query (not just the pathname) into `redirectedFrom`; the login page validates it (new shared `lib/safeRedirect.ts`, reused from the SEC-12 fix) and threads it through the OAuth `redirectTo` URL as `auth/callback`'s existing `next` param, which independently re-validates it server-side. An already-authenticated visitor who lands on `/login?redirectedFrom=...` (a stale tab, a bookmarked link) now also returns to that destination instead of always the dashboard. Verified live: `/banks?cert=123` unauthenticated now redirects to `/login?redirectedFrom=%2Fbanks%3Fcert%3D123` (previously dropped the query string).
 - [ ] GAP-02 — Exact addresses sent to public Nominatim against its own policy
 - [ ] GAP-03 — Road-trip candidate/budget/map models disagree
 - [x] GAP-04 — Malformed percent-escape crashes Maps-link import (confirmed reproducible) — fixed: `parseGoogleMapsLink` now catches a `decodeURIComponent` failure per-segment and reports it as unmatched instead of throwing out of the import click handler (plus a defensive try/catch at the call site). Verified with the audit's exact reproduction case.
@@ -131,10 +131,10 @@ decision or bigger effort before it can be safely fixed
 
 | Status | Count |
 |---|---:|
-| Fixed (code-complete) | 20 |
+| Fixed (code-complete) | 27 |
 | Already fixed by an earlier (pre-audit) round | 6 |
 | Open, needs a decision before fixing | 11 |
-| Still open | 63 |
+| Still open | 56 |
 
 **Round 1 (security, Part 1)**: SEC-01, SEC-07, SEC-08, SEC-12, SEC-14, SEC-18, SEC-21 (7 IDs — SEC-14
 moved from "already fixed" to "fully fixed" once this round closed its remaining half).
@@ -147,8 +147,16 @@ DATA-21, INT-07, INT-09, GAP-04, GAP-05 — picked for having one clear, objecti
 (no product/UX tradeoff to weigh), spanning false-success reporting (GAP-05, INT-07 — same class of
 bug as REL-01), a directly-callable-Server-Action gap (DATA-21, INT-09 — same class as SEC-01/INT-01),
 a swallowed-error gap (DATA-16 — same class as DATA-07), and a confirmed-reproducible crash (GAP-04).
-Deliberately left broader, more systemic findings (DATA-18/19, INT-04/05/06, most of Part 3) for a
-dedicated future round rather than a partial fix — see below.
+**Round 4 (full sweep of remaining findings for no-decision-needed bugs)**: after reading all 63
+remaining findings in full, picked the 7 that were narrow (1-3 files), objectively-correct-fix,
+low-regression-risk bugs, and fixed them completely or partially where the finding bundled a broader
+concern in with a concrete one: UX-16 (UTC/local-date mixing — 5 call sites + a shared helper),
+GAP-01 (deep links dropped during OAuth), INT-10 (missing-profile false-success + owner-bypass gap),
+DATA-11 (2 of its several bugs: status-parsing order, trashed-bank-restore-on-import), DATA-13 (2 of
+its several bugs: ignored alertNoActivity pref, threshold-clamp/settings mismatch, plus a calendar
+date-math bug), UX-04 (3 of its 4 bugs), UX-09 (stale-response race + holder reset).
+Deliberately left broader, more systemic findings (DATA-01/02/05/09/10/15/17-20/22, INT-03/04/05/06/
+11/12, all of Part 4, most of Part 3, GAP-02/03/06/07) for future rounds — see below for why.
 
 *(This file is updated as work proceeds — counts above will move.)*
 
@@ -158,12 +166,12 @@ dedicated future round rather than a partial fix — see below.
   `0040_lock_privileged_profile_columns.sql` (SEC-01, Critical — not actually closed until run) and
   `0041_sweep_row_locks_and_branch_refresh_atomicity.sql` (DATA-03/DATA-08 — the row-lock and
   atomic-branch-refresh fixes only take effect once this runs; the app still works exactly as before
-  until then, just without the fix). Everything else fixed across both rounds is pure code, already
+  until then, just without the fix). Everything else fixed across every round is pure code, already
   effective on deploy.
 - 11 more Part 1 (Security) findings are open but each needs a decision from the user before fixing —
   see the `[!]` items above (SEC-03, 05, 06, 09, 10, 11, 15, 16, 17, 20, 22 — several of these are
   genuinely low-priority or accepted-risk-by-design, not all equally urgent).
-- 63 findings remain open. Most of what's left is broader/systemic rather than a single clean fix:
+- 56 findings remain open. Most of what's left is broader/systemic rather than a single clean fix:
   DATA-18/DATA-19 (pagination + validation patterns spanning "most Server Actions" — needs a scoping
   decision, not just code), INT-04/INT-05/INT-06 (soft-delete-state consistency across many call
   sites — real design questions about desired restore/cascade behavior, not pure bugs), and most of

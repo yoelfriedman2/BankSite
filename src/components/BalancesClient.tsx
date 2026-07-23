@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Search } from "lucide-react";
 import { DateInput } from "@/components/DateInput";
 import { formatCurrency } from "@/lib/format";
+import { todayLocalStr } from "@/lib/date";
 import { getBalanceAsOf, type BalanceAsOfRow } from "@/app/(app)/money/actions";
 
 export function BalancesClient({
@@ -18,15 +19,37 @@ export function BalancesClient({
   const [loading, setLoading] = useState(false);
   const [holder, setHolder] = useState("all");
   const [query, setQuery] = useState("");
+  // Ignore a slower, older request that resolves after a newer one — without
+  // this, rapidly changing the date could leave rows on screen for the
+  // previously selected date while the date control shows the new one.
+  const requestIdRef = useRef(0);
+
+  // The server can only guess "today" from its own clock (UTC), which can be
+  // a full calendar day off from the browser's actual local date near
+  // midnight. Correct it once mounted and refetch if it was wrong.
+  useEffect(() => {
+    const local = todayLocalStr();
+    if (local !== initialDate) changeDate(local);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function changeDate(d: string) {
     setDate(d);
     if (!d) return;
     setLoading(true);
+    const requestId = ++requestIdRef.current;
     getBalanceAsOf(d)
-      .then(setRows)
+      .then((newRows) => {
+        if (requestId !== requestIdRef.current) return; // superseded by a newer request
+        setRows(newRows);
+        // A holder that doesn't exist on this date's rows would otherwise
+        // silently show as a confusing empty list.
+        setHolder((h) => (h !== "all" && !newRows.some((r) => r.holder === h) ? "all" : h));
+      })
       .catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (requestId === requestIdRef.current) setLoading(false);
+      });
   }
 
   const holders = useMemo(

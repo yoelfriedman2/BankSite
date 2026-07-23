@@ -49,11 +49,20 @@ function parseToIso(input: string): string | null {
   return null;
 }
 
+// Same base look every other text input in the app uses. A caller can still
+// override it, but omitting className used to mean no border/background/
+// padding at all (just the pr-10 this component adds itself) — several call
+// sites did exactly that and ended up with a borderless, visually broken
+// field on active financial screens (Money moved, Balance by date, the
+// account activity log's date, and a bank reminder's date).
+const DEFAULT_CLASS =
+  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
+
 export function DateInput({
   id,
   value,
   onChange,
-  className = "",
+  className = DEFAULT_CLASS,
   placeholder = "MM/DD/YYYY",
 }: {
   id?: string;
@@ -110,7 +119,15 @@ export function DateInput({
         onChange={(e) => setText(e.target.value)}
         onBlur={(e) => commit(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") commit((e.target as HTMLInputElement).value);
+          if (e.key === "Enter") {
+            // Commit only — don't also let Enter submit a parent <form>.
+            // Without this, the browser's native submit can fire in the same
+            // event before the just-typed date's onChange has propagated up,
+            // so a form could be submitted with the previous stored value
+            // instead of what the user just typed and pressed Enter to commit.
+            e.preventDefault();
+            commit((e.target as HTMLInputElement).value);
+          }
         }}
       />
       {/* Hidden native date input — drives the calendar popup. */}

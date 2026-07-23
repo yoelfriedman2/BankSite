@@ -691,6 +691,8 @@ export function importDemoRows(rows: ImportRow[]): {
     let bankId: string;
     if (existing) {
       updateDemoBank(existing.id, {
+        // A row matching a trashed bank restores it, same as real-mode import.
+        deleted_at: null,
         cert: row.cert ?? existing.cert,
         name: row.name || existing.name,
         city: row.city ?? existing.city,

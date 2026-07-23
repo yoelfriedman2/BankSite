@@ -42,9 +42,9 @@ export async function updateSession(request: NextRequest) {
   // missing its Supabase config would serve protected pages to anyone.
   if (!url || !key) {
     if (!isPublicPath(request.nextUrl.pathname)) {
-      const redirectUrl = request.nextUrl.clone();
-      redirectUrl.pathname = "/login";
-      redirectUrl.searchParams.set("redirectedFrom", request.nextUrl.pathname);
+      const dest = request.nextUrl.pathname + request.nextUrl.search;
+      const redirectUrl = new URL("/login", request.nextUrl.origin);
+      redirectUrl.searchParams.set("redirectedFrom", dest);
       return NextResponse.redirect(redirectUrl);
     }
     return supabaseResponse;
@@ -75,9 +75,13 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user && !isPublicPath(request.nextUrl.pathname)) {
-    const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = "/login";
-    redirectUrl.searchParams.set("redirectedFrom", request.nextUrl.pathname);
+    // Carry the full path+query (not just the pathname) so a deep link like
+    // /banks?cert=123 can be restored after sign-in instead of dropping the
+    // query string — login/page.tsx and LoginForm thread this through OAuth
+    // via auth/callback's `next` param.
+    const dest = request.nextUrl.pathname + request.nextUrl.search;
+    const redirectUrl = new URL("/login", request.nextUrl.origin);
+    redirectUrl.searchParams.set("redirectedFrom", dest);
     return NextResponse.redirect(redirectUrl);
   }
 

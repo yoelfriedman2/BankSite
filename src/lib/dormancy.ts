@@ -60,7 +60,11 @@ export function getActivityLevel(
   const activityDate = account.last_activity_date ?? account.date_opened;
   if (!activityDate) return "none";
 
-  const windowMonths = Math.max(3, effectiveDormancyMonths(account, defaultMonths));
+  // Floor of 1, not 3: Settings validates and accepts a dormancy window as
+  // low as 1 month ("Default dormancy window must be at least 1 month") — a
+  // silent 3-month floor here meant a user who configured 1 or 2 months got
+  // an experience that quietly contradicted what Settings told them was valid.
+  const windowMonths = Math.max(1, effectiveDormancyMonths(account, defaultMonths));
   const elapsed = monthsSince(activityDate, now);
 
   if (elapsed >= windowMonths - 1) return "red";
@@ -148,7 +152,7 @@ export function getAttentionReasons(
   const reasons: AttentionReason[] = [];
 
   const level = getActivityLevel(account, defaultMonths, now);
-  if (level === "orange" || level === "red") {
+  if (prefs.alertNoActivity && (level === "orange" || level === "red")) {
     // getActivityLevel falls back to date_opened when there's no recorded
     // last_activity_date, so use the same date here for the message.
     const activityDate = (account.last_activity_date ?? account.date_opened)!;

@@ -174,7 +174,109 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
-## Current state (update this — most recent first)
+**2026-07-23 (external audit — round 4: full sweep of the remaining 63 findings for more no-decision
+bugs)** — User asked to go through everything still open, fix whatever is a concrete bug with no
+product decision needed and no real regression risk, and not worry about reporting each one before
+fixing it. Read all 63 remaining findings in full (not just the ones already flagged as promising) to
+triage them, then picked the ones that were narrow (touch 1-3 files), had one objectively correct fix,
+and were low-risk to change — explicitly setting aside broader/systemic ones (see below) rather than
+rushing a partial fix on something that really needs its own dedicated pass:
+
+- **UX-16 — UTC/local-date mixing gave the wrong "today" near midnight.** `new Date().toISOString()
+  .slice(0, 10)` is always the UTC date; in a negative UTC offset (America/New_York, evening) that's a
+  full calendar day ahead of the user's actual local date. New `src/lib/date.ts#todayLocalStr()`
+  (local `getFullYear`/`getMonth`/`getDate`, never `toISOString()`) now used everywhere this mattered
+  client-side: `AccountModal.tsx` (new activity date default), `BankForm.tsx` (reminder overdue
+  check), `DashboardReminders.tsx` (overdue check), `MoneyClient.tsx` (default move-out date). The one
+  server-rendered case (`balances/page.tsx` guessing "today" for the initial view with no user
+  timezone to reference) is corrected client-side in `BalancesClient.tsx` on mount if the browser's
+  real local date differs, then refetches. Left every genuinely server-side "today" (cron timestamps,
+  backup/export filenames) as UTC on purpose — a scheduled job has no single user's timezone to use.
+- **GAP-01 — a deep link like `/banks?cert=123` got dropped during sign-in.** Middleware's redirect to
+  `/login` only ever captured the bare pathname into `redirectedFrom`, never the query string, and
+  nothing downstream (the login page, `LoginForm`, the OAuth call) actually read or forwarded that
+  value even though `auth/callback/route.ts` already had `next`-param handling wired up from the
+  SEC-12 fix — the destination-preservation plumbing existed but was never connected end to end. Fixed
+  the whole chain: middleware now captures path+query; new shared `src/lib/safeRedirect.ts` (the exact
+  same-origin validation logic SEC-12 already established, now shared instead of only living in one
+  file) validates it on the login page; `LoginForm` passes it through the OAuth `redirectTo` URL as
+  `next`, which `auth/callback` independently re-validates server-side regardless. An already-signed-in
+  visitor who lands on a `/login?redirectedFrom=...` link now also returns to that destination instead
+  of always the dashboard. Verified live: `/banks?cert=123` unauthenticated now redirects to
+  `/login?redirectedFrom=%2Fbanks%3Fcert%3D123` (previously silently became `/login?redirectedFrom=%2Fbanks`).
+- **INT-10 — a broken signup profile bounced a user between screens forever with no explanation.**
+  `completeOnboarding`, `requestAccess`, and admin's `setAccessStatus` all updated a profile row by ID
+  and checked only the query `error`, never whether a row was actually matched — a missing profile
+  (the signup trigger failing, in the rare case that happens) meant "zero rows changed, no error"
+  looked identical to success, so the client navigated on as if onboarding had completed and the user
+  landed right back on the same incomplete state. All three now check the update actually matched a
+  row via `.select()` and report an honest error otherwise — same pattern already used for DATA-07/
+  DATA-21/INT-09 in earlier rounds. Separately, `/welcome` never applied the owner-bypass exception
+  `(app)/layout.tsx` already has, so a newly configured owner with a pending/not-onboarded profile
+  could get stuck bouncing Welcome→Pending with no path to Admin to approve themselves — added the
+  same exception there.
+- **DATA-11 — two of its several bugs, the narrowest and clearest.** Import's `parseStatus` matched
+  the bare substring `"can"` *before* checking `"open"`, so a spreadsheet cell reading "Can open" (a
+  positive value) got misparsed as `cannot_open` (the opposite meaning) — now matches the actual
+  negative phrasing ("cannot"/"can't"/"unable") instead. Separately, a row matching an existing bank
+  that's currently in *Trash* fell through to the insert path (the lookup only considered active
+  banks) and hit the unique `(user_id, cert)` constraint the trashed row still occupies, failing that
+  row's import — now restores the trashed bank instead, in both real-mode and demo-mode import. Left
+  the broader per-row-non-atomic-apply and column-mapping-ambiguity (does a "website" column mean the
+  bank's site or the account's login URL?) parts of this finding alone — those need either a bigger
+  atomicity rework or an actual product decision about template semantics.
+- **DATA-13 — two of its several bugs, plus a related calendar date-math bug found while in the same
+  code.** `getAttentionReasons`'s standard "No activity in N months" warning ignored the
+  `alertNoActivity` preference entirely (the preference only ever gated a *different*, missing-date-
+  specific reason) — now gated the same way. Separately, the dormancy-window floor silently clamped to
+  a minimum of 3 months even though Settings validates and accepts as low as 1 month, so a user who
+  configured 1 or 2 got an experience quietly contradicting what Settings told them was valid — floor
+  now matches Settings' real minimum of 1. While in this file, also fixed the calendar's month-adding
+  helper: `Date.setMonth` doesn't clamp overflow (Jan 31 + 1 month silently becomes March 3, since
+  February has no 31st) and the old version round-tripped through `toISOString()`, which could also
+  shift the result by a day depending on the server's local timezone offset — rewrote as pure,
+  timezone-independent Y/M/D arithmetic that clamps to the target month's real last day. Verified with
+  a standalone script (Jan 31 + 1mo → Feb 28; Dec 15 + 1mo → Jan 15 next year; etc.).
+- **UX-04 — 3 of its 4 bugs.** `DateInput`'s Enter-to-commit handler didn't call `preventDefault()`,
+  so pressing Enter inside a `<form>` could also trigger a native submit in the same event before the
+  just-typed value had propagated to parent state — now prevented. Omitting `className` (2 call sites
+  the audit named, plus 2 more found the same way while fixing it — `AccountModal`'s activity-log date
+  and `BankForm`'s reminder date) produced a completely unstyled, borderless field on real financial
+  screens — `DateInput` now defaults to the app's standard input styling instead of an empty string,
+  closing this class of bug at the root instead of patching call sites one at a time.
+  `AccountModal`'s balance field had a native `min="0"` that could fail HTML5 validation and block
+  saving *any* edit on an account a monthly fee had legitimately driven negative — removed (the
+  monthly-fee/interest-rate fields correctly keep their own `min="0"`, since those genuinely shouldn't
+  go negative). Left the silent-revert-with-no-error-state part of this finding alone — that needs an
+  actual error-state design, not just a code fix.
+- **UX-09 — rapid balance-date changes could show the wrong date's rows.** `BalancesClient` started
+  each fetch without tracking which was the latest, so a slower older request resolving after a newer
+  one could overwrite the display with stale rows while the date control kept showing the new date —
+  now versions each request and ignores a superseded one. A selected holder that doesn't exist in the
+  new date's rows also now resets to "all" instead of silently rendering a confusing empty list.
+
+**Deliberately NOT attempted this round** (every one of these needs either a real design/scope decision
+or touches enough files that a rushed fix risked exactly the regression this round was trying to
+avoid) — flagged in `EXTERNAL-AUDIT-TRACKER.md` for a dedicated future pass: DATA-01/02/05 (shared-
+bank-data architecture, balance-history atomicity, backup/restore completeness — all genuinely
+systemic), DATA-09/10/15/17/18/19/20/22 (holding-company unlink logic, ownership-chain enforcement,
+pagination across "most Server Actions," JSON validation, document/storage desync, activity-log
+schema), INT-03/04/05/06/11/12 (FDIC-cert-as-mutable-identity, soft-delete-state consistency across
+many call sites, demo-mode isolation — real design questions about desired behavior), all of Part 4
+(cron durability, CI/tests, observability, query tuning — infrastructure investment, not code fixes),
+most of Part 3/UX (focus-trap/ARIA patterns across 10+ modal components, color contrast requiring new
+color choices — real, valuable, but large and risk-prone to rush alongside everything else), and
+GAP-02/03/06/07 (Nominatim provider policy — needs a provider decision; road-trip model-disagreement
+bugs — deferred given how much careful tuning that planner has already had; holding-company stale
+selection and changelog-unread-key scoping — both real narrow bugs, just not reached this round).
+
+**Verification**: `tsc --noEmit` and `npm run build` both clean. Calendar month-math verified with a
+standalone script against several boundary cases. Dormancy preference-gating and threshold-floor logic
+verified with a standalone script mirroring the exact fixed code. GAP-01 verified live end-to-end
+through the middleware→login-page chain (fake-but-present Supabase config, real unauthenticated-user
+code path, not the demo-mode bypass): confirmed `/banks?cert=123` → `/login?redirectedFrom=%2Fbanks%3Fcert%3D123`
+with the query string now preserved, and confirmed `/login` renders correctly with that param. Full
+DEMO_MODE dev-server smoke test across every touched page — all 200, zero server errors.
 
 **2026-07-22 (external audit — round 3: concrete no-decision bugs across Data Integrity/Integration/
 Final Gaps)** — Continuing the same tracked-checklist pattern, explicitly scoped to items with one

@@ -91,7 +91,15 @@ const GLYPHS: [string, number, number, number, number, number][] = [
   ["₿", 62, 22, 22,  5, 0.50],
 ];
 
-export function LoginForm({ initialError, notice }: { initialError?: string; notice?: string }) {
+export function LoginForm({
+  initialError,
+  notice,
+  next,
+}: {
+  initialError?: string;
+  notice?: string;
+  next?: string;
+}) {
   const [error, setError] = useState<string | null>(initialError ?? null);
   const [pending, setPending] = useState<"google" | "azure" | null>(null);
   const [mouse, setMouse] = useState({ x: 0.5, y: 0.5 });
@@ -123,10 +131,18 @@ export function LoginForm({ initialError, notice }: { initialError?: string; not
     setError(null);
     setPending(provider);
     const supabase = createClient();
+    // Carry the original deep-link destination through OAuth so a link like
+    // /banks?cert=123 (or a stale-session /login redirect) lands back where
+    // the user actually asked to go, not always the generic dashboard.
+    // auth/callback independently re-validates this as same-origin — see
+    // lib/safeRedirect.ts — so a tampered client-side value can't redirect
+    // off-site even though it was already validated once server-side too.
+    const callbackUrl = new URL("/auth/callback", window.location.origin);
+    if (next && next !== "/") callbackUrl.searchParams.set("next", next);
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: callbackUrl.toString(),
         // Request the user's name/email. Microsoft only returns the `name` claim
         // when `profile` is in scope; Google includes it by default.
         scopes: provider === "azure" ? "openid profile email" : undefined,

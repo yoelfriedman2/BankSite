@@ -5,10 +5,11 @@ import Link from "next/link";
 import { Bell, Check } from "lucide-react";
 import { toggleReminderDone, type OpenReminder } from "@/app/(app)/reminders";
 import { formatDate } from "@/lib/format";
+import { todayLocalStr } from "@/lib/date";
 
 export function DashboardReminders({ reminders }: { reminders: OpenReminder[] }) {
   const [items, setItems] = useState(reminders);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalStr();
 
   function markDone(id: string) {
     const before = items;

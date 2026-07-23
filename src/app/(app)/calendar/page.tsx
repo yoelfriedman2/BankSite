@@ -12,10 +12,20 @@ import type { Account, Bank } from "@/lib/types";
 
 const DORMANCY_TYPES = ["checking", "savings", "money_market"];
 
+/** Adds calendar months to a YYYY-MM-DD date, staying timezone-independent
+ *  (pure Y/M/D arithmetic — never round-trips through toISOString(), which
+ *  would shift the result by a day depending on the server's local timezone
+ *  offset) and clamping the day to the target month's real length. Plain
+ *  `Date.setMonth` doesn't clamp: Jan 31 + 1 month silently rolls into March
+ *  3 (February has no 31st) instead of landing on Feb 28/29. */
 function addMonths(dateStr: string, months: number): string {
-  const d = new Date(`${dateStr}T00:00:00`);
-  d.setMonth(d.getMonth() + months);
-  return d.toISOString().slice(0, 10);
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const totalMonths = m - 1 + months;
+  const targetYear = y + Math.floor(totalMonths / 12);
+  const targetMonth = ((totalMonths % 12) + 12) % 12; // 0-11
+  const daysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+  const targetDay = Math.min(d, daysInTargetMonth);
+  return `${targetYear}-${String(targetMonth + 1).padStart(2, "0")}-${String(targetDay).padStart(2, "0")}`;
 }
 
 export default async function CalendarPage() {
