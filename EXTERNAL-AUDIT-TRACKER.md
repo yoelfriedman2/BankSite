@@ -176,12 +176,10 @@ all of Part 4 except REL-04's timeout half, most of Part 3, GAP-02/03) for futur
 
 ## What's still pending
 
-- **Migrations 0040 and 0041 both need to be run** in the Supabase SQL editor —
-  `0040_lock_privileged_profile_columns.sql` (SEC-01, Critical — not actually closed until run) and
-  `0041_sweep_row_locks_and_branch_refresh_atomicity.sql` (DATA-03/DATA-08 — the row-lock and
-  atomic-branch-refresh fixes only take effect once this runs; the app still works exactly as before
-  until then, just without the fix). Everything else fixed across every round is pure code, already
-  effective on deploy.
+- ~~Migrations 0040 and 0041~~ — both confirmed run by the user. SEC-01 (Critical) is now fully
+  closed, and the DATA-03/DATA-08 row-lock and atomic-branch-refresh fixes are live. No migrations
+  pending right now — everything fixed across every round so far is either pure code (already live
+  on deploy) or a migration that's confirmed applied.
 - 11 more Part 1 (Security) findings are open but each needs a decision from the user before fixing —
   see the `[!]` items above (SEC-03, 05, 06, 09, 10, 11, 15, 16, 17, 20, 22 — several of these are
   genuinely low-priority or accepted-risk-by-design, not all equally urgent).
