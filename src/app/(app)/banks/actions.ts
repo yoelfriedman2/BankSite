@@ -227,8 +227,8 @@ export async function upsertBank(
   // admin client below, so it must require an APPROVED user, not merely a
   // signed-in one — same reasoning as fdicCheck/getAllBankComments, which also
   // write/read shared data through the admin client. getApprovedUser() fails
-  // open (returns the user as-is) if migration 0036 hasn't been run yet, so
-  // this doesn't change behavior until the migration exists.
+  // CLOSED (returns null) on a query error, missing profile, or non-approved
+  // status.
   const user = await getApprovedUser();
   if (!user) return { error: "Not authorized." };
 
@@ -898,14 +898,11 @@ export async function seedBanks(): Promise<{ seeded?: number; error?: string }> 
   // Invite-only guard (migration 0036): never seed the shared bank list for a
   // user who isn't approved. seedBanks uses the admin client below (bypasses
   // RLS), so this is the choke point that keeps the list out of a pending
-  // account. Queried separately so a missing column (migration not run yet)
-  // just falls through to the previous behavior.
-  const { data: acc } = await supabase
-    .from("profiles")
-    .select("access_status")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (acc?.access_status && acc.access_status !== "approved") return { seeded: 0 };
+  // account. getApprovedUser() fails CLOSED — a query error, missing profile
+  // row, or non-"approved" status all return null — so any of those now
+  // correctly skip seeding instead of proceeding anyway.
+  const approvedUser = await getApprovedUser();
+  if (!approvedUser) return { seeded: 0 };
 
   // Build the shared master set: union of all banks (by cert) across every user.
   // Admin client so we can see the whole team's banks, not just this user's.

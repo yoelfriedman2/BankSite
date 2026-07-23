@@ -10,9 +10,12 @@ import { isOwnerEmail } from "@/lib/isOwner";
  * service-role (admin) client, since those bypass the RLS `is_approved()` gate
  * and would otherwise be reachable by a signed-in-but-un-approved user.
  *
- * Fails OPEN if the access_status column doesn't exist yet (migration not run):
- * returns the user so nothing changes until the migration is applied. Returns
- * null only when there's no session or the user is explicitly not approved.
+ * Fails CLOSED: a query error, a missing profile row, or anything other than
+ * an explicit "approved" status all return null. Every production migration
+ * is confirmed applied (see TODO.md), so a query error here means something
+ * is genuinely wrong, not "the migration hasn't run yet" — the previous
+ * fail-open behavior existed to protect against that now-stale scenario, at
+ * the cost of letting an unverifiable user through on any DB hiccup.
  *
  * Real-mode only — callers that support DEMO_MODE handle it before calling this
  * (there's no real auth session in demo).
@@ -30,7 +33,6 @@ export async function getApprovedUser(): Promise<User | null> {
     .select("access_status")
     .eq("id", user.id)
     .maybeSingle();
-  if (error) return user; // column missing → fail open (migration not run yet)
-  if (data?.access_status && data.access_status !== "approved") return null;
+  if (error || !data || data.access_status !== "approved") return null;
   return user;
 }

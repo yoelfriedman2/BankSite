@@ -46,20 +46,23 @@ export default async function AppLayout({
       .eq("id", user.id)
       .maybeSingle();
 
-    // Access gate (migration 0036). Queried separately from the line above so
-    // that if the migration hasn't been run yet (columns don't exist), we fail
-    // OPEN — the app behaves exactly as before instead of locking everyone out.
+    // Access gate (migration 0036). Fails CLOSED: any query error, missing
+    // profile row, or non-"approved" status blocks a non-owner user — send
+    // them to /pending rather than letting a signed-in-but-unverifiable user
+    // into the app. Every migration is confirmed applied in production (see
+    // TODO.md), so a query error here means something is actually wrong, not
+    // "the migration hasn't run yet" — the previous fail-open behavior
+    // existed to protect against that now-stale scenario. The owner is
+    // always let in, regardless of what this query returns.
     const { data: acc, error: accErr } = await supabase
       .from("profiles")
       .select("access_status, last_seen_at")
       .eq("id", user.id)
       .maybeSingle();
-    if (!accErr && acc) {
-      // Un-approved (or denied) users can't enter — they get the request screen.
-      // The owner is always let in, regardless of what the column says.
-      if (!isOwner && acc.access_status && acc.access_status !== "approved") {
-        redirect("/pending");
-      }
+    if (!isOwner && (accErr || !acc || acc.access_status !== "approved")) {
+      redirect("/pending");
+    }
+    if (acc) {
       // Real "last seen" for the Admin page, throttled to at most once an hour
       // so it isn't a database write on every single navigation.
       const lastSeen = acc.last_seen_at ? new Date(acc.last_seen_at as string).getTime() : 0;

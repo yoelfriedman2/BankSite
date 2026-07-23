@@ -11,7 +11,7 @@ decision or bigger effort before it can be safely fixed
 
 - [x] SEC-01 — Users can self-approve and self-grant FDIC-admin (Critical) — fixed: migration 0040 revokes column-level UPDATE privilege on `access_status`/`is_fdic_admin`/`created_at` from the `authenticated` role, closing the direct-API bypass. **Needs the migration run — see below.**
 - [~] SEC-02 — Cross-user actions not consistently approval-gated (real instance was `upsertBank`, already fixed)
-- [!] SEC-03 — Approval checks fail open on DB/migration errors (deliberate tradeoff — needs a decision)
+- [x] SEC-03 — Approval checks fail open on DB/migration errors — decision made and built: flipped to fail CLOSED across every approval-gate check (`lib/access.ts#getApprovedUser`, `(app)/layout.tsx`'s access gate, `welcome/page.tsx`, `pending/page.tsx`, `banks/actions.ts#seedBanks`). Any query error, missing profile row, or non-"approved" status now blocks a non-owner user (redirects to `/pending`, or on the pending page itself, just keeps showing it) instead of letting them through. The original fail-open behavior existed to protect against "the migration hasn't been run yet" — every migration is now confirmed applied in production (see TODO.md), so that justification is stale; a query error today means something is genuinely wrong, not a benign missing-migration state. The owner is still always let in regardless of what these queries return, and DEMO_MODE is untouched (bypasses this whole code path). Not click-testable in DEMO_MODE (real-auth-dependent by nature) — verified by careful reading of every changed branch instead; see CLAUDE.md for the full reasoning per branch.
 - [~] SEC-04 — SSRF in FDIC website verification (already fixed)
 - [x] SEC-05 — Bank credentials stored/exported as plaintext — decision made and built: opt-in, zero-knowledge client-side encryption for `accounts.username`/`password`/`access_notes`, migration **0042_vault_encryption.sql**. A user turns it on in Settings → Account, sets a master password (never sent to or stored by the server — only a random salt + a small verification value are), and the three fields are encrypted client-side (AES-GCM via the browser's Web Crypto API) before ever reaching the server. Scoped deliberately to just these three fields — nothing else server-side reads them (no cron job, dashboard, alert, search, or shared-data sync touches them), which is what makes this safe to ship without redesigning any other feature. Off by default; existing/new plaintext data (including anything added via spreadsheet import, which can't reach the browser key) is caught up via a repeatable "Encrypt any unprotected logins" action. Turning it back off decrypts everything back to plaintext first. No admin override and no backup/restore path can recover this if the master password is forgotten — surfaced as an explicit, hard-to-miss warning before it can be turned on. See `TODO.md` for the migration.
 - [x] SEC-06 — Backups email an unencrypted archive (same root cause as SEC-05) — fixed without touching the root cause: the weekly backup email no longer attaches the raw zip at all. It's still built and stored the same as before (private Storage bucket), and the email now just links to the already-existing, already-authenticated Admin → Users → Backups panel to download it. This removes the email/inbox/mail-sync/forwarding copies of the data entirely rather than trying to encrypt an attachment nobody has a secure way to decrypt.
@@ -203,6 +203,19 @@ fields — fixed by removing that gate, since `decryptedOnceRef` already guarant
 ever runs once. Full flow (enable → encrypt-on-save → lock → unlock prompt with no data leak →
 inline unlock → hard-reload re-lock → mobile layout → disable/decrypt-back) verified clean via CDP
 browser automation after both fixes. SEC-05 marked `[x]` above.
+**Round 8 (SEC-03 decided and built, follow-up session)**: user asked whether SEC-03 had already
+been fixed — it hadn't (round 6 only got as far as agreeing on the decision) — and confirmed to go
+ahead. Flipped every approval-gate check from fail-open to fail-closed: `lib/access.ts#getApprovedUser`
+(now returns `null` on a query error, missing profile row, or non-"approved" status instead of
+returning the user), `(app)/layout.tsx`'s access gate (now redirects non-owners to `/pending` on any
+of those same conditions, not just an explicit non-approved status), `welcome/page.tsx` (same),
+`pending/page.tsx` (a query error now keeps showing the pending screen instead of redirecting into
+the app), and `banks/actions.ts#seedBanks` (rewritten to reuse the now-fixed `getApprovedUser()`
+instead of its own separate, still-fail-open inline query). The owner exemption is preserved
+everywhere it already existed. Deliberately left `fdic-sync/actions.ts#canApplyFdicChanges`'s own
+separate fail-open (a revoked FDIC-admin role holder could still apply changes if its access_status
+query errors) out of this round — narrower privilege-check, not "into the app," flagged for the user
+as a related but distinct item. SEC-03 marked `[x]` above.
 
 *(This file is updated as work proceeds — counts above will move.)*
 
@@ -214,8 +227,8 @@ browser automation after both fixes. SEC-05 marked `[x]` above.
   `vault_salt`/`vault_check`. Until it's run, the Settings → Account "Vault encryption" card degrades
   gracefully (feature just isn't offered — `saveVaultSettings` returns a friendly "run the migration"
   error if someone tries).
-- 7 more Part 1 (Security) findings are open but each needs a decision from the user before fixing —
-  see the `[!]` items above (SEC-03, 11, 15, 16, 17, 20, 22 — several of these are genuinely
+- 6 more Part 1 (Security) findings are open but each needs a decision from the user before fixing —
+  see the `[!]` items above (SEC-11, 15, 16, 17, 20, 22 — several of these are genuinely
   low-priority or accepted-risk-by-design, not all equally urgent).
 - 52 findings remain open. Most of what's left is broader/systemic rather than a single clean fix:
   DATA-18/DATA-19 (pagination + validation patterns spanning "most Server Actions" — needs a scoping

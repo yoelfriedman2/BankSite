@@ -174,6 +174,53 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-23 (external audit — round 8: SEC-03 decided and built — fail-closed authorization)** —
+Direct follow-up to round 7, next session turn: user asked whether the fail-open→fail-closed change
+discussed back in round 6 had already been made. It hadn't — round 6 only got as far as agreeing on
+the decision in chat before the session's remaining time went into building SEC-05's vault encryption
+instead. Confirmed to go ahead now. Flipped every approval-gate ("is this signed-in user actually
+approved to be in this invite-only app") check from fail-open to fail-closed:
+
+- **`src/lib/access.ts#getApprovedUser`**: was `if (error) return user;` (a query error let an
+  unverifiable user through, treated as "the migration probably hasn't run yet"). Now
+  `if (error || !data || data.access_status !== "approved") return null;` — a query error, a missing
+  profile row, or anything other than an explicit `"approved"` status all deny. The original
+  justification (protect against migration 0036 not being run yet) no longer applies — every
+  migration through 0042 is confirmed applied in production (see TODO.md) — so a query error today
+  means something is genuinely wrong, not a benign, expected state.
+- **`(app)/layout.tsx`**'s access gate: was `if (!accErr && acc) { if (!isOwner && ...) redirect(...) }`
+  — silently skipped the whole check (letting a non-owner straight into the app) whenever the query
+  errored or returned nothing. Now `if (!isOwner && (accErr || !acc || acc.access_status !== "approved")) redirect("/pending");`,
+  with the `last_seen_at` update logic moved to its own `if (acc)` block so it degrades gracefully
+  (skips silently) rather than needing to re-check the same conditions.
+- **`welcome/page.tsx`**: same fix (a query error no longer lets an unapproved user run onboarding).
+- **`pending/page.tsx`**: this one needed the opposite direction of care — it's the page a denied
+  user LANDS on, so it must never treat "can't confirm" as "they're approved, send them into the
+  app" (its old behavior on any error). Now only an explicit `"approved"` status redirects to `/`;
+  anything else (including a query error) just keeps showing the pending screen — which also avoids
+  a potential redirect loop back through the layout's own now-stricter gate.
+- **`banks/actions.ts#seedBanks`**: had its own separate, still-fail-open inline `access_status`
+  query (`if (acc?.access_status && acc.access_status !== "approved") return { seeded: 0 };` — silently
+  proceeded to seed the shared bank list on any error). Rewritten to call the now-fixed
+  `getApprovedUser()` instead of duplicating the query, matching the pattern already used elsewhere
+  in this same file (`upsertBank`, `getAllBankComments`) — also updated those two call sites' stale
+  "fails open" doc comments to match the new behavior.
+
+The owner exemption (`isOwnerEmail`/`isOwner`) is preserved unchanged everywhere it already existed —
+this only tightens what happens when we *can't tell* whether a non-owner is approved, never touches
+the "owner is always let in" path. **Deliberately left one adjacent, similarly-shaped fail-open alone**:
+`fdic-sync/actions.ts#canApplyFdicChanges` also fails open on an `access_status` query error, but
+that's a narrower check (whether an already-`is_fdic_admin`-flagged user can still apply FDIC sync
+changes, not whether they can enter the app at all) — flagged for the user as a related-but-distinct
+item rather than folded into this round without asking.
+
+**Verification**: `tsc --noEmit` and `npm run build` both clean. **Not click-testable in DEMO_MODE**
+— this whole code path is real-Supabase-auth-dependent and DEMO_MODE bypasses it entirely by design
+(same limitation as every other real-auth-only change this project has made) — verified instead by
+tracing every changed branch by hand against both the "properly approved user" and "query error"
+inputs to confirm neither regresses the working case nor reopens the fail-open gap. `EXTERNAL-AUDIT-
+TRACKER.md` updated: SEC-03 marked `[x]`, 6 Part 1 Security findings remain open pending a decision.
+
 **2026-07-23 (external audit — round 7: SEC-05 decided and built — opt-in vault encryption)** —
 Direct continuation of round 6, same day: with the security findings triaged and SEC-05 (plaintext
 bank credentials) and SEC-03 (fail-open authorization) left as the two remaining decisions, the user
