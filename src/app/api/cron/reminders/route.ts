@@ -367,7 +367,7 @@ export async function GET(req: NextRequest) {
 
       const monthlyEmail = today.getDate() <= 7 || forceBackup;
       if (monthlyEmail) {
-        const { error } = await sendBackupEmail(zip, tableCounts, warnings);
+        const { error } = await sendBackupEmail(tableCounts, warnings);
         backup += error ? `; email failed: ${error}` : "; emailed";
         if (error) console.error("[cron/reminders] backup email failed:", error);
       }

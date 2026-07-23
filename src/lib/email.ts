@@ -385,9 +385,17 @@ export async function sendReminderDueEmail(
   );
 }
 
-/* ── Weekly backup email with the full-database zip attached ── */
+/* ── Weekly backup notification — no attachment (SEC-06) ──
+ * The backup itself already lands in the private "backups" Storage bucket
+ * (saveBackupToStorage) — this email is just a heads-up that a new one
+ * exists, with a link to download it from the already-authenticated
+ * Admin -> Users -> Backups panel. Emailing the raw zip as an attachment
+ * used to multiply the number of places a copy of every saved bank login
+ * lived (the outbound send, Resend's own processing, the inbox, any device/
+ * backup that syncs that inbox, any accidental forward) for no benefit over
+ * the panel, which was already built and already the documented way to
+ * grab a specific backup on demand. */
 export async function sendBackupEmail(
-  zip: Buffer,
   tableCounts: Record<string, number>,
   warnings: string[],
 ): Promise<{ error?: string }> {
@@ -406,7 +414,7 @@ export async function sendBackupEmail(
   const html = `
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:#0f172a;">
   <p><strong>Bank Tracker weekly backup — ${date}</strong></p>
-  <p style="color:#475569;">The attached zip contains every table (data.json) plus a readable Excel snapshot. Keep it somewhere safe — it includes account numbers and saved logins.</p>
+  <p style="color:#475569;">This week's backup (every table, plus a readable Excel snapshot) is saved and ready. Since it includes saved bank logins and account numbers, it's no longer attached here — download it from <a href="${APP_URL}/admin">Admin &rarr; Users &rarr; Backups</a> (last 8 kept) whenever you need it.</p>
   <table style="font-size:13px;border-collapse:collapse;">${rows}</table>
   ${warnHtml}
 </div>`;
@@ -417,9 +425,6 @@ export async function sendBackupEmail(
     to: adminEmail,
     subject: `Bank Tracker backup — ${date}`,
     html,
-    attachments: [
-      { filename: `bank-tracker-backup-${date}.zip`, content: zip },
-    ],
   });
   if (error) return { error: error.message };
   return {};

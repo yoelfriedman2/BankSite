@@ -16,6 +16,29 @@ const SECURITY_HEADERS = [
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  // Report-Only, not enforcing: by definition this can never block anything,
+  // it only logs what a real CSP *would* have blocked to the browser
+  // console — a safe first step before committing to an enforcing policy
+  // (which needs a nonce-based setup to allow Next's own inline runtime
+  // scripts without a blanket 'unsafe-inline', a bigger change on its own).
+  // Covers every third-party host this app actually talks to from the
+  // browser: Supabase (auth/data), OpenStreetMap tiles + Nominatim
+  // (road-trip map/address autocomplete), Google's favicon service (bank
+  // logos), and Sentry (error reporting, only active if its DSN is set).
+  {
+    key: "Content-Security-Policy-Report-Only",
+    value: [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: https://tile.openstreetmap.org https://www.google.com",
+      "font-src 'self' data:",
+      "connect-src 'self' https://*.supabase.co https://nominatim.openstreetmap.org https://*.sentry.io",
+      "frame-ancestors 'self'",
+      "base-uri 'self'",
+      "form-action 'self' https://accounts.google.com https://login.microsoftonline.com",
+    ].join("; "),
+  },
 ];
 
 const nextConfig: NextConfig = {

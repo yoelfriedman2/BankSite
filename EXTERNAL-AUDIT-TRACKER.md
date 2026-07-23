@@ -14,17 +14,17 @@ decision or bigger effort before it can be safely fixed
 - [!] SEC-03 — Approval checks fail open on DB/migration errors (deliberate tradeoff — needs a decision)
 - [~] SEC-04 — SSRF in FDIC website verification (already fixed)
 - [!] SEC-05 — Bank credentials stored/exported as plaintext (accepted risk, by design — needs a decision)
-- [!] SEC-06 — Backups email an unencrypted archive (same root cause as SEC-05)
+- [x] SEC-06 — Backups email an unencrypted archive (same root cause as SEC-05) — fixed without touching the root cause: the weekly backup email no longer attaches the raw zip at all. It's still built and stored the same as before (private Storage bucket), and the email now just links to the already-existing, already-authenticated Admin → Users → Backups panel to download it. This removes the email/inbox/mail-sync/forwarding copies of the data entirely rather than trying to encrypt an attachment nobody has a secure way to decrypt.
 - [x] SEC-07 — Next.js version affected by current advisories — fixed: bumped `15.5.4` → `15.5.21`, past both `GHSA-m99w-x7hq-7vfj` and `GHSA-955p-x3mx-jcvp`'s patched line.
 - [x] SEC-08 — 5 known transitive package vulnerabilities — rechecked after SEC-07: same count/severity remains (all in build-time-only transitive deps, not exploitable at runtime — see prior audit note not to force `npm audit fix --force`, which downgrades Next).
-- [!] SEC-09 — 15MB Server Action body limit (needs usage check before narrowing)
-- [!] SEC-10 — No CSP (bigger change, real regression risk if rushed)
+- [x] SEC-09 — 15MB Server Action body limit (needs usage check before narrowing) — investigated and closed as a non-issue: `AccountDocuments.tsx` already enforces its own 15MB per-file cap client-side ("File too large (max 15 MB)") — the config value matches a real, deliberate feature limit, not an oversized default with room to narrow. Next.js also doesn't support a per-route body limit, only one global value, so there's no way to shrink this without breaking document uploads. No code change needed.
+- [x] SEC-10 — No CSP (bigger change, real regression risk if rushed) — first safe step taken: added a `Content-Security-Policy-Report-Only` header covering every third-party host the app actually talks to from the browser (Supabase, OpenStreetMap tiles/Nominatim, Google favicons, Sentry). Report-Only can never block anything — it only surfaces what a real policy would catch, via the browser console. A real *enforcing* CSP still needs a nonce-based setup (to allow Next's own inline runtime scripts without a blanket `unsafe-inline`) — that's the bigger, still-open part of this finding.
 - [!] SEC-11 — Idle timeout is client-side only (needs a decision on server-side session policy)
 - [x] SEC-12 — OAuth redirect bypass via backslash normalization — fixed in `auth/callback/route.ts`: now verifies the parsed `.origin` of the `next` redirect target instead of pattern-matching the input string.
 - [~] SEC-13 — No rate limiting on expensive actions (feedback email already covered; access-request cooldown's integrity depends on SEC-01, fixed alongside it)
 - [x] SEC-14 — Env config incomplete/undocumented — fixed: docs were already fixed by an earlier round, and this round closed the remaining half — `middleware.ts` now fails closed (redirects protected paths to `/login`) instead of open when Supabase config is entirely missing. Verified live.
 - [!] SEC-15 — No MFA/recent-auth for sensitive ops (needs Supabase MFA setup — bigger effort)
-- [!] SEC-16 — Password-update page allows any session to set a password (needs careful design, deferring)
+- [!] SEC-16 — Password-update page allows any session to set a password (needs careful design, deferring) — impact is already substantially reduced: per `TODO.md`'s 2026-07-08 entry, the owner already disabled the Supabase project's Email auth provider (Google/Microsoft OAuth only), so a password set through this page can't currently be used to log in anywhere — the main "persistence after a stolen session" risk the finding describes doesn't apply today. The code-level gap (no check that the session came from a real recovery/invite link) is still open in case that provider setting is ever changed back on; a real fix needs verifying Supabase's session-recency claims against a live project, which isn't something this sandbox can do — still deferred.
 - [!] SEC-17 — Owner tied to mutable email + PII in migration history (low severity, hard to undo retroactively)
 - [x] SEC-18 — No server-only import guards — fixed: added `import "server-only"` to `lib/supabase/admin.ts`, `lib/backup.ts`, `lib/audit.ts`, `lib/email.ts` — each now throws at build time if accidentally bundled into client-side JS.
 - [~] SEC-19 — Raw errors reach client/logs (mostly fixed via friendlyDbError)
@@ -142,9 +142,9 @@ decision or bigger effort before it can be safely fixed
 
 | Status | Count |
 |---|---:|
-| Fixed (code-complete) | 31 |
+| Fixed (code-complete) | 34 |
 | Already fixed by an earlier (pre-audit) round | 6 |
-| Open, needs a decision before fixing | 11 |
+| Open, needs a decision before fixing | 8 |
 | Still open | 52 |
 
 **Round 1 (security, Part 1)**: SEC-01, SEC-07, SEC-08, SEC-12, SEC-14, SEC-18, SEC-21 (7 IDs — SEC-14
@@ -169,6 +169,17 @@ date-math bug), UX-04 (3 of its 4 bugs), UX-09 (stale-response race + holder res
 **Round 5 (continuing the same sweep)**: GAP-06 (holding-company stale selection), GAP-07 (changelog
 unread key not scoped per user), INT-03 (FDIC cert read-only after creation, both UI and server-side),
 REL-04 (timeout on the 2 previously-unbounded FDIC fetch calls).
+**Round 6 (back to Part 1 Security, at the user's request — "biggest security issues, let's tackle
+them")**: read all 11 remaining `[!]` Security items in full, ranked by severity, and reported the 3
+High-severity ones (SEC-03, SEC-05, SEC-06) back in plain language before touching anything. Fixed
+SEC-06 without needing the user's SEC-05 decision first — removed the backup email's raw attachment
+entirely rather than trying to encrypt something nobody has a secure way to decrypt. Took the safe,
+non-decision first step on SEC-10 (CSP Report-Only, which can't block anything by definition).
+Investigated SEC-09 and closed it as a non-issue (the limit already matches a real feature need,
+nothing to narrow). Investigated SEC-16 and found its real-world impact already substantially reduced
+by an existing owner setting (password login disabled at the Supabase project level) — left open since
+the code-level gap itself is unchanged. SEC-05 (the root cause of both SEC-05 and SEC-06) and SEC-03
+(fail-open vs. fail-closed authorization) are still open pending the user's decision — see below.
 Deliberately left broader, more systemic findings (DATA-01/02/05/09/10/15/17-20/22, INT-04/05/06/11/12,
 all of Part 4 except REL-04's timeout half, most of Part 3, GAP-02/03) for future rounds — see below.
 

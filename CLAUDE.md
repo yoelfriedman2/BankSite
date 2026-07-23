@@ -174,6 +174,58 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-23 (external audit — round 6: back to Part 1 Security, at the user's request)** — User asked
+to hear the biggest remaining security issues and tackle them, after previously saying decisions could
+wait. Read all 11 remaining `[!]` Security findings in full, ranked them by the audit's own severity
+rating, and reported the 3 High-severity ones back in plain language (SEC-03 fail-open authorization,
+SEC-05 plaintext bank credentials, SEC-06 the backup email carrying that same data) before changing
+anything. Investigated two more before presenting a plan, since guessing at their status would have
+been worse than checking:
+
+- **SEC-09 (15MB Server Action body limit) — turned out to be a non-issue.** `AccountDocuments.tsx`
+  already enforces its own 15MB per-file cap for document uploads — the global config matches a real,
+  deliberate feature need, not an oversized default with room to narrow. Next.js also only supports one
+  global body-size value, not a per-route one, so there's no way to shrink this without breaking
+  uploads. Closed with no code change.
+- **SEC-16 (password page doesn't require a recent login) — impact already substantially reduced.**
+  Checked `TODO.md`'s 2026-07-08 entry: the owner already disabled the Supabase project's Email
+  auth provider (Google/Microsoft OAuth only) as part of the original invite-only rollout. A password
+  set through `/account/update-password` today can't be used to log in anywhere, so the "attacker
+  steals a session, sets a password, keeps access after the session dies" scenario the finding
+  describes doesn't apply currently. The code-level gap (no check that the session came from an actual
+  recovery/invite link) is still open in case that setting ever changes — a real fix needs verifying
+  Supabase's session-recency claims against a live project, not something this sandbox can do — left
+  deferred rather than guessing at an unverifiable fix.
+
+Fixed what didn't need the user's input first:
+
+- **SEC-06 — the weekly backup email no longer attaches the raw zip.** The backup already gets saved
+  to the private `backups` Storage bucket every week (unchanged) and was already downloadable from the
+  existing Admin → Users → Backups panel (built earlier this project). The monthly email attachment was
+  a second, less-controlled copy of every saved bank login sitting in an inbox, Resend's processing
+  path, and anywhere that inbox syncs to — with zero benefit over the panel, which already existed.
+  Removed the attachment entirely; the email is now just a heads-up with a link to the panel. Doesn't
+  touch the root cause (SEC-05 — credentials are still plaintext in the database and in the stored zip)
+  but removes an entire class of exposure for the email path specifically, with no capability lost.
+- **SEC-10 — added a Content-Security-Policy in Report-Only mode.** By definition this can never break
+  anything — Report-Only never blocks a resource, it only logs to the browser console what a real
+  policy would have caught. Covers the actual third-party hosts the browser talks to (Supabase,
+  OpenStreetMap tiles + Nominatim, Google's favicon service for bank logos, Sentry). A real *enforcing*
+  CSP still needs a nonce-based setup so Next's own inline runtime scripts don't need a blanket
+  `unsafe-inline` — that's real, separate work, not attempted here.
+
+**Still open, waiting on the user**: SEC-05 (plaintext credentials — encrypting meaningfully means
+either a client-side master password the user must remember, unrecoverable if lost, or server-side
+encryption that doesn't protect against a compromised app server — a real UX tradeoff only the user can
+make) and SEC-03 (should authorization fail closed — lock everyone out — or stay fail-open — let people
+in — when the database/config is unhealthy; today's deliberate choice is fail-open so a missed
+migration doesn't lock out the whole family, but that's exactly the tradeoff SEC-03 flags).
+
+**Verification**: `tsc --noEmit` and `npm run build` both clean. Live-verified the new CSP header
+actually appears on a real response (`curl` against a local dev server) with the exact policy string
+intended. Full DEMO_MODE smoke test across every touched/adjacent page — all 200, zero server errors.
+Confirmed `sendBackupEmail`'s only call site (the cron route) was updated to match its new signature.
+
 **2026-07-23 (external audit — round 5: continuing the same sweep)** — Direct continuation of round 4,
 same session, same instruction ("go for them"). Picked up the remaining narrow, no-decision candidates
 identified during round 4's full read-through that weren't reached yet:
