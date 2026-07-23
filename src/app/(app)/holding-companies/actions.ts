@@ -13,6 +13,7 @@ import {
   applyDemoHoldingCompanyChanges,
 } from "@/lib/demo";
 import { friendlyDbError } from "@/lib/friendlyError";
+import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 
 export type HoldingCompanyOverviewRow = {
   id: string;
@@ -110,7 +111,7 @@ async function fetchFedRssd(certs: number[]): Promise<Map<number, number>> {
     const chunk = certs.slice(i, i + 40);
     const filter = encodeURIComponent(`CERT:(${chunk.join(" OR ")})`);
     const url = `https://api.fdic.gov/banks/institutions?filters=${filter}&fields=CERT,FED_RSSD&limit=100&format=json`;
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await fetchWithTimeout(url, { cache: "no-store" });
     if (!res.ok) throw new Error(`FDIC API error ${res.status}`);
     const body = (await res.json()) as { data?: { data: FdicRssdRow }[] };
     for (const item of body.data ?? []) {

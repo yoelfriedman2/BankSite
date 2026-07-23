@@ -369,11 +369,19 @@ export function HoldingCompaniesClient({
     });
   }
 
-  useMemo(() => {
-    if (diff && selected.size === 0 && diff.groups.length > 0) {
+  // A real effect, not a useMemo side effect (useMemo is meant to calculate
+  // a value, not perform a state transition — React docs are explicit about
+  // this). Re-initializes to "everything selected" whenever a genuinely NEW
+  // diff appears (diff only gets a new object identity when its own
+  // dependencies — a newly uploaded file — actually change), not just when
+  // selected happens to be empty. The old "only if empty" condition meant a
+  // selection from a PRIOR sync run survived into a later one: the apply
+  // button could show "Apply N changes" using stale IDs while the actual
+  // submission (filtered against the new diff) sent fewer or none of them.
+  useEffect(() => {
+    if (diff && diff.groups.length > 0) {
       setSelected(new Set(diff.groups.map((g) => g.parentRssd)));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diff]);
 
   function toggle(parentRssd: number) {
@@ -413,6 +421,12 @@ export function HoldingCompaniesClient({
     setStep("intro");
     setMode("wizard");
     setAllDetected({ relationships: null, attributes: null, financials: null });
+    // A fresh run should start with a clean slate — leftover state from a
+    // previous run (a stale selection, a since-resolved error, an old
+    // applied count) shouldn't carry into a new one.
+    setSelected(new Set());
+    setApplyError(null);
+    setAppliedCount(null);
   }
   function backToBrowse() {
     setMode("browse");

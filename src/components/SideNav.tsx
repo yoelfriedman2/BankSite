@@ -86,16 +86,18 @@ function isActive(pathname: string, href: string) {
 export function SideNav({
   displayName,
   isOwner = false,
+  userId,
 }: {
   displayName: string;
   isOwner?: boolean;
+  userId: string;
 }) {
   const pathname = usePathname();
   const groups = GROUPS.map((g) => ({
     ...g,
     links: g.links.filter((l) => !l.ownerOnly || isOwner),
   })).filter((g) => g.links.length > 0);
-  const updatesUnread = useChangelogUnread();
+  const updatesUnread = useChangelogUnread(userId);
 
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-800 bg-slate-900 text-slate-300 md:flex md:sticky md:top-0 md:h-screen md:overflow-y-auto">

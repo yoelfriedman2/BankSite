@@ -59,14 +59,16 @@ function timeAgo(iso: string) {
 export function UpdatesClient({
   changelog,
   activity,
+  userId,
 }: {
   changelog: ChangelogEntry[];
   activity: AuditEntry[];
+  userId: string;
 }) {
   // Opening the page = the user has seen the latest update; clear the nav dot.
   useEffect(() => {
-    markChangelogSeen();
-  }, []);
+    markChangelogSeen(userId);
+  }, [userId]);
 
   const [mobileTab, setMobileTab] = useState<"activity" | "whatsnew">("whatsnew");
 

@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getApprovedUser } from "@/lib/access";
 import { formatAssets } from "@/lib/format";
 import { friendlyDbError } from "@/lib/friendlyError";
+import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 
 /* FDIC sync: poll-and-propose only. The check is read-only and available to
    every signed-in user. Applying a change (rename/website/assets/city-state/
@@ -128,7 +129,7 @@ async function fetchFdic(certs: number[]): Promise<Map<number, FdicRow>> {
     const chunk = certs.slice(i, i + 40);
     const filters = encodeURIComponent(`CERT:(${chunk.join(" OR ")})`);
     const url = `https://api.fdic.gov/banks/institutions?filters=${filters}&fields=CERT,NAME,CITY,STALP,ASSET,WEBADDR,ACTIVE,REPDTE,ENDEFYMD&limit=100&format=json`;
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await fetchWithTimeout(url, { cache: "no-store" });
     if (!res.ok) throw new Error(`FDIC API error ${res.status}`);
     const body = (await res.json()) as { data?: { data: FdicRow }[] };
     for (const item of body.data ?? []) out.set(Number(item.data.CERT), item.data);
@@ -405,7 +406,7 @@ async function fetchFdicLocations(certs: number[]): Promise<FdicLocationRow[]> {
     let offset = 0;
     for (;;) {
       const url = `https://api.fdic.gov/banks/locations?filters=${filters}&fields=${fields}&limit=1000&offset=${offset}&format=json`;
-      const res = await fetch(url, { cache: "no-store" });
+      const res = await fetchWithTimeout(url, { cache: "no-store" });
       if (!res.ok) throw new Error(`FDIC locations API error ${res.status}`);
       const body = (await res.json()) as { data?: { data: FdicLocationRow }[] };
       const rows = body.data ?? [];

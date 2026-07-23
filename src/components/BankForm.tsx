@@ -863,7 +863,24 @@ export function BankForm({
                         </div>
                         <div>
                           <label className={labelClass} htmlFor="cert">FDIC cert #</label>
-                          <input id="cert" type="number" className={inputClass} value={values.cert} onChange={(e) => set("cert", e.target.value)} />
+                          <input
+                            id="cert"
+                            type="number"
+                            // Read-only once a bank already exists: the cert is
+                            // treated as a durable identity everywhere else in
+                            // the app (shared notes, relationships, branch
+                            // locations, road trips, FDIC/holding-company sync
+                            // all key off it) — changing it after the fact
+                            // silently detaches the bank from its own existing
+                            // shared records instead of migrating them. Still
+                            // editable while first creating a bank, since
+                            // nothing is keyed to it yet.
+                            className={initial?.id ? `${inputClass} cursor-not-allowed bg-slate-50 text-slate-500` : inputClass}
+                            value={values.cert}
+                            onChange={(e) => set("cert", e.target.value)}
+                            readOnly={!!initial?.id}
+                            title={initial?.id ? "Can't be changed after a bank is created — delete and re-add it if the cert was wrong." : undefined}
+                          />
                         </div>
                         <div>
                           <label className={labelClass} htmlFor="assets">Assets ($000)</label>

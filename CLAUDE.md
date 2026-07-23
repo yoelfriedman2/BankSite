@@ -174,6 +174,66 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-23 (external audit — round 5: continuing the same sweep)** — Direct continuation of round 4,
+same session, same instruction ("go for them"). Picked up the remaining narrow, no-decision candidates
+identified during round 4's full read-through that weren't reached yet:
+
+- **GAP-06 — a stale holding-company selection could survive into a new sync run.** The wizard
+  initialized its `selected` Set of parent RSSDs to "everything in the diff" inside a `useMemo`, gated
+  on `selected.size === 0` — a state mutation during memo calculation (against React's own rules), and
+  the `size === 0` gate meant a selection from a *prior* run stuck around once populated, since it was
+  never empty again. A later sync computing a genuinely new diff wouldn't re-select anything, and
+  `apply()` filters the diff by membership in that stale set — so the button could say "Apply N
+  changes" while the server received fewer (or none) of them. Moved the logic into a real `useEffect`
+  keyed on `diff` itself, which only gets a new object identity when its own dependencies (an actually
+  new uploaded file) change — so a plain checkbox toggle never re-triggers it, but a genuinely new sync
+  run always does. Also resets `selected`/`applyError`/`appliedCount` when re-entering the wizard, so a
+  fresh run starts clean instead of carrying leftover state from the last one.
+- **GAP-07 — the "unread update" indicator was shared across every user on one browser.** The
+  changelog-seen marker lived under one global `localStorage` key — opening Updates as one family
+  member silently marked it "seen" for whoever signed in next on the same device. `WalkthroughModal`
+  already had the right pattern (`${key}_${userId}`) for exactly this kind of per-user browser state;
+  applied the same convention here. Needed threading a real `userId` through `SideNav`/`TopNav` (only
+  `WalkthroughModal` had it before) and into `/updates` (which didn't fetch the user at all previously)
+  — DEMO_MODE now uses the fixed `DEMO_USER.id` for this, matching how other demo-mode state is scoped.
+  Also flipped the storage-unavailable default from "seen" to "unread" — a blocked/missing localStorage
+  means we genuinely don't know, and since this is just a notice dot (not a security control), erring
+  toward showing it is the safer failure mode than silently hiding a real update.
+- **INT-03 — editing a bank's FDIC cert silently detached it from its own shared data.** Comments,
+  relationships, branch locations, road-trip associations, and FDIC/holding-company sync are all keyed
+  by cert — but the bank form presented it as an ordinary editable number, and `upsertBank` wrote
+  whatever was submitted straight through. Changing it on an existing bank doesn't migrate any of those
+  dependents; it just makes the edited row start looking up a *different* institution's shared records
+  (or none at all) while the old comments/relationships/branches for the original cert are still there,
+  just no longer reachable from this bank. Made the field read-only in the form once a bank already
+  exists (still freely editable while first creating one, since nothing is keyed to it yet), and — since
+  Server Actions are directly callable regardless of what the UI allows — `upsertBank` now also strips
+  `cert` from the update patch server-side when editing, so even a stale or crafted request can't change
+  it after creation.
+- **REL-04 — two FDIC API calls had no timeout at all.** The bank-website verification path already
+  had an 8-second `AbortController` timeout, proving the pattern was already established, but
+  `fetchFdic` (the main institutions check) and `fetchFdicLocations` (branch-location refresh) used a
+  bare `fetch` with no bound — an upstream stall could hold the whole serverless invocation open
+  indefinitely instead of failing with a clear, catchable error. Extracted the pattern into a shared
+  `lib/fetchWithTimeout.ts` (15s default) and applied it to both, plus the holding-company RSSD lookup
+  in a separate file that had the same gap. Left the website-verification call's own inline
+  implementation as-is (already correct, just not using the new shared helper — not worth the extra
+  diff for something that already works). Retry/backoff and client-side Nominatim request cancellation
+  are still open — this only closes the "no bound at all" half of the finding.
+
+No migration this round — every fix is pure application code, effective immediately on deploy. Skipped
+changelog/Guide — all bug fixes, no new user-visible feature, same policy as every round so far.
+`EXTERNAL-AUDIT-TRACKER.md` updated: 31 of 100 findings now fixed across five rounds.
+
+**Verification**: `tsc --noEmit` and `npm run build` both clean. Full DEMO_MODE dev-server smoke test
+across every touched page (`/`, `/banks`, `/accounts`, `/updates`, `/holding-companies`, `/fdic-sync`,
+`/road-trip`) — all 200, zero server errors; confirmed `/updates` renders real content with the new
+per-user key wiring in place. GAP-06/INT-03/REL-04's core logic changes are either pure client-side
+state-management fixes (GAP-06 — verified by reading through the exact dependency-array/effect-timing
+behavior) or server-side guards unreachable without a real crafted request (INT-03, REL-04 — verified
+by reading the change against the original code, confirming each is a narrow, additive guard with no
+alteration to the existing success path).
+
 **2026-07-23 (external audit — round 4: full sweep of the remaining 63 findings for more no-decision
 bugs)** — User asked to go through everything still open, fix whatever is a concrete bug with no
 product decision needed and no real regression risk, and not worry about reporting each one before

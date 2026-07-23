@@ -94,7 +94,7 @@ decision or bigger effort before it can be safely fixed
 - [ ] PERF-03 — Balance-as-of and batch-return scale poorly
 - [ ] PERF-04 — Holding-companies route ships parsers eagerly (bundle outlier)
 - [ ] REL-03 — Backups built as single unbounded in-memory artifact
-- [ ] REL-04 — External API calls lack timeout/retry/backoff policy
+- [x] REL-04 — External API calls lack timeout/retry/backoff policy — partially fixed (the timeout half): new shared `lib/fetchWithTimeout.ts` (the same AbortController pattern already used for bank-website verification, now extracted and reused) applied to the 2 FDIC BankFind calls that previously had no bound at all (`fetchFdic`, `fetchFdicLocations`) plus the holding-company RSSD lookup. Retry/backoff and client-side (Nominatim autocomplete) cancellation are unaddressed.
 - [ ] OBS-01 — Monitoring captures only a subset of real failures
 - [ ] OPS-02 — Maintenance scripts have hard-coded paths, weak safety
 - [ ] TYPE-01 — No generated DB types / schema-contract check
@@ -104,7 +104,7 @@ decision or bigger effort before it can be safely fixed
 
 - [x] INT-01 — Denying access doesn't revoke session or FDIC-admin role (confirmed, connects to SEC-01) — fixed: `canApplyFdicChanges` now also requires `access_status === "approved"` (not just `is_fdic_admin`), and `setAccessStatus` clears `is_fdic_admin` whenever a user is denied/un-approved. A true "kill the live session" primitive isn't available for an arbitrary user via the Supabase SDK, but `(app)/layout.tsx` already blocks all page navigation for a denied user on every request, and this closes the remaining gap (privileged server actions not independently re-checking approval).
 - [x] INT-02 — Pending/denied users can receive protected note content by email (confirmed) — fixed: the community-note broadcast in `addBankComment` now excludes pending/denied users from the recipient list before sending, closing the RLS-bypassing side channel.
-- [ ] INT-03 — FDIC cert used as mutable "identity" across subsystems
+- [x] INT-03 — FDIC cert used as mutable "identity" across subsystems — fixed the core danger (an ordinary form edit silently changing what the cert means to every other feature keyed by it): the cert field is now read-only once a bank already exists (still editable when first creating one, since nothing is keyed to it yet) — both in the form UI and, since Server Actions are directly callable, enforced server-side in `upsertBank` too (a submitted cert change on an existing bank is now silently dropped from the update rather than applied).
 - [ ] INT-04 — Active accounts can exist under a soft-deleted bank
 - [ ] INT-05 — Money-owed sweeps conflict with trash/permanent delete
 - [ ] INT-06 — Duplicate account copies live balance/credentials as template
@@ -122,8 +122,19 @@ decision or bigger effort before it can be safely fixed
 - [ ] GAP-03 — Road-trip candidate/budget/map models disagree
 - [x] GAP-04 — Malformed percent-escape crashes Maps-link import (confirmed reproducible) — fixed: `parseGoogleMapsLink` now catches a `decodeURIComponent` failure per-segment and reports it as unmatched instead of throwing out of the import click handler (plus a defensive try/catch at the call site). Verified with the audit's exact reproduction case.
 - [x] GAP-05 — FDIC "Accept all" reports failures as success (confirmed) — fixed: `applyFdicAssets` now returns exactly which certs succeeded, and the bulk-accept UI marks each row by whether its own cert actually applied instead of treating "no top-level error" as "every row succeeded."
-- [ ] GAP-06 — Stale holding-company selection survives a new sync run
-- [ ] GAP-07 — Changelog unread state shared across users on one browser
+- [x] GAP-06 — Stale holding-company selection survives a new sync run — fixed: the selection-
+  initializing side effect moved out of `useMemo` (a state mutation inside useMemo, against React's
+  own rules) into a real `useEffect` that re-initializes to "everything selected" whenever the diff
+  itself genuinely changes, not just when the selection happens to be empty — closing the gap where a
+  selection from a prior sync run survived into a later one and the apply button's count no longer
+  matched what would actually be submitted. Also resets selection/errors/applied-count when re-entering
+  the wizard, so a fresh run starts clean.
+- [x] GAP-07 — Changelog unread state shared across users on one browser — fixed: the localStorage key
+  is now scoped per user (`bt_changelog_seen_<userId>`, matching the exact convention `WalkthroughModal`
+  already used) instead of one global key, so one family member opening Updates no longer silently
+  marks it "seen" for whoever signs in next on the same browser. Also flipped the storage-unavailable
+  default from "seen" to "unread" — a blocked/unavailable localStorage means we genuinely don't know,
+  and this indicator isn't a security control, so erring toward showing it is the safer failure mode.
 
 ---
 
@@ -131,10 +142,10 @@ decision or bigger effort before it can be safely fixed
 
 | Status | Count |
 |---|---:|
-| Fixed (code-complete) | 27 |
+| Fixed (code-complete) | 31 |
 | Already fixed by an earlier (pre-audit) round | 6 |
 | Open, needs a decision before fixing | 11 |
-| Still open | 56 |
+| Still open | 52 |
 
 **Round 1 (security, Part 1)**: SEC-01, SEC-07, SEC-08, SEC-12, SEC-14, SEC-18, SEC-21 (7 IDs — SEC-14
 moved from "already fixed" to "fully fixed" once this round closed its remaining half).
@@ -155,8 +166,11 @@ GAP-01 (deep links dropped during OAuth), INT-10 (missing-profile false-success 
 DATA-11 (2 of its several bugs: status-parsing order, trashed-bank-restore-on-import), DATA-13 (2 of
 its several bugs: ignored alertNoActivity pref, threshold-clamp/settings mismatch, plus a calendar
 date-math bug), UX-04 (3 of its 4 bugs), UX-09 (stale-response race + holder reset).
-Deliberately left broader, more systemic findings (DATA-01/02/05/09/10/15/17-20/22, INT-03/04/05/06/
-11/12, all of Part 4, most of Part 3, GAP-02/03/06/07) for future rounds — see below for why.
+**Round 5 (continuing the same sweep)**: GAP-06 (holding-company stale selection), GAP-07 (changelog
+unread key not scoped per user), INT-03 (FDIC cert read-only after creation, both UI and server-side),
+REL-04 (timeout on the 2 previously-unbounded FDIC fetch calls).
+Deliberately left broader, more systemic findings (DATA-01/02/05/09/10/15/17-20/22, INT-04/05/06/11/12,
+all of Part 4 except REL-04's timeout half, most of Part 3, GAP-02/03) for future rounds — see below.
 
 *(This file is updated as work proceeds — counts above will move.)*
 
@@ -171,7 +185,7 @@ Deliberately left broader, more systemic findings (DATA-01/02/05/09/10/15/17-20/
 - 11 more Part 1 (Security) findings are open but each needs a decision from the user before fixing —
   see the `[!]` items above (SEC-03, 05, 06, 09, 10, 11, 15, 16, 17, 20, 22 — several of these are
   genuinely low-priority or accepted-risk-by-design, not all equally urgent).
-- 56 findings remain open. Most of what's left is broader/systemic rather than a single clean fix:
+- 52 findings remain open. Most of what's left is broader/systemic rather than a single clean fix:
   DATA-18/DATA-19 (pagination + validation patterns spanning "most Server Actions" — needs a scoping
   decision, not just code), INT-04/INT-05/INT-06 (soft-delete-state consistency across many call
   sites — real design questions about desired restore/cascade behavior, not pure bugs), and most of

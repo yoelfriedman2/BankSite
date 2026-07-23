@@ -244,7 +244,16 @@ export async function upsertBank(
   }
 
   if (values.id) {
-    const { error } = await supabase.from("banks").update(patch).eq("id", values.id);
+    // The FDIC cert is treated as a durable identity everywhere else in the
+    // app (shared notes, relationships, branch locations, road trips, FDIC/
+    // holding-company sync all key off it) — never let an edit change it
+    // once the bank exists, even from a stale or crafted request, since
+    // changing it silently detaches the bank from its own existing shared
+    // records instead of migrating them. The form's cert field is already
+    // read-only for the same reason; this is the server-side enforcement,
+    // since Server Actions are directly callable regardless of UI state.
+    const { cert: _cert, ...editablePatch } = patch;
+    const { error } = await supabase.from("banks").update(editablePatch).eq("id", values.id);
     if (error) return { error: friendlyDbError(error.message) };
     await autoQueueIfWantToOpen(values.id, patch.status!);
   } else {

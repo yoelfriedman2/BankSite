@@ -89,9 +89,11 @@ function isActive(pathname: string, href: string) {
 export function TopNav({
   displayName,
   isOwner = false,
+  userId,
 }: {
   displayName: string;
   isOwner?: boolean;
+  userId: string;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -99,7 +101,7 @@ export function TopNav({
     ...g,
     links: g.links.filter((l) => !l.ownerOnly || isOwner),
   })).filter((g) => g.links.length > 0);
-  const updatesUnread = useChangelogUnread();
+  const updatesUnread = useChangelogUnread(userId);
 
   // Close the drawer whenever the route changes (e.g. after tapping a link).
   useEffect(() => {

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SideNav } from "@/components/SideNav";
 import { TopNav } from "@/components/TopNav";
-import { DEMO_MODE, getDemoProfile } from "@/lib/demo";
+import { DEMO_MODE, DEMO_USER, getDemoProfile } from "@/lib/demo";
 import { WalkthroughModal } from "@/components/WalkthroughModal";
 import { IdleTimeout } from "@/components/IdleTimeout";
 
@@ -18,6 +18,7 @@ export default async function AppLayout({
 
   if (DEMO_MODE) {
     displayName = getDemoProfile().display_name ?? "Demo User";
+    userId = DEMO_USER.id;
   } else {
     const supabase = await createClient();
     const {
@@ -77,9 +78,9 @@ export default async function AppLayout({
     <div className="flex min-h-screen bg-slate-50">
       <IdleTimeout enabled={!DEMO_MODE} />
       <WalkthroughModal isDemo={DEMO_MODE} userId={userId} />
-      <SideNav displayName={displayName} isOwner={isOwner} />
+      <SideNav displayName={displayName} isOwner={isOwner} userId={userId} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <TopNav displayName={displayName} isOwner={isOwner} />
+        <TopNav displayName={displayName} isOwner={isOwner} userId={userId} />
         <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
           {children}
         </main>
