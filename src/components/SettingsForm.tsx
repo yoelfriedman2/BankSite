@@ -32,6 +32,7 @@ import {
 } from "@/app/(app)/settings/actions";
 import { exportToExcel } from "@/lib/export";
 import { useToast } from "@/components/Toast";
+import { VaultEncryptionCard } from "@/components/VaultEncryptionCard";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -121,6 +122,7 @@ export function SettingsForm({
   minBalance,
   lastSignInAt,
   isOwner = false,
+  vaultEnabled = false,
 }: {
   email: string;
   displayName: string;
@@ -136,6 +138,7 @@ export function SettingsForm({
   minBalance: number;
   lastSignInAt: string | null;
   isOwner?: boolean;
+  vaultEnabled?: boolean;
 }) {
   const [tab, setTab] = useState<TabId>("profile");
 
@@ -687,6 +690,8 @@ export function SettingsForm({
               )}
             </div>
           </Card>
+
+          <VaultEncryptionCard enabled={vaultEnabled} />
 
           <div className="rounded-2xl border border-rose-200 bg-rose-50/40 p-6">
             <div className="mb-1 flex items-center gap-2">

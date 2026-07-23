@@ -207,6 +207,11 @@ export interface Profile {
   is_fdic_admin: boolean;
   banks_seeded: boolean;
   onboarded: boolean;
+  // Opt-in zero-knowledge encryption for accounts.username/password/access_notes
+  // (migration 0042). vault_salt/vault_check are not secret — see lib/vaultCrypto.ts.
+  vault_encryption_enabled: boolean;
+  vault_salt: string | null;
+  vault_check: string | null;
   // Invite-only access gate (migration 0036).
   access_status: "pending" | "approved" | "denied";
   access_requested_at: string | null;

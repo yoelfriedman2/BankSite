@@ -100,6 +100,39 @@ export async function updateSettings(values: {
   return {};
 }
 
+/** Saves this user's vault-encryption preference + the (non-secret) salt and
+ *  check value their browser generated. The master password itself is never
+ *  part of this call — it never leaves the browser. See lib/vaultCrypto.ts
+ *  and VaultKeyProvider for the client-side half of this feature. */
+export async function saveVaultSettings(patch: {
+  vault_encryption_enabled: boolean;
+  vault_salt: string | null;
+  vault_check: string | null;
+}): Promise<{ error?: string }> {
+  if (DEMO_MODE) {
+    setDemoProfile(patch);
+    revalidatePath("/settings");
+    return {};
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { error } = await supabase.from("profiles").update(patch).eq("id", user.id);
+  if (error) {
+    if (/vault_encryption_enabled|vault_salt|vault_check|column/.test(error.message)) {
+      return { error: "One-time setup needed: run migration 0042 in the Supabase SQL editor, then try again." };
+    }
+    return { error: friendlyDbError(error.message) };
+  }
+
+  revalidatePath("/settings");
+  return {};
+}
+
 /** Don't let a signed-in user loop this action to flood the owner's inbox. */
 const FEEDBACK_COOLDOWN_MS = 2 * 60 * 1000;
 

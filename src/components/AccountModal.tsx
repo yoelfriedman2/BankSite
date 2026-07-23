@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useTransition, type FormEvent } from "react";
-import { X, Loader2, Eye, EyeOff } from "lucide-react";
+import { useState, useEffect, useRef, useTransition, type FormEvent } from "react";
+import { X, Loader2, Eye, EyeOff, Lock } from "lucide-react";
 import { ACCOUNT_TYPE_LABELS, ACTIVITY_TYPE_LABELS, type Account, type ActivityType } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { DateInput } from "@/components/DateInput";
@@ -16,6 +16,9 @@ import { Box, BoxHeader } from "@/components/DetailBox";
 import { getActivityLevel, daysUntil } from "@/lib/dormancy";
 import { ActivityDot } from "@/components/badges";
 import { todayLocalStr } from "@/lib/date";
+import { useVault } from "@/components/VaultKeyProvider";
+import { VaultUnlockPrompt } from "@/components/VaultUnlockPrompt";
+import { isEncryptedVaultValue, decryptVaultField, encryptVaultField } from "@/lib/vaultCrypto";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -97,6 +100,11 @@ export function AccountModal({
   const [balanceHistory, setBalanceHistory] = useState<BalancePoint[]>([]);
   const [dirty, setDirty] = useState(false);
 
+  const vault = useVault();
+  const vaultActive = vault.enabled;
+  const [vaultDecrypting, setVaultDecrypting] = useState(false);
+  const decryptedOnceRef = useRef(false);
+
   useUnsavedChanges(dirty);
 
   function attemptClose() {
@@ -108,6 +116,56 @@ export function AccountModal({
       getBalanceHistory(initial.id).then(setBalanceHistory).catch(() => {});
     }
   }, [initial?.id]);
+
+  // Once the vault is unlocked, reveal this account's real login details —
+  // any of the three fields might still be ciphertext from before.
+  // decryptedOnceRef guarantees this async work only ever *starts* once per
+  // modal instance — including across React 18 Strict Mode's dev-only
+  // double-invoke of this effect (mount → cleanup → mount again): the first
+  // invocation starts the real decrypt, the second sees the ref already set
+  // and no-ops. Because of that guarantee, there's no scenario where a
+  // second, overlapping run could make an in-flight result stale — so unlike
+  // the usual "cancelled" closure-flag pattern, applying the result here is
+  // never conditional. (An earlier version gated both the state write and
+  // the loading-flag reset on a `cancelled` flag set by the cleanup —
+  // Strict Mode's simulated cleanup always fires for the one invocation that
+  // actually decrypted, so that gate silently discarded the only real result
+  // every time, leaving the fields showing raw ciphertext forever.)
+  useEffect(() => {
+    if (!vaultActive || !vault.unlocked || !vault.key || decryptedOnceRef.current) return;
+    decryptedOnceRef.current = true;
+    setVaultDecrypting(true);
+    (async () => {
+      try {
+        const dec = async (v: string) =>
+          v && isEncryptedVaultValue(v) ? await decryptVaultField(vault.key!, v) : v;
+        const [username, password, access_notes] = await Promise.all([
+          dec(values.username),
+          dec(values.password),
+          dec(values.access_notes),
+        ]);
+        setValues((old) => ({ ...old, username, password, access_notes }));
+      } catch {
+        /* leave whatever was there — better than getting stuck */
+      } finally {
+        setVaultDecrypting(false);
+      }
+    })();
+    // Deliberately only re-runs when the vault itself changes state, not on
+    // every values.* edit — see decryptedOnceRef above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vaultActive, vault.unlocked, vault.key]);
+
+  async function maybeEncryptForSave(v: AccountFormValues): Promise<AccountFormValues> {
+    if (!vaultActive || !vault.unlocked || !vault.key) return v;
+    const enc = async (s: string) => (s ? await encryptVaultField(vault.key!, s) : s);
+    const [username, password, access_notes] = await Promise.all([
+      enc(v.username),
+      enc(v.password),
+      enc(v.access_notes),
+    ]);
+    return { ...v, username, password, access_notes };
+  }
 
   function set<K extends keyof AccountFormValues>(
     key: K,
@@ -141,7 +199,8 @@ export function AccountModal({
     e.preventDefault();
     setError(null);
     startTransition(async () => {
-      const result = await upsertAccount(values);
+      const toSave = await maybeEncryptForSave(values);
+      const result = await upsertAccount(toSave);
       if (result.error) {
         setError(result.error);
         return;
@@ -421,9 +480,22 @@ export function AccountModal({
                 <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
                   Online access
                 </span>
+                {vaultActive && (
+                  <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-200">
+                    <Lock className="h-2.5 w-2.5" />
+                    Encrypted
+                  </span>
+                )}
               </label>
             </div>
-            {onlineAccessOpen && (
+            {onlineAccessOpen && vaultActive && !vault.unlocked && <VaultUnlockPrompt />}
+            {onlineAccessOpen && vaultActive && vault.unlocked && vaultDecrypting && (
+              <p className="flex items-center gap-1.5 text-xs text-slate-400">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Decrypting…
+              </p>
+            )}
+            {onlineAccessOpen && (!vaultActive || (vault.unlocked && !vaultDecrypting)) && (
               <div className="space-y-3">
                 <div>
                   <label className={labelClass} htmlFor="online_url">Login URL</label>

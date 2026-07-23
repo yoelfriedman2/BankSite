@@ -4,8 +4,12 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 
 ## One-time setup pending
 
-*(Nothing pending right now — both audit-round migrations below are confirmed run. New items land here
-as they come up.)*
+- **Run migration `0042_vault_encryption.sql`** — adds `profiles.vault_encryption_enabled`,
+  `vault_salt`, `vault_check` (all additive/nullable/safe-default). Powers the new opt-in "Vault
+  encryption" feature in Settings → Account (encrypts saved account usernames/passwords/access
+  notes with a user-chosen master password the server never sees). Degrades gracefully until run —
+  the Settings card just isn't offered, and `saveVaultSettings` returns a friendly error pointing at
+  this migration if it's somehow reached anyway.
 
 - ~~Run migration `0041_sweep_row_locks_and_branch_refresh_atomicity.sql`~~ — confirmed run. Closes
   two data-safety findings from the external audit. DATA-03: `sweep_accounts`/`return_sweep` now take

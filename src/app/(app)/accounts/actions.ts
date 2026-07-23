@@ -500,6 +500,80 @@ export async function saveLastCheckNumber(accountId: string, num: number): Promi
   revalidatePath("/banks");
 }
 
+export type VaultFieldSet = {
+  id: string;
+  username: string | null;
+  password: string | null;
+  access_notes: string | null;
+};
+
+/** Every one of the current user's own (non-deleted) accounts' raw vault
+ *  field values, as currently stored — plaintext, ciphertext, or a mix.
+ *  Used only by the client-side vault-encryption enable/disable/re-encrypt
+ *  flows in Settings, which need to read the current value before
+ *  re-writing it through the master key. The server never decrypts
+ *  anything here — it only ever moves opaque strings around. */
+export async function getMyAccountVaultFields(): Promise<VaultFieldSet[]> {
+  if (DEMO_MODE) {
+    return getDemoAccounts().map((a) => ({
+      id: a.id,
+      username: a.username,
+      password: a.password,
+      access_notes: a.access_notes,
+    }));
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data } = await supabase
+    .from("accounts")
+    .select("id, username, password, access_notes")
+    .is("deleted_at", null);
+  return (data ?? []) as VaultFieldSet[];
+}
+
+/** Bulk-writes vault field values back after a client-side encrypt/decrypt
+ *  pass. RLS scopes every update to the caller's own accounts, same as any
+ *  other account write in this file. */
+export async function updateAccountVaultFields(
+  updates: VaultFieldSet[],
+): Promise<{ error?: string }> {
+  if (!updates.length) return {};
+
+  if (DEMO_MODE) {
+    for (const u of updates) {
+      updateDemoAccount(u.id, {
+        username: u.username,
+        password: u.password,
+        access_notes: u.access_notes,
+      });
+    }
+    revalidate();
+    return {};
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  for (const u of updates) {
+    const { error } = await supabase
+      .from("accounts")
+      .update({ username: u.username, password: u.password, access_notes: u.access_notes })
+      .eq("id", u.id);
+    if (error) return { error: friendlyDbError(error.message) };
+  }
+
+  revalidate();
+  return {};
+}
+
 /** Quick log: stamp an account's last activity as today (resets dormancy clock),
  *  with an optional type — same shape as an entry added from the account editor. */
 export async function logActivityToday(

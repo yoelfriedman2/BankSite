@@ -5,6 +5,7 @@ import { TopNav } from "@/components/TopNav";
 import { DEMO_MODE, DEMO_USER, getDemoProfile } from "@/lib/demo";
 import { WalkthroughModal } from "@/components/WalkthroughModal";
 import { IdleTimeout } from "@/components/IdleTimeout";
+import { VaultKeyProvider } from "@/components/VaultKeyProvider";
 
 export default async function AppLayout({
   children,
@@ -15,10 +16,17 @@ export default async function AppLayout({
 
   let userId = "";
   let isOwner = false;
+  let vaultEnabled = false;
+  let vaultSalt: string | null = null;
+  let vaultCheck: string | null = null;
 
   if (DEMO_MODE) {
-    displayName = getDemoProfile().display_name ?? "Demo User";
+    const p = getDemoProfile();
+    displayName = p.display_name ?? "Demo User";
     userId = DEMO_USER.id;
+    vaultEnabled = !!p.vault_encryption_enabled;
+    vaultSalt = p.vault_salt ?? null;
+    vaultCheck = p.vault_check ?? null;
   } else {
     const supabase = await createClient();
     const {
@@ -66,6 +74,19 @@ export default async function AppLayout({
     // New users finish setup (confirm their name) before entering the app.
     if (!profile?.onboarded) redirect("/welcome");
 
+    // Vault encryption config (migration 0042), queried separately for the
+    // same reason as the access gate above: a missing migration must not
+    // break anything else on this page — it just means the feature isn't
+    // offered yet (vaultEnabled stays false, its own safe default).
+    const { data: vault } = await supabase
+      .from("profiles")
+      .select("vault_encryption_enabled, vault_salt, vault_check")
+      .eq("id", user.id)
+      .maybeSingle();
+    vaultEnabled = !!vault?.vault_encryption_enabled;
+    vaultSalt = (vault?.vault_salt as string | null) ?? null;
+    vaultCheck = (vault?.vault_check as string | null) ?? null;
+
     displayName =
       profile?.display_name ||
       (user.user_metadata?.full_name as string | undefined) ||
@@ -75,16 +96,18 @@ export default async function AppLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
-      <IdleTimeout enabled={!DEMO_MODE} />
-      <WalkthroughModal isDemo={DEMO_MODE} userId={userId} />
-      <SideNav displayName={displayName} isOwner={isOwner} userId={userId} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <TopNav displayName={displayName} isOwner={isOwner} userId={userId} />
-        <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-          {children}
-        </main>
+    <VaultKeyProvider enabled={vaultEnabled} salt={vaultSalt} check={vaultCheck}>
+      <div className="flex min-h-screen bg-slate-50">
+        <IdleTimeout enabled={!DEMO_MODE} />
+        <WalkthroughModal isDemo={DEMO_MODE} userId={userId} />
+        <SideNav displayName={displayName} isOwner={isOwner} userId={userId} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TopNav displayName={displayName} isOwner={isOwner} userId={userId} />
+          <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </VaultKeyProvider>
   );
 }

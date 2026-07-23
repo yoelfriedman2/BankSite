@@ -13,7 +13,7 @@ decision or bigger effort before it can be safely fixed
 - [~] SEC-02 — Cross-user actions not consistently approval-gated (real instance was `upsertBank`, already fixed)
 - [!] SEC-03 — Approval checks fail open on DB/migration errors (deliberate tradeoff — needs a decision)
 - [~] SEC-04 — SSRF in FDIC website verification (already fixed)
-- [!] SEC-05 — Bank credentials stored/exported as plaintext (accepted risk, by design — needs a decision)
+- [x] SEC-05 — Bank credentials stored/exported as plaintext — decision made and built: opt-in, zero-knowledge client-side encryption for `accounts.username`/`password`/`access_notes`, migration **0042_vault_encryption.sql**. A user turns it on in Settings → Account, sets a master password (never sent to or stored by the server — only a random salt + a small verification value are), and the three fields are encrypted client-side (AES-GCM via the browser's Web Crypto API) before ever reaching the server. Scoped deliberately to just these three fields — nothing else server-side reads them (no cron job, dashboard, alert, search, or shared-data sync touches them), which is what makes this safe to ship without redesigning any other feature. Off by default; existing/new plaintext data (including anything added via spreadsheet import, which can't reach the browser key) is caught up via a repeatable "Encrypt any unprotected logins" action. Turning it back off decrypts everything back to plaintext first. No admin override and no backup/restore path can recover this if the master password is forgotten — surfaced as an explicit, hard-to-miss warning before it can be turned on. See `TODO.md` for the migration.
 - [x] SEC-06 — Backups email an unencrypted archive (same root cause as SEC-05) — fixed without touching the root cause: the weekly backup email no longer attaches the raw zip at all. It's still built and stored the same as before (private Storage bucket), and the email now just links to the already-existing, already-authenticated Admin → Users → Backups panel to download it. This removes the email/inbox/mail-sync/forwarding copies of the data entirely rather than trying to encrypt an attachment nobody has a secure way to decrypt.
 - [x] SEC-07 — Next.js version affected by current advisories — fixed: bumped `15.5.4` → `15.5.21`, past both `GHSA-m99w-x7hq-7vfj` and `GHSA-955p-x3mx-jcvp`'s patched line.
 - [x] SEC-08 — 5 known transitive package vulnerabilities — rechecked after SEC-07: same count/severity remains (all in build-time-only transitive deps, not exploitable at runtime — see prior audit note not to force `npm audit fix --force`, which downgrades Next).
@@ -179,21 +179,44 @@ Investigated SEC-09 and closed it as a non-issue (the limit already matches a re
 nothing to narrow). Investigated SEC-16 and found its real-world impact already substantially reduced
 by an existing owner setting (password login disabled at the Supabase project level) — left open since
 the code-level gap itself is unchanged. SEC-05 (the root cause of both SEC-05 and SEC-06) and SEC-03
-(fail-open vs. fail-closed authorization) are still open pending the user's decision — see below.
+(fail-open vs. fail-closed authorization) were left open pending the user's decision at the end of this
+round — see Round 7 below for how SEC-05 was resolved.
 Deliberately left broader, more systemic findings (DATA-01/02/05/09/10/15/17-20/22, INT-04/05/06/11/12,
 all of Part 4 except REL-04's timeout half, most of Part 3, GAP-02/03) for future rounds — see below.
+**Round 7 (SEC-05 decided and built, same day)**: talked through the tradeoffs with the user —
+full app-wide encryption is architecturally incompatible with cron-based fee/interest accrual,
+dashboard/alert aggregation, search, and shared-data sync; a plain "don't store real passwords here"
+warning was considered and set aside — the user chose real, opt-in, zero-knowledge encryption scoped
+to just the three login-credential fields, since nothing server-side needs to read them. Built:
+migration 0042, `lib/vaultCrypto.ts` (Web Crypto AES-GCM + PBKDF2, verified via a standalone Node
+round-trip test — encrypt/decrypt, wrong-password rejection, check-value verification, fresh IV per
+call all confirmed), `VaultKeyProvider`/`VaultUnlockPrompt`/`VaultEncryptionCard` components, and
+wiring into `AccountModal.tsx`'s Online access section. Two real bugs found and fixed via CDP browser
+testing along the way (both React 18 Strict Mode double-invoke interactions, not caught by the pure
+crypto test since they were React-effect bugs, not crypto bugs): (1) `VaultKeyProvider`'s prop-sync
+effect cleared the just-adopted key on almost every `router.refresh()`, forcing an immediate re-entry
+of the password the user had just chosen — fixed by only invalidating on a genuinely different new
+salt, not a transitional/stale one; (2) `AccountModal`'s decrypt-on-unlock effect gated the state
+write on a `cancelled` flag that Strict Mode's double-invoke always set for the one run that actually
+decrypted, silently discarding the result every time and leaving raw ciphertext visible in the
+fields — fixed by removing that gate, since `decryptedOnceRef` already guarantees the async work only
+ever runs once. Full flow (enable → encrypt-on-save → lock → unlock prompt with no data leak →
+inline unlock → hard-reload re-lock → mobile layout → disable/decrypt-back) verified clean via CDP
+browser automation after both fixes. SEC-05 marked `[x]` above.
 
 *(This file is updated as work proceeds — counts above will move.)*
 
 ## What's still pending
 
 - ~~Migrations 0040 and 0041~~ — both confirmed run by the user. SEC-01 (Critical) is now fully
-  closed, and the DATA-03/DATA-08 row-lock and atomic-branch-refresh fixes are live. No migrations
-  pending right now — everything fixed across every round so far is either pure code (already live
-  on deploy) or a migration that's confirmed applied.
-- 11 more Part 1 (Security) findings are open but each needs a decision from the user before fixing —
-  see the `[!]` items above (SEC-03, 05, 06, 09, 10, 11, 15, 16, 17, 20, 22 — several of these are
-  genuinely low-priority or accepted-risk-by-design, not all equally urgent).
+  closed, and the DATA-03/DATA-08 row-lock and atomic-branch-refresh fixes are live.
+- **Migration 0042_vault_encryption.sql needs to be run** — adds `profiles.vault_encryption_enabled`/
+  `vault_salt`/`vault_check`. Until it's run, the Settings → Account "Vault encryption" card degrades
+  gracefully (feature just isn't offered — `saveVaultSettings` returns a friendly "run the migration"
+  error if someone tries).
+- 7 more Part 1 (Security) findings are open but each needs a decision from the user before fixing —
+  see the `[!]` items above (SEC-03, 11, 15, 16, 17, 20, 22 — several of these are genuinely
+  low-priority or accepted-risk-by-design, not all equally urgent).
 - 52 findings remain open. Most of what's left is broader/systemic rather than a single clean fix:
   DATA-18/DATA-19 (pagination + validation patterns spanning "most Server Actions" — needs a scoping
   decision, not just code), INT-04/INT-05/INT-06 (soft-delete-state consistency across many call

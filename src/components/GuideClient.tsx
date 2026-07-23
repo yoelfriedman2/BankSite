@@ -373,10 +373,11 @@ const TOPICS: Topic[] = [
       "Profile: display name & account holder names",
       "Alerts & emails: dormancy window, minimum balance, which Needs-attention alerts are on, which emails you get",
       "Your data: full backup or spreadsheet export",
-      "Account: sign out everywhere, feedback, delete your account",
+      "Account: sign out everywhere, feedback, delete your account, optional encryption for saved logins",
     ],
     tips: [
       "Every Needs-attention alert (no activity, low balance, CD maturing) can be turned off individually, and your minimum balance defaults to $100 but is yours to change.",
+      "Want to encrypt the usernames/passwords you've saved on your accounts? Turn on Vault encryption under Settings → Account with a master password only you know — nobody else can read that data, but there's also no way to recover it if you forget the password, so it's worth a second thought before turning on.",
       "Deleting your account removes everything, including your uploaded documents — export a backup first if you want a copy.",
     ],
   },

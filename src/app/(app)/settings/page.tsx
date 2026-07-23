@@ -23,6 +23,7 @@ export default async function SettingsPage() {
         minBalance={p.min_balance ?? 100}
         lastSignInAt={null}
         isOwner={isOwnerEmail(DEMO_USER.email)}
+        vaultEnabled={!!p.vault_encryption_enabled}
       />
     );
   }
@@ -58,6 +59,7 @@ export default async function SettingsPage() {
       minBalance={profile?.min_balance != null ? Number(profile.min_balance) : 100}
       lastSignInAt={user?.last_sign_in_at ?? null}
       isOwner={isOwnerEmail(user.email)}
+      vaultEnabled={!!profile?.vault_encryption_enabled}
     />
   );
 }

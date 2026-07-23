@@ -21,6 +21,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-07-23",
+    title: "Optional encryption for saved bank logins",
+    items: [
+      "In Settings → Account, you can now turn on encryption for any usernames, passwords, and access notes you've saved on your accounts, protected by a master password only you know.",
+      "It's zero-knowledge: the password never leaves your browser, and nobody — including the app owner — can read that data without it. There's a clear warning up front, because it also means there's no reset if you forget it.",
+      "Once turned on, you'll unlock it with your master password once per browser session (closing the tab locks it again). Everything else about your accounts — balances, banks, notes — is unaffected either way.",
+    ],
+  },
+  {
     date: "2026-07-17",
     title: "Find banks near any address",
     items: [

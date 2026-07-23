@@ -174,6 +174,110 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-23 (external audit — round 7: SEC-05 decided and built — opt-in vault encryption)** —
+Direct continuation of round 6, same day: with the security findings triaged and SEC-05 (plaintext
+bank credentials) and SEC-03 (fail-open authorization) left as the two remaining decisions, the user
+walked through the SEC-05 tradeoffs in chat. Ruled out full app-wide encryption first — it's
+architecturally incompatible with several existing features that need server-side plaintext access
+(the cron's automatic monthly fee/interest accrual runs with no user present to supply a key;
+dashboard/alert aggregation and search need real values; FDIC/holding-company sync writes one shared
+value across every user's copy of a bank, which can't work if each copy is separately encrypted) —
+and a plain "don't store real passwords here" warning label was floated as a simpler alternative. The
+user chose the real option: opt-in, zero-knowledge encryption scoped to just the three login-
+credential fields on `accounts` (`username`, `password`, `access_notes`), since — unlike balances or
+shared bank data — nothing server-side ever needs to read those three, which is exactly what makes
+real client-side encryption safe to ship here without touching any other feature.
+
+- **Migration `0042_vault_encryption.sql`**: adds `profiles.vault_encryption_enabled` (default
+  `false`), `vault_salt`, `vault_check` — all additive/nullable/safe-default. **Not yet run — see
+  TODO.md.** Degrades gracefully until then: the Settings card just isn't offered, and the save
+  action returns a friendly "run the migration" error if reached anyway.
+- **`src/lib/vaultCrypto.ts`** (new, browser-only — never import from a `"use server"` file): AES-GCM
+  encryption via the native Web Crypto API, key derived from the user's password + a random salt via
+  PBKDF2 (300,000 iterations). Ciphertext is a self-describing JSON string (`{v:1, iv, ct}`) so any
+  code path can tell ciphertext apart from legacy/unencrypted plaintext without needing to trust the
+  `vault_encryption_enabled` flag being perfectly in sync — a value is self-describing regardless of
+  the current setting. A small "check" value (a fixed string encrypted with the derived key) lets a
+  re-entered password be confirmed correct or rejected with a clear error, without needing any real
+  vault data to exist yet. The master password itself is never sent to or stored by the server in any
+  form — only the salt and check value are, and neither is secret.
+- **`src/components/VaultKeyProvider.tsx`** (new): holds the derived key in React context, in memory
+  only, for the current browser tab/session — no localStorage/sessionStorage/cookie, so closing the
+  tab or a hard reload always re-locks it. Mounted in `(app)/layout.tsx`, wrapping the whole app shell
+  (same level as `SideNav`/`TopNav`), fed `vault_encryption_enabled`/`vault_salt`/`vault_check` as
+  props from a `profiles` query — queried as a **separate** call from the rest of the layout's
+  profile lookup, same "a missing migration can't break something else on the page" pattern already
+  used for the access gate right above it in the same file.
+- **`src/components/VaultEncryptionCard.tsx`** (new, rendered in `SettingsForm.tsx`'s Account tab):
+  the enable flow requires typing "ENCRYPT" past an explicit, blunt warning (forgetting the password
+  means that data is gone permanently — no admin override, no backup/restore path, because the server
+  never had anything to recover) before setting a master password; on submit it generates a salt,
+  derives a key, and does a one-time client-side pass re-encrypting any of the user's existing
+  plaintext login fields. Also exposes "Encrypt any unprotected logins" (repeatable — catches data
+  added after the fact, e.g. via spreadsheet import, which writes plaintext directly server-side and
+  has no way to reach the browser's key) and a disable flow (decrypts everything back to plaintext
+  first, then clears the salt/check/enabled flag).
+- **`AccountModal.tsx`**: when the vault is active, the "Online access" section (login URL/username/
+  password/access notes) is gated behind `VaultUnlockPrompt` until unlocked this session — no
+  ciphertext is ever rendered into a text field. Once unlocked, fields decrypt for editing and
+  re-encrypt on save automatically. `AccountViewModal.tsx` needed no changes — it never displayed
+  these fields to begin with.
+- **`accounts/actions.ts`**: new `getMyAccountVaultFields`/`updateAccountVaultFields` — the server's
+  role is purely moving opaque strings around (fetch the current value, write back whatever the
+  client computed); it never decrypts anything itself. **`settings/actions.ts`**: new
+  `saveVaultSettings` writes the profile's three new columns via the ordinary RLS-scoped client (not
+  `createAdminClient` — a user setting their own vault preference is exactly the kind of write that
+  belongs on the normal per-user path).
+
+**Two real bugs found via CDP browser testing, both React 18 Strict Mode double-invoke interactions**
+— neither was caught by an initial standalone Node script that verified the crypto module itself
+(encrypt/decrypt round-trip, wrong-password rejection, check-value verification, fresh IV every call
+all passed cleanly first try), because both were bugs in the *React effect* wiring around the crypto,
+not in the crypto:
+1. `VaultKeyProvider`'s prop-sync effect unconditionally cleared the held key whenever its
+   `salt`/`enabled`/`check` props changed at all — but enabling encryption itself changes salt from
+   `null` to a real value and then calls `router.refresh()` to pick that up, so the very act of
+   enabling immediately re-locked the key `adoptKey()` had just handed it, forcing the user to
+   re-enter the password they'd just chosen. Fixed by only invalidating when the incoming salt is a
+   genuinely different *real* value than the one the held key was derived for — a transitional/stale
+   `null` (a possible race between `adoptKey()` and `router.refresh()` actually resolving fresh props)
+   no longer clears it; an actual disable already clears the key explicitly via `lock()` at the point
+   it happens, so this doesn't rely on inferring disablement from a possibly-stale prop.
+2. `AccountModal`'s decrypt-on-unlock effect used a `cancelled` closure flag (the standard "ignore a
+   stale async result" pattern) to gate *both* the loading-spinner reset and the actual decrypted-
+   value write. But the effect is also guarded by a `decryptedOnceRef` to ensure the real decrypt work
+   only ever starts once per modal instance — and under Strict Mode's dev-only double-invoke (mount →
+   cleanup → mount again), the *first* invocation is the one that does the real work and gets marked
+   `cancelled` by the simulated cleanup, while the *second* invocation sees the ref already set and
+   no-ops entirely. Gating the value-write on `!cancelled` meant the one and only successful decrypt
+   result was silently discarded every time — fields stayed showing raw ciphertext forever (or the
+   loading spinner stuck permanently `true`, for the same reason, until the first fix above). Since
+   `decryptedOnceRef` already guarantees there's no scenario where a second overlapping run could make
+   an in-flight result stale, the `cancelled` gate was solving a problem that can't happen in this
+   specific once-only pattern, while actively causing one — fixed by applying the result
+   unconditionally.
+
+**Verification**: `tsc --noEmit` and `npm run build` both clean. `vaultCrypto.ts` verified in
+isolation via a standalone Node script (Node's `crypto.webcrypto` matches the browser's `crypto.subtle`
+API) — round-trip correctness, wrong-key rejection, check-value accept/reject, and fresh-IV-per-call
+all confirmed. Full flow verified via a hand-rolled CDP driver (same approach as prior sessions —
+Playwright is blocked by this sandbox's npm policy) against DEMO_MODE: enable (with the real warning/
+confirm-phrase/password-setup steps), staying unlocked across real in-app client-side navigation
+(not just a page reload), typing and saving a new login and having it round-trip correctly through
+encrypt-on-save and decrypt-on-load, locking from Settings and confirming the account editor shows
+only the unlock prompt with zero ciphertext ever rendered into an input, inline unlocking from inside
+the account modal, a genuine hard page reload correctly re-locking the vault (proving the key never
+touches disk), no mobile overflow (375px) on either the Settings card or the account modal's new
+vault UI, and disabling correctly decrypting saved data back to plaintext. Getting a clean run took
+several iterations — most early "failures" turned out to be test-harness issues (a stale dev server
+still bound to the port from an earlier restart attempt serving requests instead of a fresh one,
+first-hit-on-a-cold-server compile timing, and a test script that didn't handle the "already enabled
+from a previous run" starting state) rather than app bugs, each traced down by direct DOM/process
+inspection before concluding a fix was or wasn't needed — but the two bugs described above were real,
+reproduced consistently across multiple clean runs, and are now fixed and re-verified. Added a
+changelog entry (genuinely new, user-visible, opt-in feature) and a Guide tip under Settings; skipped
+for SEC-03, which remains open pending the user's decision.
+
 **2026-07-23 (external audit — round 6: back to Part 1 Security, at the user's request)** — User asked
 to hear the biggest remaining security issues and tackle them, after previously saying decisions could
 wait. Read all 11 remaining `[!]` Security findings in full, ranked them by the audit's own severity
