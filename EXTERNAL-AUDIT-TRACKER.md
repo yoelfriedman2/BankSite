@@ -216,6 +216,16 @@ everywhere it already existed. Deliberately left `fdic-sync/actions.ts#canApplyF
 separate fail-open (a revoked FDIC-admin role holder could still apply changes if its access_status
 query errors) out of this round — narrower privilege-check, not "into the app," flagged for the user
 as a related but distinct item. SEC-03 marked `[x]` above.
+**Round 9 (closing the adjacent fail-open flagged in round 8)**: user asked for the next security
+fix that doesn't need a decision. Every remaining `[!]` Part 1 item genuinely needs one (session
+policy, MFA setup, a redesign that can't be verified in this sandbox, rewriting migration history,
+removing a feature, a separate CI initiative) — the one ready item was the `canApplyFdicChanges`
+fail-open flagged and deliberately set aside in round 8. Fixed the same way as SEC-03: `if (error)
+return true;` → `if (error || !access || access.access_status !== "approved") return false;`. This
+is the real enforcement gate behind all 6 FDIC-sync apply actions (rename/website/assets/city-state/
+delete-closed-bank), not just the UI's show/hide-button check, so this closes a real path where a
+revoked FDIC-admin could keep applying shared-data changes on a DB hiccup. Not one of the audit's
+100 numbered findings (found while fixing SEC-03) — no new `[!]`/`[x]` line added above.
 
 *(This file is updated as work proceeds — counts above will move.)*
 

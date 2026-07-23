@@ -26,8 +26,11 @@ async function currentUser(): Promise<User | null> {
  *  an approved user (migration 0036) — a role granted before someone was denied
  *  access must not keep working after the denial. Queried as a separate call
  *  from is_fdic_admin (same pattern as admin/actions.ts's user list) so a
- *  missing access_status column (migration 0036 not run yet) fails OPEN on
- *  just this check, instead of also breaking is_fdic_admin lookups. */
+ *  missing access_status column can't also break is_fdic_admin lookups. Fails
+ *  CLOSED on that query: an error, missing row, or non-"approved" status all
+ *  deny — same reasoning as lib/access.ts#getApprovedUser (every migration is
+ *  confirmed applied in production, so a query error here means something is
+ *  genuinely wrong, not "the migration hasn't run yet"). */
 async function canApplyFdicChanges(user: User | null): Promise<boolean> {
   if (!user) return false;
   const adminEmail = process.env.ADMIN_EMAIL;
@@ -41,8 +44,7 @@ async function canApplyFdicChanges(user: User | null): Promise<boolean> {
     .select("access_status")
     .eq("id", user.id)
     .maybeSingle();
-  if (error) return true; // column missing → fail open (migration not run yet)
-  if (access?.access_status && access.access_status !== "approved") return false;
+  if (error || !access || access.access_status !== "approved") return false;
   return true;
 }
 

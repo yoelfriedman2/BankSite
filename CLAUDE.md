@@ -174,6 +174,31 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-23 (external audit — round 9: closed the adjacent fail-open flagged in round 8)** — User
+asked for the next security fix that doesn't need a decision from them. Checked every remaining `[!]`
+Part 1 item in `EXTERNAL-AUDIT-TRACKER.md`: all six genuinely need one (SEC-11 session-timeout policy,
+SEC-15 MFA setup, SEC-16 a redesign this sandbox can't verify against a live Supabase project, SEC-17
+rewriting migration history, SEC-20 removing a feature, SEC-22 a separate CI initiative). The one
+ready-to-go item was `fdic-sync/actions.ts#canApplyFdicChanges`'s fail-open, spotted and deliberately
+set aside while fixing SEC-03 in round 8 (narrower scope — a role-revocation check, not "into the app
+at all" — so it wasn't folded into that round without asking first).
+
+Same fix shape as SEC-03: was `if (error) return true; // column missing → fail open`; now
+`if (error || !access || access.access_status !== "approved") return false;`. This function is the
+*real* enforcement behind all 6 FDIC-sync apply actions (rename/website/assets/city-state/
+delete-closed-bank/accept-all-assets) — `getFdicPermissions()` (which only controls whether the
+Accept buttons render) was never the actual gate, per its own docblock ("never trust this alone").
+So this closes a real path: a user who *was* granted the FDIC-admin role but has since been denied
+access could previously keep applying changes to the shared bank list as long as the follow-up
+`access_status` re-check happened to error.
+
+**Verification**: `tsc --noEmit` and `npm run build` both clean. Confirmed via `grep` that no
+`fail open`/`fails open` pattern remains anywhere in `src/`. Same limitation as round 8 — this path
+is real-Supabase-admin-client-dependent and DEMO_MODE special-cases around FDIC-sync permission
+checks entirely, so it's not click-testable here; verified by reading the change against the
+original code and confirming it's a narrow, additive tightening with no alteration to the
+already-correct `is_fdic_admin` / owner-bypass logic above it in the same function.
+
 **2026-07-23 (external audit — round 8: SEC-03 decided and built — fail-closed authorization)** —
 Direct follow-up to round 7, next session turn: user asked whether the fail-open→fail-closed change
 discussed back in round 6 had already been made. It hadn't — round 6 only got as far as agreeing on
