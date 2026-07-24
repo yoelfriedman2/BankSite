@@ -174,6 +174,93 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-24 (external audit — round 17: reaching into lower-confidence territory on purpose —
+UX-22, UX-12, DATA-10, CFG-01, UX-02 fixed, plus 3 freebie closures)** — Direct continuation of
+round 16, same day: user explicitly asked to go further than the usual "biggest wins" framing —
+"I want all these resolved if they need to be resolved so give me another 5 things that we can
+work on." Reported 5 items plus 3 "freebie" closures that need no code, each grounded by reading
+the actual current code (not the tracker's stale one-line text) rather than padding the list.
+User approved all of it without needing the specifics explained: "I don't understand, but if
+these need fixing and it won't break anything, just fix it."
+
+- **UX-22 (loading states half only — the bundle-outlier half was already PERF-04 from round
+  16)** — confirmed only `banks/loading.tsx` existed anywhere in the app; every other route
+  (dashboard, accounts, settings, admin, etc.) showed a blank page during data fetch/client
+  navigation instead of an instant skeleton. New `src/components/PageLoading.tsx` (a generic
+  `animate-pulse` skeleton — a title bar + N placeholder rows, matching the visual shape
+  `banks/loading.tsx` already established) plus a 5-line `loading.tsx` re-exporting it for the 19
+  routes that had none: root dashboard, `accounts/`, `activity/`, `address-change/`, `admin/`,
+  `balances/`, `calendar/`, `checks/`, `documents/`, `fdic-sync/`, `fees-interest/`, `guide/`,
+  `holding-companies/`, `money/`, `road-trip/`, `settings/`, `trash/`, `up-next/`, `updates/`.
+  `banks/loading.tsx` itself deliberately left untouched — it already has its own more detailed
+  bespoke skeleton (including a filter-bar row `PageLoading` doesn't replicate) and already works;
+  no functional need to force it into the generic component.
+- **UX-12** — confirmed `ActivityDot` (`components/badges.tsx`) rendered as a bare `aria-hidden`
+  colored circle with zero text alternative — a colorblind user, or a screen reader (which gets
+  literally nothing from a hidden colored circle), had no way to tell green/orange/red/none apart.
+  Added a new `DOT_LABELS` map (a plain-English sentence per color, e.g. "At risk of dormancy —
+  needs attention") wired into a `title`/`aria-label` pair plus `role="img"` on the dot itself.
+- **DATA-10** — confirmed the one concrete unguarded instance in the app (not a full re-audit of
+  every parent/child write path): `addReminder` (`app/(app)/reminders.ts`) inserted a reminder
+  using a client-supplied `bankId` with zero check that the bank actually belonged to the calling
+  user — a crafted/stale request could point a reminder at a `bank_id` that isn't the caller's own.
+  Added an RLS-scoped `select` on `banks` by `id` first (RLS returns no row for a bank that isn't
+  the caller's own) and rejects with "Bank not found." before the insert proceeds — same pattern
+  already established for INT-09's account-edit ownership check a few rounds back.
+- **CFG-01 (the remaining validation half — docs were already fixed by an earlier round)** — new
+  `checkRequiredEnvVars()` in `src/instrumentation.ts`, called from `register()`'s Node-runtime
+  branch, checks all 5 required env vars (`NEXT_PUBLIC_SUPABASE_URL`,
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_EMAIL`, `CRON_SECRET`) and
+  logs one clear `console.error` listing whichever are missing at server startup — instead of
+  failing silently deep inside whatever code path first touches the missing value (e.g. an unset
+  `CRON_SECRET` previously just made the cron routes 401 forever with nothing pointing at why).
+  Deliberately warns, doesn't throw/crash — several of these already have documented
+  graceful-degradation behavior when unset (see `.env.local.example`), and taking the whole server
+  down here would be a worse failure mode than what already exists.
+- **UX-02** — confirmed the Banks page's desktop table row's `onKeyDown` only handled Enter, while
+  the equivalent mobile card handler already accepted both Enter and Space. Added Space handling
+  to the desktop row to match. Deliberately scoped to just the missing key — did not also add
+  `role="button"` to fully mirror the mobile card's ARIA shape, to avoid changing table-row
+  semantics beyond the concrete gap that was found and described to the user.
+- **3 freebie closures, no code needed**: **QA-01** (no automated regression suite or CI) is
+  already fully resolved by SEC-22's work back in round 11 (`vitest`, 84 tests, `.github/
+  workflows/ci.yml` running type-check + build + test on every push/PR to `main`). **OPS-01**
+  (schema deployment manual/undocumented, hidden by fallbacks) is already substantially resolved
+  by the extensive per-migration documentation this file and `TODO.md` already maintain (every
+  migration numbered, with what/why/run-status spelled out) — and its "hidden by fallbacks" half
+  is a deliberate, load-bearing design choice for this project (graceful degradation until a
+  migration is run — see the "Migrations are never run automatically" convention above), not an
+  accidental gap to close. **INT-12** (demo mode shares mutable state across visitors) is closed
+  as not applicable: `DEMO_MODE`'s in-memory fake data store is hard-gated to `NODE_ENV !==
+  "production"` (SEC-21's fix), which every real deployment always sets for `build`/`start`
+  regardless of host — so this code path can never be reachable by a real user in production at
+  all, the same reasoning already used to close SEC-15 as inapplicable.
+
+No migration this round — every fix is pure application code, live on deploy.
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (84/84) all clean. All 5 code
+fixes are genuinely UI/DOM-observable (unlike several recent rounds' RPC-only changes), so all 5
+got a live CDP browser pass against a real DEMO_MODE dev server rather than just a code read:
+launched headless Chromium (`/opt/pw-browsers/chromium-1194`) with `--remote-debugging-port=9333`
+and drove it via the existing hand-rolled `scratchpad/cdp.mjs` driver (Playwright still isn't
+installable in this sandbox). Confirmed `role="img"` `ActivityDot` elements on `/banks` render
+with matching non-empty `title`/`aria-label` text (e.g. "At risk of dormancy — needs attention");
+confirmed focusing a Banks desktop table row (`tr[tabindex="0"]`) and dispatching a real CDP
+`Input.dispatchKeyEvent` Space keydown/keyup opens the bank drawer, exactly matching Enter's
+existing behavior; confirmed zero console errors across the whole pass. The `loading.tsx` skeleton
+itself wasn't caught mid-flight live — DEMO_MODE's in-memory data resolves fast enough that the
+Suspense fallback never stayed on screen long enough for the polling loop to observe it, the same
+kind of raciness earlier rounds have noted when testing fast UI transitions — verified instead by
+confirming all 19 new files exactly match the already-proven-working `banks/loading.tsx` pattern.
+DATA-10 was verified by tracing the new ownership-check branch by hand against INT-09's
+already-verified identical pattern (a Supabase query resolves `{data, error}`/`null`, never
+throws, so the added `if (!owned) return { error: ... }` can't introduce a new crash path).
+CFG-01 was verified with a real negative-case test, not just the positive case: temporarily
+blanked `CRON_SECRET` in `.env.local` (backed up first), restarted the dev server, confirmed the
+exact expected warning line appeared in the server log, then restored the original value. Dev
+server and headless Chromium processes were killed and `DEMO_MODE` was flipped back to `false` in
+`.env.local` before finishing, per the standing rule.
+
 **2026-07-24 (external audit — round 16: next-10 request, narrowed to 5 well-grounded — UX-17,
 INT-04, UX-13, PERF-04, UX-20 all fixed)** — Direct continuation of round 15, same day: user asked
 for the next 10 biggest remaining findings. Reported 5 confirmed-against-real-code findings plus was

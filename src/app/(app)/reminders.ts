@@ -75,6 +75,13 @@ export async function addReminder(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
+  // Ownership check: RLS returns a row only if this bank is the caller's own
+  // (DATA-10) — without this, a reminder could be inserted pointing at a
+  // bank_id that isn't actually this user's, same class of gap already
+  // closed for accounts/documents elsewhere in the app.
+  const { data: owned } = await supabase.from("banks").select("id").eq("id", bankId).maybeSingle();
+  if (!owned) return { error: "Bank not found." };
+
   const { error } = await supabase
     .from("reminders")
     .insert({ user_id: user.id, bank_id: bankId, note: text, due_date: dueDate });

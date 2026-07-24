@@ -903,7 +903,9 @@ export function BanksClient({
                     key={b.id}
                     onClick={() => openBank(b)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") {
+                      // Space wasn't handled here, only on the mobile card
+                      // version of this same row (UX-02) — added to match.
+                      if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
                         openBank(b);
                       }

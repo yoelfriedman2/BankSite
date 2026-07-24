@@ -66,11 +66,23 @@ const DOT_STYLES: Record<ActivityLevel, string> = {
   none: "bg-slate-300",
 };
 
+// Plain-English meaning behind each color, so the dot isn't color-only
+// (UX-12) — a colorblind user (or a screen reader, which otherwise gets
+// nothing from a bare colored circle) has no other way to tell these apart.
+const DOT_LABELS: Record<ActivityLevel, string> = {
+  green: "Active — plenty of time before dormancy",
+  orange: "Getting close to dormancy — check in soon",
+  red: "At risk of dormancy — needs attention",
+  none: "Dormancy tracking doesn't apply to this account",
+};
+
 export function ActivityDot({ level }: { level: ActivityLevel }) {
   return (
     <span
       className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${DOT_STYLES[level]}`}
-      aria-hidden
+      title={DOT_LABELS[level]}
+      aria-label={DOT_LABELS[level]}
+      role="img"
     />
   );
 }
