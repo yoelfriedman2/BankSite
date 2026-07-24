@@ -174,6 +174,84 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-24 (external audit — round 12: DATA-01 and DATA-02 fixed — both remaining High-severity
+findings now closed)** — Direct continuation of round 11, same day: with all 22 Part 1 Security
+findings resolved, user asked what the next biggest thing to fix was. DATA-01 and DATA-02 were the
+only two remaining High-severity findings anywhere in the 100-item tracker (every other open item is
+Medium/Low). User asked to fix both, explicitly conditioned on confirming neither could break
+anything live, and asked whether the CI built in round 11 runs automatically on every push (confirmed
+yes — `.github/workflows/ci.yml` triggers on every push/PR to `main`, no manual trigger needed).
+
+Investigated both findings' actual current scope before writing any code, rather than trusting the
+tracker's original description — several sub-issues each one originally described had already been
+narrowed or closed by earlier rounds (migration 0039 already added `account_balance_history`'s
+`created_at` tiebreaker; earlier fixes to `money/actions.ts` and import already closed the
+duplicate-write sub-cases DATA-02 originally flagged) — and reported the narrower real scope back
+before starting.
+
+- **DATA-01 — shared bank data propagation had a soft-delete bug that could silently fail an entire
+  batch.** `upsertBank`'s "does this recipient already have a copy of this bank?" check
+  (`app/(app)/banks/actions.ts`) filtered on `deleted_at is null`, so a family member whose copy of a
+  bank was sitting in Trash was invisible to it two ways at once: the shared-field propagation UPDATE
+  (meant for every other user) silently skipped them, **and** the multi-row INSERT meant to create
+  fresh copies for "everyone still missing one" tried to insert a duplicate row for them too — which,
+  since a trashed row already occupies that `(user_id, cert)` unique constraint, fails. Since it's one
+  batched `.insert()` call for every recipient, that one conflict could fail the *entire insert*,
+  silently dropping the bank from every other genuinely-new recipient in the same call too — not just
+  the trashed user. Fixed by querying `deleted_at` unfiltered, splitting into active/trashed recipient
+  sets, excluding trashed users from the insert entirely, and adding a separate UPDATE that refreshes
+  a trashed user's copy's shared fields without touching `deleted_at` (so it stays in their Trash,
+  just with current data whenever they do restore it). The existing propagation UPDATE for
+  already-active copies also had its `deleted_at is null` filter removed for the same reason. Neither
+  the insert nor the propagation UPDATE checked its own error before this round — both now do, logged
+  via `console.error`. `importBanks`'s bulk balance-history insert got the same error-check treatment
+  while in the same file. No migration — pure application code, live on deploy.
+- **DATA-02 — balance and its history trail could silently drift apart.** A live read-only snapshot
+  confirmed the real scale: 356 of 425 accounts had a current balance but zero `account_balance_
+  history` rows. Root cause: every balance-changing code path (manual edit in the account editor,
+  cron monthly-fee charge, cron interest credit) did the accounts UPDATE and the history INSERT as two
+  separate, previously-unchecked calls — a failure (or a dropped connection) between them, or a
+  silently-failing insert, leaves the balance changed with nothing recorded about why. New migration
+  **`0043_atomic_balance_history.sql`**: `charge_monthly_fee_with_history` /
+  `credit_monthly_interest_with_history` do the balance update and the history insert inside one
+  Postgres function call (one call is always one transaction), so the pair can no longer drift apart.
+  **Deliberately new function names, not `create or replace` on 0039's existing `charge_monthly_fee`/
+  `credit_monthly_interest`** — 0039 is already confirmed deployed, and the plan was for app code to
+  stop doing its own separate history insert once it calls the "does it all" function; reusing 0039's
+  names would mean that if 0043 hadn't been run yet, the *old* 0039 function body (balance-only) would
+  still be what's live — RPC succeeds, no history written, and app code (having dropped its own
+  insert) doesn't write it either, a real regression during the gap between shipping and the user
+  running the migration. New names sidestep that risk entirely: an un-run migration just means "RPC
+  not found," a clean, detectable failure the existing fallback already handles. Also added
+  `update_account_balance` for the account editor's manual-edit path, which had no atomic function at
+  all before this (it predates even 0039). The cron route (`api/cron/reminders`) now has a genuine
+  three-tier fallback for both the fee and interest sections: try the new atomic-with-history RPC →
+  on error, fall back to 0039's atomic-balance-only RPC (now with its previously-unchecked follow-up
+  history insert error-checked and logged) → on error, fall back to the original pre-0039 plain
+  two-step update (history insert now also checked). Each tier is already-proven-safe, so this can
+  never regress below what already worked, regardless of which migrations are or aren't run yet.
+  `upsertAccount`'s edit path (`app/(app)/accounts/actions.ts`) does the analogous thing: when the
+  submitted balance is actually changing, it's excluded from the main patch object and applied via
+  `update_account_balance` instead (falling back to the original direct `.update()` + a now-checked
+  history insert on RPC error) — deliberately *not* included in both the main patch and the RPC call
+  at once, since that would double-apply the change and corrupt the RPC's own before/after delta.
+  Every other previously-unchecked balance-history insert found while in these files (account
+  create, `duplicateAccount`) also gained error checking.
+  **Explicitly does not backfill the 356 already-missing history rows** — asked the user via
+  `AskUserQuestion` whether to backfill a "starting balance" row for each from today's current
+  balance; **user chose not to** ("No, leave it") — scope stayed "stop it from happening again," zero
+  existing production data touched. **Needs migration 0043 run — see below.**
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (84/84 passing) all clean — the
+first round to actually lean on the CI/test investment from round 11 rather than only manual
+reasoning. Both fixes are real-Supabase-RPC-dependent (DEMO_MODE bypasses this whole code path by
+design, same limitation as every other RPC/RLS-dependent fix this project has shipped) — not
+click-testable here; verified instead by reading every changed branch by hand against both "migration
+run" and "migration not yet run" inputs, confirming each fallback tier degrades to exactly the
+previously-working behavior with nothing new required to keep the app working. Skipped changelog/
+Guide — both are internal data-integrity/security fixes with no new user-visible feature, per the
+standing features-only policy.
+
 **2026-07-24 (external audit — round 11: SEC-15/16/17/20/22 all decided — Part 1 Security is now
 100% resolved, all 22 findings)** — User went through the remaining 5 findings one at a time and made
 a real call on each:

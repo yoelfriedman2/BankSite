@@ -207,12 +207,14 @@ export async function GET(req: NextRequest) {
       }
       const oldBalance = Number(a.balance);
 
-      // Atomic delta update via RPC (migration 0039) — a guarded single
-      // UPDATE that Postgres runs atomically, closing the read-then-write
-      // window the old JS-computed version had. Falls back to that same old
-      // approach for any RPC error (not deployed yet, or anything else
-      // unexpected), so this can never regress below what already worked.
-      const { data: rpcBalance, error: rpcErr } = await admin.rpc("charge_monthly_fee", {
+      // Atomic balance-update-AND-history-write via RPC (migration 0043) —
+      // one function call is one transaction, so the two can't drift apart
+      // (DATA-02). Falls back through two more tiers, each already proven
+      // safe in production, so this can never regress below what already
+      // worked: first 0039's atomic-balance-only function (still calls out
+      // to a separate, now error-checked history insert), then — if even
+      // that isn't deployed — today's original plain two-step update.
+      const { data: rpcBalance, error: rpcErr } = await admin.rpc("charge_monthly_fee_with_history", {
         p_account_id: a.id,
         p_amount: fee,
         p_charged_on: todayStr,
@@ -222,8 +224,24 @@ export async function GET(req: NextRequest) {
         // null result means the guard didn't match (e.g. a concurrent run
         // already charged this account this month) — nothing new to log.
         if (rpcBalance == null) continue;
-        const newBalance = Number(rpcBalance);
-        await admin.from("account_balance_history").insert({
+        feesCharged++;
+        continue;
+      }
+      console.warn(
+        `[cron/reminders] charge_monthly_fee_with_history RPC unavailable (migration 0043 not run yet?), falling back for account ${a.id}:`,
+        rpcErr.message,
+      );
+
+      const { data: rpcBalance2, error: rpcErr2 } = await admin.rpc("charge_monthly_fee", {
+        p_account_id: a.id,
+        p_amount: fee,
+        p_charged_on: todayStr,
+      });
+
+      if (!rpcErr2) {
+        if (rpcBalance2 == null) continue;
+        const newBalance = Number(rpcBalance2);
+        const { error: historyErr } = await admin.from("account_balance_history").insert({
           user_id: a.user_id,
           account_id: a.id,
           as_of_date: todayStr,
@@ -231,12 +249,15 @@ export async function GET(req: NextRequest) {
           change_amount: Number((-fee).toFixed(2)),
           reason: "monthly fee",
         });
+        if (historyErr) {
+          console.error(`[cron/reminders] monthly-fee history insert failed for account ${a.id}:`, historyErr.message);
+        }
         feesCharged++;
         continue;
       }
       console.warn(
         `[cron/reminders] charge_monthly_fee RPC unavailable (migration 0039 not run yet?), falling back for account ${a.id}:`,
-        rpcErr.message,
+        rpcErr2.message,
       );
 
       const newBalance = Number((oldBalance - fee).toFixed(2));
@@ -248,7 +269,7 @@ export async function GET(req: NextRequest) {
         console.error(`[cron/reminders] monthly fee charge failed for account ${a.id}:`, updateErr.message);
         continue;
       }
-      await admin.from("account_balance_history").insert({
+      const { error: historyErr2 } = await admin.from("account_balance_history").insert({
         user_id: a.user_id,
         account_id: a.id,
         as_of_date: todayStr,
@@ -256,6 +277,9 @@ export async function GET(req: NextRequest) {
         change_amount: Number((-fee).toFixed(2)),
         reason: "monthly fee",
       });
+      if (historyErr2) {
+        console.error(`[cron/reminders] monthly-fee history insert failed for account ${a.id}:`, historyErr2.message);
+      }
       feesCharged++;
     }
   }
@@ -300,10 +324,10 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
-      // Atomic delta update via RPC (migration 0039) — same shape as the
-      // monthly-fee section above, with the same fallback-on-any-error
-      // safety net so this can never regress below what already worked.
-      const { data: rpcBalance, error: rpcErr } = await admin.rpc("credit_monthly_interest", {
+      // Atomic balance-update-AND-history-write via RPC (migration 0043) —
+      // same shape and same three-tier fallback as the monthly-fee section
+      // above, so this can never regress below what already worked.
+      const { data: rpcBalance, error: rpcErr } = await admin.rpc("credit_monthly_interest_with_history", {
         p_account_id: a.id,
         p_amount: amount,
         p_credited_on: todayStr,
@@ -311,8 +335,24 @@ export async function GET(req: NextRequest) {
 
       if (!rpcErr) {
         if (rpcBalance == null) continue;
-        const newBalance = Number(rpcBalance);
-        await admin.from("account_balance_history").insert({
+        interestCredited++;
+        continue;
+      }
+      console.warn(
+        `[cron/reminders] credit_monthly_interest_with_history RPC unavailable (migration 0043 not run yet?), falling back for account ${a.id}:`,
+        rpcErr.message,
+      );
+
+      const { data: rpcBalance2, error: rpcErr2 } = await admin.rpc("credit_monthly_interest", {
+        p_account_id: a.id,
+        p_amount: amount,
+        p_credited_on: todayStr,
+      });
+
+      if (!rpcErr2) {
+        if (rpcBalance2 == null) continue;
+        const newBalance = Number(rpcBalance2);
+        const { error: historyErr } = await admin.from("account_balance_history").insert({
           user_id: a.user_id,
           account_id: a.id,
           as_of_date: todayStr,
@@ -320,12 +360,15 @@ export async function GET(req: NextRequest) {
           change_amount: amount,
           reason: "interest credited",
         });
+        if (historyErr) {
+          console.error(`[cron/reminders] interest history insert failed for account ${a.id}:`, historyErr.message);
+        }
         interestCredited++;
         continue;
       }
       console.warn(
         `[cron/reminders] credit_monthly_interest RPC unavailable (migration 0039 not run yet?), falling back for account ${a.id}:`,
-        rpcErr.message,
+        rpcErr2.message,
       );
 
       const newBalance = Number((oldBalance + amount).toFixed(2));
@@ -337,7 +380,7 @@ export async function GET(req: NextRequest) {
         console.error(`[cron/reminders] interest credit failed for account ${a.id}:`, updateErr.message);
         continue;
       }
-      await admin.from("account_balance_history").insert({
+      const { error: historyErr2 } = await admin.from("account_balance_history").insert({
         user_id: a.user_id,
         account_id: a.id,
         as_of_date: todayStr,
@@ -345,6 +388,9 @@ export async function GET(req: NextRequest) {
         change_amount: amount,
         reason: "interest credited",
       });
+      if (historyErr2) {
+        console.error(`[cron/reminders] interest history insert failed for account ${a.id}:`, historyErr2.message);
+      }
       interestCredited++;
     }
   }

@@ -268,34 +268,67 @@ export async function upsertBank(
     // For a new bank with a cert, add it (as untracked) to every other user who doesn't have it yet.
     if (patch.cert != null) {
       const admin = createAdminClient();
+      // DATA-01: deliberately NOT filtering by deleted_at here. A recipient
+      // with a *trashed* copy of this cert still occupies the unique
+      // (user_id, cert) key — the old version only looked at non-deleted
+      // rows, so it mistook "has a trashed copy" for "has no copy at all"
+      // and tried to INSERT a duplicate for them. Since toInsert below is one
+      // bulk insert call, that single conflicting row failed the *entire*
+      // batch — silently costing every other genuinely-new recipient their
+      // copy too, not just the one with the trashed row.
       const [{ data: otherProfiles }, { data: existingBanks }] = await Promise.all([
         admin.from("profiles").select("id").neq("id", user.id),
-        admin.from("banks").select("user_id").eq("cert", patch.cert).is("deleted_at", null),
+        admin.from("banks").select("user_id, deleted_at").eq("cert", patch.cert),
       ]);
-      const existingIds = new Set((existingBanks ?? []).map((b) => b.user_id as string));
+      const activeIds = new Set(
+        (existingBanks ?? []).filter((b) => !b.deleted_at).map((b) => b.user_id as string),
+      );
+      const trashedIds = new Set(
+        (existingBanks ?? []).filter((b) => b.deleted_at).map((b) => b.user_id as string),
+      );
+      const sharedFieldsForCert = {
+        name: patch.name,
+        city: patch.city,
+        state: patch.state,
+        assets: patch.assets,
+        holding_company: patch.holding_company,
+        open_methods: patch.open_methods,
+        eligibility: patch.eligibility,
+        eligibility_date: patch.eligibility_date,
+        branch_location: patch.branch_location,
+        phone: patch.phone,
+        website: patch.website,
+        min_to_open: patch.min_to_open,
+        conversion_stage: patch.conversion_stage,
+      };
       const toInsert = (otherProfiles ?? [])
-        .filter((p) => !existingIds.has(p.id as string))
+        .filter((p) => !activeIds.has(p.id as string) && !trashedIds.has(p.id as string))
         .map((p) => ({
           user_id: p.id,
           cert: patch.cert,
-          name: patch.name,
-          city: patch.city,
-          state: patch.state,
-          assets: patch.assets,
-          holding_company: patch.holding_company,
+          ...sharedFieldsForCert,
           regulator: null,
           status: "untracked",
-          open_methods: patch.open_methods,
-          eligibility: patch.eligibility,
-          eligibility_date: patch.eligibility_date,
-          branch_location: patch.branch_location,
-          phone: patch.phone,
-          website: patch.website,
-          min_to_open: patch.min_to_open,
-          conversion_stage: patch.conversion_stage,
         }));
       if (toInsert.length > 0) {
-        await admin.from("banks").insert(toInsert);
+        const { error: insertErr } = await admin.from("banks").insert(toInsert);
+        if (insertErr) {
+          console.error(`[upsertBank] propagating new bank cert=${patch.cert} to new recipients failed:`, insertErr.message);
+        }
+      }
+      // A recipient with a trashed copy keeps their own deleted_at as-is
+      // (they chose to trash it) — just refresh its shared reference data,
+      // same as the "update everyone else's active copy" propagation below,
+      // so it's already current whenever/if they restore it.
+      if (trashedIds.size > 0) {
+        const { error: trashedErr } = await admin
+          .from("banks")
+          .update(sharedFieldsForCert)
+          .eq("cert", patch.cert)
+          .in("user_id", Array.from(trashedIds));
+        if (trashedErr) {
+          console.error(`[upsertBank] refreshing trashed copies of cert=${patch.cert} failed:`, trashedErr.message);
+        }
       }
     }
   }
@@ -348,12 +381,20 @@ export async function upsertBank(
       shared_updated_summary: summary,
     };
     const admin = createAdminClient();
-    await admin
+    // DATA-01: deliberately not filtering out trashed copies here either — a
+    // family member who trashed this bank still has a row occupying the
+    // unique key, and leaving their copy's shared fields stale means it's
+    // already out of date the moment they restore it. Updating shared
+    // reference data on a soft-deleted row doesn't touch deleted_at itself,
+    // so it stays exactly as trashed as they left it.
+    const { error: propagateErr } = await admin
       .from("banks")
       .update(sharedPatch)
       .eq("cert", patch.cert)
-      .neq("user_id", user.id)
-      .is("deleted_at", null);
+      .neq("user_id", user.id);
+    if (propagateErr) {
+      console.error(`[upsertBank] propagating shared-field update for cert=${patch.cert} failed:`, propagateErr.message);
+    }
 
     await logAudit({
       actorId: user.id,
@@ -827,7 +868,10 @@ export async function importBanks(
         reason: "opening balance",
       }));
     if (historyRows.length) {
-      await supabase.from("account_balance_history").insert(historyRows);
+      const { error: historyErr } = await supabase.from("account_balance_history").insert(historyRows);
+      if (historyErr) {
+        console.error(`[importBanks] opening-balance history insert failed for ${historyRows.length} imported account(s):`, historyErr.message);
+      }
     }
   }
 

@@ -4,6 +4,16 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 
 ## One-time setup pending
 
+- **Run migration `0043_atomic_balance_history.sql`** — adds `charge_monthly_fee_with_history`,
+  `credit_monthly_interest_with_history`, and `update_account_balance` Postgres functions (DATA-02).
+  Fixes a real gap where a balance change and its `account_balance_history` record could silently
+  drift apart (356 of 425 accounts currently have a balance with zero history rows — this migration
+  does not backfill those, only stops new drift going forward, per an explicit decision not to touch
+  existing data). Degrades gracefully until run — every balance-changing path (cron fee/interest,
+  manual balance edits) automatically falls back to its exact prior behavior (0039's atomic-balance-
+  only RPC if deployed, otherwise the original plain two-step update), so nothing breaks either way;
+  running it just closes the window where a write failure could drop history silently.
+
 - **Run migration `0042_vault_encryption.sql`** — adds `profiles.vault_encryption_enabled`,
   `vault_salt`, `vault_check` (all additive/nullable/safe-default). Powers the new opt-in "Vault
   encryption" feature in Settings → Account (encrypts saved account usernames/passwords/access

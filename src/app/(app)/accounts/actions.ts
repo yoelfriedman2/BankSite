@@ -242,8 +242,17 @@ export async function upsertAccount(
     // rate itself actually changed, never on an unrelated field edit.
     const rateChanged =
       (prev?.interest_rate != null ? Number(prev.interest_rate) : null) !== patch.interest_rate;
+
+    // DATA-02: a genuine balance change is handled atomically (balance +
+    // history together, via update_account_balance — migration 0043) instead
+    // of here, so it's excluded from this main patch update to avoid writing
+    // it twice. A null/unchanged balance still goes through the ordinary
+    // update below exactly as before.
+    const { balance: patchBalance, ...patchWithoutBalance } = patch;
+    const balanceChanging = patchBalance != null && patchBalance !== oldBalance;
     const dbPatch = {
-      ...patch,
+      ...patchWithoutBalance,
+      ...(balanceChanging ? {} : { balance: patchBalance }),
       ...(feeConfigChanged
         ? {
             monthly_fee_last_charged_on:
@@ -263,15 +272,39 @@ export async function upsertAccount(
       .eq("id", values.id);
     if (error) return { error: friendlyDbError(error.message) };
 
-    if (patch.balance != null && patch.balance !== oldBalance) {
-      await supabase.from("account_balance_history").insert({
-        user_id: user.id,
-        account_id: values.id,
-        as_of_date: today,
-        balance: patch.balance,
-        change_amount: oldBalance != null ? Number((patch.balance - oldBalance).toFixed(2)) : null,
-        reason: "manual update",
+    if (balanceChanging) {
+      const { error: rpcErr } = await supabase.rpc("update_account_balance", {
+        p_account_id: values.id,
+        p_new_balance: patchBalance,
+        p_as_of_date: today,
+        p_reason: "manual update",
       });
+      if (rpcErr) {
+        // Migration 0043 not run yet (or some other RPC-level failure) —
+        // fall back to the old two-step behavior so saving isn't blocked on
+        // the migration being applied; this can never regress below what
+        // already worked before this atomic path existed.
+        console.warn(
+          `[upsertAccount] update_account_balance RPC unavailable (migration 0043 not run yet?), falling back for account ${values.id}:`,
+          rpcErr.message,
+        );
+        const { error: fallbackErr } = await supabase
+          .from("accounts")
+          .update({ balance: patchBalance })
+          .eq("id", values.id);
+        if (fallbackErr) return { error: friendlyDbError(fallbackErr.message) };
+        const { error: historyErr } = await supabase.from("account_balance_history").insert({
+          user_id: user.id,
+          account_id: values.id,
+          as_of_date: today,
+          balance: patchBalance,
+          change_amount: oldBalance != null ? Number((patchBalance - oldBalance).toFixed(2)) : null,
+          reason: "manual update",
+        });
+        if (historyErr) {
+          console.error(`[upsertAccount] balance-history fallback insert failed for account ${values.id}:`, historyErr.message);
+        }
+      }
     }
   } else {
     const monthlyFeeLastChargedOn =
@@ -292,13 +325,16 @@ export async function upsertAccount(
     if (error || !created) return { error: friendlyDbError(error?.message) ?? "Could not add the account." };
 
     if (patch.balance != null) {
-      await supabase.from("account_balance_history").insert({
+      const { error: historyErr } = await supabase.from("account_balance_history").insert({
         user_id: user.id,
         account_id: created.id,
         as_of_date: today,
         balance: patch.balance,
         reason: "opening balance",
       });
+      if (historyErr) {
+        console.error(`[upsertAccount] opening-balance history insert failed for new account ${created.id}:`, historyErr.message);
+      }
     }
   }
 
@@ -465,13 +501,16 @@ export async function duplicateAccount(
   // path (upsertAccount, importBanks) — otherwise a duplicated account is
   // invisible on Balance-by-date until it's later edited by hand.
   if (copy.balance != null) {
-    await supabase.from("account_balance_history").insert({
+    const { error: historyErr } = await supabase.from("account_balance_history").insert({
       user_id: user.id,
       account_id: created.id,
       as_of_date: new Date().toISOString().slice(0, 10),
       balance: copy.balance,
       reason: "opening balance",
     });
+    if (historyErr) {
+      console.error(`[duplicateAccount] opening-balance history insert failed for account ${created.id}:`, historyErr.message);
+    }
   }
 
   const { data: bank } = await supabase

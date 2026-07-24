@@ -34,8 +34,8 @@ decision or bigger effort before it can be safely fixed
 
 ## Part 2 — Data Integrity (22)
 
-- [ ] DATA-01 — Shared bank data unsynchronized across users
-- [ ] DATA-02 — Balance history incomplete/non-atomic/nondeterministic
+- [x] DATA-01 — Shared bank data unsynchronized across users — fixed the concrete bug, not the broader "per-user-copy" architecture (that's a real, deliberate design — see `CLAUDE.md`'s "Shared vs. private bank fields"). `upsertBank`'s propagation to every other family member's copy of a bank had two real gaps: (1) the "does this user already have a copy?" existing-recipients check filtered on `deleted_at is null`, so a recipient whose copy was sitting in Trash was invisible to it — the shared-field update meant for everyone silently skipped them, AND the multi-row insert meant to create fresh copies for "everyone missing one" tried to insert a duplicate for them too, which (since the row already exists in Trash) hit the unique `(user_id, cert)` constraint and could fail the *entire batch insert* — every other genuinely-new recipient in that same call silently got nothing. Fixed by querying `deleted_at` unfiltered, splitting recipients into active/trashed, excluding trashed users from the insert (an UPDATE refreshes their trashed copy's shared fields instead, leaving `deleted_at` alone), and the propagation UPDATE itself no longer filters out trashed rows either. (2) Both the insert and the propagation UPDATE were fire-and-forget with no error check at all — a partial-batch failure was invisible. Both now check `{ error }` and `console.error` on failure. `importBanks`'s bulk balance-history insert got the same error-check treatment while in the file. No migration — pure application code, effective on deploy.
+- [x] DATA-02 — Balance history incomplete/non-atomic/nondeterministic — fixed the two real remaining gaps (the same-day-tiebreaker and duplicate/import-write sub-issues the original finding described were already closed by earlier rounds — migration 0039's `created_at` column and prior fixes to `money/actions.ts`/import). A live snapshot found 356 of 425 accounts with a current balance but zero history rows — caused by every balance-changing path doing the accounts UPDATE and the history INSERT as two separate, unchecked calls, so a failure (or just a dropped connection) between them silently drops the history side while the balance change still sticks. New migration **`0043_atomic_balance_history.sql`**: `charge_monthly_fee_with_history`/`credit_monthly_interest_with_history` (new function names, not replacing 0039's existing ones — see the migration's own header comment for why reusing those names would create a silent gap during rollout) do the balance update and history insert inside one Postgres function call, so they can't drift apart; `update_account_balance` does the same for the account editor's manual balance-edit path, which previously had no atomicity at all. The cron route (`api/cron/reminders`) now tries the new atomic-with-history RPC first, falls back to 0039's atomic-balance-only RPC (now with an error-checked history insert) if 0043 isn't deployed yet, and falls back again to the original plain two-step behavior if even 0039 isn't deployed — three tiers, each already proven safe, so this can never regress below what already worked. `upsertAccount`'s edit path does the analogous thing: when the balance is actually changing, it's excluded from the main patch and applied via `update_account_balance` instead (falling back to the original two-step + now-checked insert on RPC error); every other previously-unchecked history insert in the account create/duplicate paths also gained error checking. **Deliberately does not backfill the 356 already-missing history rows** — explicit user decision to fix the code only and leave existing data untouched. **Needs migration 0043 run — see below.**
 - [x] DATA-03 — Concurrent sweeps/returns can corrupt balances (no row lock) — fixed: migration 0041 adds `for update` row locks on the accounts row in both `sweep_accounts` and `return_sweep`, so two concurrent operations on the same account now serialize instead of racing.
 - [~] DATA-04 — Non-atomic cron fee/interest (already fixed)
 - [~] DATA-05 — Backup/restore incomplete (2 missing tables already fixed; rest open)
@@ -278,6 +278,30 @@ checkout), not just against this sandbox's own configured environment.
 
 *(This file is updated as work proceeds — counts above will move.)*
 
+**Round 12 (DATA-01 and DATA-02 — the last two High-severity findings)**: with all of Part 1
+Security resolved, asked what the next biggest thing to fix was — DATA-01 and DATA-02 were the only
+remaining High-severity findings anywhere in the tracker. User asked for both, conditioned explicitly
+on confirming neither could break anything live, and asked whether the CI built in Round 11 runs
+automatically on every push (confirmed: yes, `.github/workflows/ci.yml` triggers on every push/PR to
+`main`, no manual step needed). Investigated both findings' *actual* current scope first rather than
+trusting the tracker's original text — several sub-issues each one originally described (the
+same-day-tiebreaker and duplicate/import-write gaps under DATA-02; DATA-01's own historical
+propagation logic) had already been narrowed or closed by earlier rounds (migration 0039's
+`created_at` column, prior fixes to `money/actions.ts`/import) — and reported the narrower real scope
+to the user before writing any code. Fixed both (see DATA-01/DATA-02 above for the detail) — pure
+additive application code plus one new migration (`0043_atomic_balance_history.sql`, new function
+names, doesn't touch or replace anything already deployed). Asked the user whether to backfill history
+for the 356 accounts already missing it; **user chose not to** — fix scoped to preventing future drift
+only, zero existing data touched. **Needs migration 0043 run — see below.**
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (84/84) all clean — the first round
+to lean on the Round 11 CI/test investment rather than only manual checks. Both fixes are real-
+Supabase-RPC-dependent (DEMO_MODE bypasses this whole code path by design, same limitation as every
+prior round touching this class of code) — not click-testable here; verified instead by careful
+reading of every changed branch against both the "migration run" and "migration not yet run" cases,
+confirming each fallback tier degrades to exactly the previously-working behavior with nothing new
+required to keep working.
+
 ## What's still pending
 
 - ~~Migrations 0040 and 0041~~ — both confirmed run by the user. SEC-01 (Critical) is now fully
@@ -286,14 +310,22 @@ checkout), not just against this sandbox's own configured environment.
   `vault_salt`/`vault_check`. Until it's run, the Settings → Account "Vault encryption" card degrades
   gracefully (feature just isn't offered — `saveVaultSettings` returns a friendly "run the migration"
   error if someone tries).
+- **Migration 0043_atomic_balance_history.sql needs to be run** — adds `charge_monthly_fee_with_
+  history`/`credit_monthly_interest_with_history`/`update_account_balance`. Until it's run, every
+  balance-changing path (cron fee/interest, manual balance edits) automatically falls back to exactly
+  its prior behavior (0039's atomic-balance-only RPC if that's deployed, otherwise the original plain
+  two-step update) — nothing breaks or degrades in a user-visible way, the only difference is that
+  balance history can keep silently going missing on a rare write failure until this is run.
 - **All 22 Part 1 (Security) findings are now resolved** — either fixed, closed as a non-issue,
   or a deliberate accepted-risk decision made with the user (see each item above for which).
-- 52 findings remain open. Most of what's left is broader/systemic rather than a single clean fix:
-  DATA-18/DATA-19 (pagination + validation patterns spanning "most Server Actions" — needs a scoping
-  decision, not just code), INT-04/INT-05/INT-06 (soft-delete-state consistency across many call
-  sites — real design questions about desired restore/cascade behavior, not pure bugs), and most of
-  Part 3 (UX/Accessibility, 22 findings — several need a design decision, e.g. which new colors fix
-  the contrast failures, but some like UX-04/UX-05/UX-10 look like plain bugs worth a closer look).
-  Part 4 (Performance/Reliability/Ops, 15 findings) is mostly bigger-effort infrastructure work
-  (CI, monitoring, query tuning) rather than quick fixes. Worth a dedicated round to scope out the
-  next no-decision-needed batch from these once this round is reviewed.
+- **Both remaining High-severity findings (DATA-01, DATA-02) are now resolved.** No High-severity
+  findings remain open anywhere in the tracker.
+- 50 findings remain open, all Medium/Low severity. Most of what's left is broader/systemic rather
+  than a single clean fix: DATA-18/DATA-19 (pagination + validation patterns spanning "most Server
+  Actions" — needs a scoping decision, not just code), INT-04/INT-05/INT-06 (soft-delete-state
+  consistency across many call sites — real design questions about desired restore/cascade behavior,
+  not pure bugs), and most of Part 3 (UX/Accessibility, 22 findings — several need a design decision,
+  e.g. which new colors fix the contrast failures, but some like UX-04/UX-05/UX-10 look like plain
+  bugs worth a closer look). Part 4 (Performance/Reliability/Ops, 15 findings) is mostly bigger-effort
+  infrastructure work (CI, monitoring, query tuning) rather than quick fixes. Worth a dedicated round
+  to scope out the next no-decision-needed batch from these once this round is reviewed.
