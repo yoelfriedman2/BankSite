@@ -240,7 +240,7 @@ before starting.
   **Explicitly does not backfill the 356 already-missing history rows** — asked the user via
   `AskUserQuestion` whether to backfill a "starting balance" row for each from today's current
   balance; **user chose not to** ("No, leave it") — scope stayed "stop it from happening again," zero
-  existing production data touched. **Needs migration 0043 run — see below.**
+  existing production data touched. **Migration 0043 confirmed run.**
 
 **Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (84/84 passing) all clean — the
 first round to actually lean on the CI/test investment from round 11 rather than only manual
