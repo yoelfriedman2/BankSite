@@ -23,14 +23,14 @@ decision or bigger effort before it can be safely fixed
 - [x] SEC-12 — OAuth redirect bypass via backslash normalization — fixed in `auth/callback/route.ts`: now verifies the parsed `.origin` of the `next` redirect target instead of pattern-matching the input string.
 - [~] SEC-13 — No rate limiting on expensive actions (feedback email already covered; access-request cooldown's integrity depends on SEC-01, fixed alongside it)
 - [x] SEC-14 — Env config incomplete/undocumented — fixed: docs were already fixed by an earlier round, and this round closed the remaining half — `middleware.ts` now fails closed (redirects protected paths to `/login`) instead of open when Supabase config is entirely missing. Verified live.
-- [!] SEC-15 — No MFA/recent-auth for sensitive ops (needs Supabase MFA setup — bigger effort)
-- [!] SEC-16 — Password-update page allows any session to set a password (needs careful design, deferring) — impact is already substantially reduced: per `TODO.md`'s 2026-07-08 entry, the owner already disabled the Supabase project's Email auth provider (Google/Microsoft OAuth only), so a password set through this page can't currently be used to log in anywhere — the main "persistence after a stolen session" risk the finding describes doesn't apply today. The code-level gap (no check that the session came from a real recovery/invite link) is still open in case that provider setting is ever changed back on; a real fix needs verifying Supabase's session-recency claims against a live project, which isn't something this sandbox can do — still deferred.
-- [!] SEC-17 — Owner tied to mutable email + PII in migration history (low severity, hard to undo retroactively)
+- [x] SEC-15 — No MFA/recent-auth for sensitive ops — decided: not applicable given this app's design. Login is Google/Microsoft OAuth only (no separate password login), so whatever MFA protection exists on a session is entirely whatever the user's own Google/Microsoft account enforces — this app has no visibility into or control over that. Supabase's own separate MFA feature would mean enrolling a second, app-specific factor alongside SSO, which is exactly the redundant new auth system the owner explicitly doesn't want. Closed as inapplicable rather than "needs a decision" — the decision was implicit in choosing SSO-only login.
+- [x] SEC-16 — Password-update page allows any session to set a password — decided and built: the page (`/account/update-password`) and its wiring in `auth/confirm/route.ts` were removed entirely, rather than hardened. With login SSO-only, there was no legitimate reason for a password-set page to exist at all, and it was a real gap as long as it did (any signed-in session, not just a fresh recovery link, could reach it). `auth/confirm/route.ts`'s invite/recovery token verification now just redirects into the app like any other sign-in, letting the normal (app) layout gate (onboarding, invite-only approval) take over.
+- [x] SEC-17 — Owner tied to mutable email + PII in migration history — two separate items, handled differently. (1) Owner identity via `ADMIN_EMAIL` string comparison: reviewed and accepted as-is — the owner is fine with this mechanism, no change made. (2) The 11 real email addresses hardcoded in migration `0036_access_control.sql`: redacted from the file (safe/free to do — this migration already ran in production and is never re-executed, so editing it now has zero functional effect) and replaced with a placeholder + an explanatory comment. **Caveat surfaced to the user and accepted**: this does NOT purge the real addresses from git history — the original commit still has them, and truly removing them would need a full history rewrite (`git filter-repo`/BFG + force-push), judged not worth the risk/disruption for a private repo only the owner controls. The redaction only affects the file as it reads going forward.
 - [x] SEC-18 — No server-only import guards — fixed: added `import "server-only"` to `lib/supabase/admin.ts`, `lib/backup.ts`, `lib/audit.ts`, `lib/email.ts` — each now throws at build time if accidentally bundled into client-side JS.
 - [~] SEC-19 — Raw errors reach client/logs (mostly fixed via friendlyDbError)
-- [!] SEC-20 — Favicon service leaks usage metadata to Google (removing it removes a feature — needs a decision)
+- [x] SEC-20 — Favicon service leaks usage metadata to Google — decided: accepted risk, no change. Reviewed with the user: the browser's direct request to Google's favicon service does leak the requesting IP and the specific bank domain (a small, real behavioral signal about which institutions are being tracked, sent to a third party) — not nothing, but genuinely low-stakes and extremely common practice (lots of sites use this exact free service). The owner is fine with this tradeoff for the convenience of showing bank logos; no fix exists that keeps the feature without either this tradeoff or self-hosting a favicon proxy, which wasn't wanted either.
 - [x] SEC-21 — Demo-mode safety depends on Vercel-specific env detection — fixed: both `lib/demo.ts` and `lib/supabase/middleware.ts` now gate on `NODE_ENV !== "production"` (host-independent — Next always sets this for any `build`/`start`) instead of the narrower Vercel-only `VERCEL_ENV` check, closing the Vercel-preview and self-hosted-production gaps.
-- [!] SEC-22 — No CI/test suite (large effort, separate initiative)
+- [x] SEC-22 — No CI/test suite — a real foundation built, not the complete solution the finding envisions. Added `vitest` + `.github/workflows/ci.yml` (runs type-check, build, and tests on every push/PR to `main`). Wrote 84 tests across 8 files covering every pure-logic module with no DB/browser dependency: `vaultCrypto` (encrypt/decrypt round-trip, wrong-key rejection, check-value verify, fresh-IV-per-call), `monthlyFee`/`interestAccrual` (the self-healing due-checks, the DATA-12 compounding-interest regression), `dormancy` (activity-level color thresholds, attention reasons, the DATA-13 1-month-floor regression), `date` (the UX-16 UTC/local-date regression), `safeRedirect` (the SEC-12 backslash-bypass regression), `isOwner`, and `roadtrip` (haversine math, the GAP-04 malformed-percent-escape regression). Deliberately does **not** cover the RLS/approval-gate logic this finding's own reasoning centers on (SEC-01/SEC-03's territory) — that needs integration-style tests against a real or mocked Supabase client, a meaningfully bigger lift than converting already-pure functions into permanent tests, left for a future round.
 
 ## Part 2 — Data Integrity (22)
 
@@ -238,6 +238,43 @@ on personally-controlled devices (compared, with the caveat that Google's long s
 anomaly detection/MFA this app doesn't have), bumped `IdleTimeout.tsx`'s `IDLE_MS` 30 min → 8 hours —
 pure UX tuning of the existing client-side convenience layer, not a security change either direction.
 SEC-11 marked `[x]` above.
+**Round 11 (SEC-15/16/17/20/22 all decided in one sitting — Part 1 Security now 100% resolved)**:
+user asked to walk through the remaining 5 findings and made a call on every one:
+- **SEC-15**: closed as not applicable — SSO-only login means MFA is entirely the user's own
+  Google/Microsoft account's business, and the user explicitly doesn't want a second, app-specific
+  auth factor layered on top.
+- **SEC-16**: removed `/account/update-password` and its `auth/confirm/route.ts` wiring entirely —
+  the user's own read ("there shouldn't be a password-update page if there's no password login")
+  was correct; hardening a page that shouldn't exist made less sense than deleting it.
+- **SEC-17**: the `ADMIN_EMAIL`-as-owner mechanism itself was reviewed and kept as-is (accepted).
+  The 11 real emails hardcoded in migration `0036_access_control.sql` were redacted from the file
+  (confirmed safe/free — the migration already ran in production and never re-runs) with a clear
+  caveat given to the user that this doesn't purge git history, which would need a full rewrite —
+  correctly judged not worth it for a private repo.
+- **SEC-20**: accepted as low-risk after explaining exactly what leaks (the requesting IP + which
+  bank domain, to Google, via the favicon request) — genuinely common practice, user is fine with it.
+- **SEC-22**: built a real foundation. Added `vitest` (a temporary local `xlsx` CDN→npm-registry
+  swap was needed to `npm install` it in this sandbox, same recurring issue as every prior session
+  touching `package.json` — this time restored via a precise JSON-level lockfile patch afterward,
+  copying just the `xlsx` package entry back from a pre-swap backup rather than a blind full
+  `package.json`/`package-lock.json` revert, since vitest needed to stay a real, permanent
+  dependency this time, not just a transient local check) + `.github/workflows/ci.yml` (type-check,
+  build, test on every push/PR). Wrote 84 tests across 8 files for every pure-logic module with no
+  DB/browser dependency — several are explicit regression guards for bugs fixed earlier this
+  project (DATA-12's compounding-interest formula, DATA-13's dormancy-floor clamp, UX-16's UTC/
+  local-date mixing, SEC-12's backslash open-redirect bypass, GAP-04's malformed-percent-escape
+  crash). Deliberately doesn't cover the RLS/approval-gate logic the finding's own reasoning is
+  really about (SEC-01/SEC-03's territory) — that needs a real or mocked Supabase client, a bigger
+  lift than converting already-pure functions, left for later. All 22 Part 1 Security findings are
+  now resolved.
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (84/84) all clean. Confirmed via a
+direct isolation test (temporarily restoring the deleted page, rebuilding, removing it again) that
+`/login`'s bundle-size jump in the build output is expected Next.js chunk-accounting behavior from
+removing the second consumer of some shared client-auth code, not a real regression — `First Load
+JS` for `/login` is byte-identical before and after. Confirmed the CI workflow's build step actually
+succeeds against only placeholder env vars and no `.env.local` (matching a genuinely fresh CI
+checkout), not just against this sandbox's own configured environment.
 
 *(This file is updated as work proceeds — counts above will move.)*
 
@@ -249,9 +286,8 @@ SEC-11 marked `[x]` above.
   `vault_salt`/`vault_check`. Until it's run, the Settings → Account "Vault encryption" card degrades
   gracefully (feature just isn't offered — `saveVaultSettings` returns a friendly "run the migration"
   error if someone tries).
-- 5 more Part 1 (Security) findings are open but each needs a decision from the user before fixing —
-  see the `[!]` items above (SEC-15, 16, 17, 20, 22 — several of these are genuinely
-  low-priority or accepted-risk-by-design, not all equally urgent).
+- **All 22 Part 1 (Security) findings are now resolved** — either fixed, closed as a non-issue,
+  or a deliberate accepted-risk decision made with the user (see each item above for which).
 - 52 findings remain open. Most of what's left is broader/systemic rather than a single clean fix:
   DATA-18/DATA-19 (pagination + validation patterns spanning "most Server Actions" — needs a scoping
   decision, not just code), INT-04/INT-05/INT-06 (soft-delete-state consistency across many call

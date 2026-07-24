@@ -37,22 +37,22 @@ update public.profiles p
 -- Everyone already using the app on the day this ships. Anyone NOT on this list
 -- becomes 'pending' and simply has to request access (no data is lost). Matched
 -- by email against auth.users since profiles doesn't store the email itself.
+--
+-- SEC-17: this list originally had the 11 real email addresses inline. This
+-- migration already ran in production (confirmed — see TODO.md); editing it
+-- now has zero effect on the live database, since migrations in this project
+-- are pasted once by hand into the Supabase SQL editor and never re-run. The
+-- real list is kept in the owner's private records, not in this repo. Note
+-- this redaction only affects the file as it reads going forward — the
+-- original commit with the real addresses still exists in git history and
+-- isn't removed by this edit (that would need a full history rewrite, judged
+-- not worth the risk/disruption for a private repo only the owner controls).
 update public.profiles p
   set access_status = 'approved'
   from auth.users u
   where u.id = p.id
     and lower(u.email) in (
-      'pinibrodjik@gmail.com',
-      'ben@clicrite.com',
-      'benfriedmanit@gmail.com',
-      'yoelfriedman2@gmail.com',
-      'yoelfriedman7@gmail.com',
-      'notes@banktracker.local',
-      'davidyfriedman@gmail.com',
-      'dovfriedman901@gmail.com',
-      'friedman1850@gmail.com',
-      'brachafriedman01@gmail.com',
-      'eliezervfriedman1@gmail.com'
+      'redacted-see-private-records@example.com'
     );
 
 -- ── the gate: is the CURRENT user approved? ────────────────────────────────

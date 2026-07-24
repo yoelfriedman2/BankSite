@@ -174,6 +174,92 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-24 (external audit — round 11: SEC-15/16/17/20/22 all decided — Part 1 Security is now
+100% resolved, all 22 findings)** — User went through the remaining 5 findings one at a time and made
+a real call on each:
+
+- **SEC-15 (MFA) — closed as not applicable.** Login is Google/Microsoft OAuth only; whatever MFA
+  protection exists on a session is entirely whatever the user's own Google/Microsoft account
+  enforces, which this app has zero visibility into or control over. Building Supabase's own
+  separate MFA feature would mean enrolling a second, app-specific factor alongside SSO — exactly
+  the redundant auth system the user explicitly doesn't want. No code change; the decision was
+  already implicit in choosing SSO-only login, this just makes it official.
+- **SEC-16 (password-update page) — removed entirely, not hardened.** Deleted
+  `src/app/account/update-password/page.tsx` and simplified `auth/confirm/route.ts` to redirect any
+  successfully-verified invite/recovery/etc. link straight into the app (`/`) instead of to a
+  password-set page — the normal (app) layout gate (onboarding, invite-only approval) takes it from
+  there, same as any other sign-in. With login SSO-only, there was no legitimate reason for a
+  password-set page to exist; it was also a real gap the whole time it did (any signed-in session,
+  not just a fresh recovery link, could reach it and plant a password via
+  `auth.updateUser({password})` with only a length check).
+- **SEC-17 (owner tied to email) — two separate items, handled differently.** (1) The
+  `ADMIN_EMAIL`-string-comparison mechanism for who counts as owner: reviewed and kept as-is, the
+  user is fine with it. (2) The 11 real family email addresses hardcoded in migration
+  `0036_access_control.sql`: redacted from the file, replaced with a placeholder + explanatory
+  comment. Confirmed safe to edit with zero functional risk — this migration already ran in
+  production (confirmed applied, see below) and this project's migrations are never re-run, so
+  editing the file now only affects how it reads going forward. **Explicit caveat given to and
+  accepted by the user**: this does NOT purge the real addresses from git history — the original
+  commit still has them; true removal needs a full history rewrite (`git filter-repo`/BFG +
+  force-push across every branch), judged not worth the risk/disruption for a private repo only the
+  owner controls. The user only wanted the "easy, easy, easy" part done, not that.
+- **SEC-20 (favicon leak) — accepted, no change.** Walked through exactly what leaks (the browser's
+  direct request to Google's favicon service carries the requesting IP and which specific bank
+  domain is being looked up — not app data, but a real behavioral signal to a third party) — the
+  user's instinct that this is common, low-stakes practice was correct, and they're fine with the
+  tradeoff for the convenience of showing bank logos.
+- **SEC-22 (no tests/CI) — built a real foundation, not full coverage.** Added `vitest` as a dev
+  dependency and `.github/workflows/ci.yml` (type-check + build + test on every push/PR to `main`).
+  Wrote **84 tests across 8 new `*.test.ts` files** — every pure-logic module with no DB/browser
+  dependency: `vaultCrypto.ts` (encrypt/decrypt round-trip, wrong-key rejection, check-value verify,
+  fresh-IV-per-call — the same properties manually verified via a throwaway script back in the vault
+  round, now permanent), `monthlyFee.ts`/`interestAccrual.ts` (self-healing due-checks, and a
+  regression guard reproducing DATA-12's 12-month compounding-to-exact-APY fix), `dormancy.ts`
+  (activity-level color thresholds including a DATA-13 1-month-floor regression guard, attention
+  reasons, min-balance/CD-maturity checks), `date.ts` (a UX-16 UTC-vs-local-date regression guard),
+  `safeRedirect.ts` (a SEC-12 leading-backslash open-redirect regression guard), `isOwner.ts`, and
+  `roadtrip.ts` (haversine distance math, Google Maps link parsing including a GAP-04
+  malformed-percent-escape regression guard). Deliberately does **not** cover the RLS/approval-gate
+  logic that's actually the heart of this finding's own reasoning (the SEC-01/SEC-03 class of bug) —
+  testing that needs a real or mocked Supabase client, a meaningfully bigger lift than converting
+  already-pure, already-manually-verified functions into permanent tests — left for a future round
+  rather than claiming more coverage than this pass actually has.
+
+**A real npm/lockfile complication, worth remembering**: installing `vitest` needed the same
+temporary `xlsx` CDN→npm-registry swap this sandbox always needs for any `npm install` (`xlsx`'s
+real dependency is a `cdn.sheetjs.com` tarball URL, blocked by this environment's egress policy).
+Every previous round that hit this just restored `package.json`/`package-lock.json` to their exact
+committed state afterward, because nothing was actually meant to change — but this time `vitest`
+needed to survive as a real, permanent new dependency, so a blind full revert would have deleted it
+again. Fixed with a precise Node script that copied just the `xlsx`-related entries (the top-level
+dependency spec and its `node_modules/xlsx` block) back from a pre-swap backup of
+`package-lock.json` into the post-`npm install` lockfile, and deleted the handful of orphaned
+sub-dependency entries (`adler-32`, `cfb`, `codepage`, `crc-32`, `ssf`, `wmf`, `word`) that only
+existed to support the temporary npm-registry `xlsx@0.18.5` build — leaving every `vitest`-related
+addition untouched. **Lesson for next time this comes up: a targeted JSON-level patch of just the
+swapped package's entries, not a full file revert, is what's needed whenever the sandbox-only
+`xlsx` workaround overlaps with an install that's supposed to stick.**
+
+**A build-output red herring, chased down rather than assumed benign**: after removing the
+password-update page, `npm run build`'s route table showed `/login`'s own reported bundle size jump
+from ~5.5 kB to ~63 kB — alarming at a glance. Isolated by temporarily restoring the deleted page and
+rebuilding: the jump reverted, confirming the deleted page caused it. Root cause is benign Next.js
+chunk-accounting, not a real regression: some client-side Supabase-auth code was previously shared
+between two routes and extracted into a separate shared chunk; with only one consumer left, Next
+inlined it directly into `/login`'s own bundle instead. Confirmed by checking the one number that
+actually matters — `/login`'s **First Load JS** (the real total a visitor downloads) was 254 kB
+before and 254 kB after, byte-identical; only which column of the table it's counted under changed.
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (84/84 passing) all clean. Grepped
+for any remaining reference to `update-password` — none. Confirmed the CI workflow's build step
+actually succeeds against only placeholder env vars and no `.env.local` present at all (moved it
+aside and rebuilt), matching what a genuinely fresh CI checkout will have, not just this sandbox's
+own already-configured environment. `EXTERNAL-AUDIT-TRACKER.md` updated: SEC-15/16/17/20/22 all
+marked `[x]` — **all 22 Part 1 Security findings are now resolved** (fixed, closed as a non-issue, or
+a deliberate accepted-risk decision with the user, tracked individually per item). Skipped changelog/
+Guide entries — every change this round is either a removal/security fix or internal tooling, not a
+new user-visible feature, matching the standing policy.
+
 **2026-07-23 (external audit — round 10: SEC-11 decided — idle timeout stays client-side, bumped to 8h)**
 — User asked to hear the SEC-11 tradeoffs (idle timeout is a client-side convenience only, not a real
 enforced session policy — `IdleTimeout.tsx` tracks activity in `localStorage` and redirects to
