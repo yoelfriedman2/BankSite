@@ -174,6 +174,37 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-23 (external audit — round 10: SEC-11 decided — idle timeout stays client-side, bumped to 8h)**
+— User asked to hear the SEC-11 tradeoffs (idle timeout is a client-side convenience only, not a real
+enforced session policy — `IdleTimeout.tsx` tracks activity in `localStorage` and redirects to
+`/login` after inactivity, but nothing server-side actually invalidates the session, so a copied/
+leaked session token, or storage being blocked/edited, or a failed sign-out call, all leave the real
+session usable regardless of what the browser shows). Recommended against building real server-side
+enforcement: it needs either a DB check on every single request or working against Supabase's
+client-side auto-refresh (which keeps renewing the session in the background regardless of user
+activity) — real engineering cost and regression risk on core auth plumbing, to protect a threat
+model (a family member's own device, physically left open) that already sits under whatever OS-level
+auto-lock that device has. The sharper related risk — a session token leaked some other way, which
+isn't "idle" from the server's perspective and so wouldn't be caught by idle-checking regardless — is
+better addressed by an *absolute* session-lifetime cap, which is a **Supabase project dashboard
+setting** (Authentication → Sessions), not app code, and outside what this repo can see or change;
+flagged for the user to check directly.
+
+Separately, live feedback: 30 minutes felt too aggressive for a private, invite-only, family-only
+tool used on personally-controlled devices — compared to Google staying signed in for weeks. Gave the
+honest caveat that Google's long sessions are backed by a lot this app doesn't have yet (anomaly/
+new-device detection, sign-in alerts, MFA — SEC-15 is still open) so "as long as Google" isn't quite
+apples-to-apples, but agreed the underlying point stands for this app's actual threat model. Landed on
+**8 hours** (`IdleTimeout.tsx`'s `IDLE_MS`, 30 min → 8h) — a full workday of not getting nagged to
+re-login, while still meaning something if a device is left open overnight. Purely a UX tuning of the
+existing client-side convenience layer — since it was already established this isn't a real security
+boundary, lengthening it doesn't weaken anything that was actually protecting data. SEC-11 marked `[x]`
+in `EXTERNAL-AUDIT-TRACKER.md` as "decided," not "server-enforced" — the distinction is spelled out
+there and in this file so a future session doesn't mistake "decided" for "the gap is closed."
+
+**Verification**: `tsc --noEmit` and `npm run build` both clean — a one-constant change with no other
+code depending on the exact value.
+
 **2026-07-23 (external audit — round 9: closed the adjacent fail-open flagged in round 8)** — User
 asked for the next security fix that doesn't need a decision from them. Checked every remaining `[!]`
 Part 1 item in `EXTERNAL-AUDIT-TRACKER.md`: all six genuinely need one (SEC-11 session-timeout policy,

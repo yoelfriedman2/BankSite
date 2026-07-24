@@ -3,8 +3,11 @@
 import { useEffect, useRef } from "react";
 
 // Sign the user out after this much inactivity, to protect data on a shared or
-// unattended device. Tuned for a financial tool; adjust if it feels too short.
-const IDLE_MS = 30 * 60 * 1000; // 30 minutes
+// unattended device. This is a client-side convenience only, not a real
+// security boundary (see SEC-11 in EXTERNAL-AUDIT-TRACKER.md) — tuned for a
+// private, invite-only family tool on personally-controlled devices, not a
+// walk-up-kiosk threat model. Adjust freely; nothing else depends on this value.
+const IDLE_MS = 8 * 60 * 60 * 1000; // 8 hours
 const CHECK_MS = 20 * 1000; // how often to re-check
 const STORAGE_KEY = "bt_last_activity"; // shared across tabs
 

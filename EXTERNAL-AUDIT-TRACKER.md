@@ -19,7 +19,7 @@ decision or bigger effort before it can be safely fixed
 - [x] SEC-08 — 5 known transitive package vulnerabilities — rechecked after SEC-07: same count/severity remains (all in build-time-only transitive deps, not exploitable at runtime — see prior audit note not to force `npm audit fix --force`, which downgrades Next).
 - [x] SEC-09 — 15MB Server Action body limit (needs usage check before narrowing) — investigated and closed as a non-issue: `AccountDocuments.tsx` already enforces its own 15MB per-file cap client-side ("File too large (max 15 MB)") — the config value matches a real, deliberate feature limit, not an oversized default with room to narrow. Next.js also doesn't support a per-route body limit, only one global value, so there's no way to shrink this without breaking document uploads. No code change needed.
 - [x] SEC-10 — No CSP (bigger change, real regression risk if rushed) — first safe step taken: added a `Content-Security-Policy-Report-Only` header covering every third-party host the app actually talks to from the browser (Supabase, OpenStreetMap tiles/Nominatim, Google favicons, Sentry). Report-Only can never block anything — it only surfaces what a real policy would catch, via the browser console. A real *enforcing* CSP still needs a nonce-based setup (to allow Next's own inline runtime scripts without a blanket `unsafe-inline`) — that's the bigger, still-open part of this finding.
-- [!] SEC-11 — Idle timeout is client-side only (needs a decision on server-side session policy)
+- [x] SEC-11 — Idle timeout is client-side only — decision made: stays client-side-only, deliberately not building server-side enforcement. Reasoning discussed with the user: real server-side idle enforcement means either a DB check on every request or fighting Supabase's client-side auto-refresh — real engineering cost and regression risk — to protect against a threat model (a family member's own device, physically left open) that's already got OS-level auto-lock underneath it. The scarier related risk — a leaked/stolen session token, which isn't "idle" from the server's point of view and so wouldn't be caught by idle-checking anyway — is better addressed by an *absolute* session-lifetime cap, which is a Supabase project dashboard setting (Authentication → Sessions), not app code; flagged for the user to check directly, out of this repo's reach. Separately, the 30-minute default was judged too aggressive for a private invite-only tool on personally-controlled devices and bumped to 8 hours (`IdleTimeout.tsx`'s `IDLE_MS`) — purely a UX tuning of the existing convenience layer, not a security change either direction.
 - [x] SEC-12 — OAuth redirect bypass via backslash normalization — fixed in `auth/callback/route.ts`: now verifies the parsed `.origin` of the `next` redirect target instead of pattern-matching the input string.
 - [~] SEC-13 — No rate limiting on expensive actions (feedback email already covered; access-request cooldown's integrity depends on SEC-01, fixed alongside it)
 - [x] SEC-14 — Env config incomplete/undocumented — fixed: docs were already fixed by an earlier round, and this round closed the remaining half — `middleware.ts` now fails closed (redirects protected paths to `/login`) instead of open when Supabase config is entirely missing. Verified live.
@@ -226,6 +226,18 @@ is the real enforcement gate behind all 6 FDIC-sync apply actions (rename/websit
 delete-closed-bank), not just the UI's show/hide-button check, so this closes a real path where a
 revoked FDIC-admin could keep applying shared-data changes on a DB hiccup. Not one of the audit's
 100 numbered findings (found while fixing SEC-03) — no new `[!]`/`[x]` line added above.
+**Round 10 (SEC-11 decided)**: user asked to hear the tradeoffs on SEC-11. Recommended against
+building real server-side idle enforcement — the engineering cost (a DB check on every request, or
+fighting Supabase's client-side auto-refresh) is real, and it would only protect a threat model (a
+family member's own device, physically left open) that already sits under OS-level auto-lock. The
+scarier related risk — a leaked/stolen session token, which isn't "idle" server-side and so wouldn't
+be caught by idle-checking anyway — is better addressed by an absolute session-lifetime cap, a
+Supabase dashboard setting outside this repo's reach, flagged for the user to check directly.
+Separately, on live user feedback that 30 minutes felt too aggressive for a private invite-only tool
+on personally-controlled devices (compared, with the caveat that Google's long sessions are backed by
+anomaly detection/MFA this app doesn't have), bumped `IdleTimeout.tsx`'s `IDLE_MS` 30 min → 8 hours —
+pure UX tuning of the existing client-side convenience layer, not a security change either direction.
+SEC-11 marked `[x]` above.
 
 *(This file is updated as work proceeds — counts above will move.)*
 
@@ -237,8 +249,8 @@ revoked FDIC-admin could keep applying shared-data changes on a DB hiccup. Not o
   `vault_salt`/`vault_check`. Until it's run, the Settings → Account "Vault encryption" card degrades
   gracefully (feature just isn't offered — `saveVaultSettings` returns a friendly "run the migration"
   error if someone tries).
-- 6 more Part 1 (Security) findings are open but each needs a decision from the user before fixing —
-  see the `[!]` items above (SEC-11, 15, 16, 17, 20, 22 — several of these are genuinely
+- 5 more Part 1 (Security) findings are open but each needs a decision from the user before fixing —
+  see the `[!]` items above (SEC-15, 16, 17, 20, 22 — several of these are genuinely
   low-priority or accepted-risk-by-design, not all equally urgent).
 - 52 findings remain open. Most of what's left is broader/systemic rather than a single clean fix:
   DATA-18/DATA-19 (pagination + validation patterns spanning "most Server Actions" — needs a scoping
