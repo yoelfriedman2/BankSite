@@ -5,6 +5,7 @@ import { Compass, ChevronDown, ChevronUp, MapPin, Phone, Globe } from "lucide-re
 import type { RoadTripBank } from "@/app/(app)/road-trip/actions";
 import { haversineMiles, type LatLng } from "@/lib/roadtrip";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
+import { withScheme } from "@/lib/format";
 
 const MAX_RESULTS = 25;
 
@@ -89,7 +90,7 @@ export function NearbyBanksFinder({ banks }: { banks: RoadTripBank[] }) {
                     )}
                     {bank.website && (
                       <a
-                        href={bank.website}
+                        href={withScheme(bank.website)}
                         target="_blank"
                         rel="noreferrer"
                         className="flex shrink-0 items-center gap-1 hover:text-blue-500"

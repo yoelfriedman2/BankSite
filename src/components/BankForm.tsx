@@ -21,7 +21,7 @@ import {
   type Reminder,
 } from "@/lib/types";
 import { getActivityLevel, type ActivityLevel } from "@/lib/dormancy";
-import { formatCurrency, formatDate, maskAccountNumber } from "@/lib/format";
+import { formatCurrency, formatDate, maskAccountNumber, withScheme } from "@/lib/format";
 import { ActivityDot, STATUS_SELECT_STYLES } from "@/components/badges";
 import { BankLogo } from "@/components/BankLogo";
 import { AccountModal } from "@/components/AccountModal";
@@ -1074,7 +1074,7 @@ export function BankForm({
                       value={
                         values.website.trim() ? (
                           <a
-                            href={values.website.startsWith("http") ? values.website : `https://${values.website}`}
+                            href={withScheme(values.website)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-emerald-700 hover:underline"

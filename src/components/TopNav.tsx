@@ -154,6 +154,11 @@ export function TopNav({
             open ? "translate-x-0" : "-translate-x-full"
           }`}
           aria-hidden={!open}
+          // aria-hidden alone only hides this from assistive tech — it doesn't
+          // stop native keyboard Tab navigation from reaching links that are
+          // just transformed off-screen while closed (UX-13). inert removes
+          // both focusability and accessibility-tree presence together.
+          inert={!open}
         >
           <div className="flex items-center justify-between px-5 py-5">
             <div className="flex items-center gap-2.5">

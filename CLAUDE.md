@@ -174,6 +174,87 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-24 (external audit — round 16: next-10 request, narrowed to 5 well-grounded — UX-17,
+INT-04, UX-13, PERF-04, UX-20 all fixed)** — Direct continuation of round 15, same day: user asked
+for the next 10 biggest remaining findings. Reported 5 confirmed-against-real-code findings plus was
+explicit that the remaining slots in "10" would need either more investigation or a genuine design/
+scope decision — the pool of clean, no-decision-needed bugs is visibly thinning at this point in the
+audit, and padding the list with weakly-verified items would have broken the pattern this whole
+engagement has run on. User asked to fix the 5 solid ones first.
+
+- **UX-17 — 4 of 5 bank-website links were one scheme-less value away from silently breaking.**
+  Grepped every spot rendering `website` as a link: only `BankForm.tsx` guarded against a value like
+  `www.examplebank.com` (no `https://`) resolving as a broken relative link instead of navigating
+  out. New shared `withScheme()` (`lib/format.ts`) replacing both the missing guards in
+  `AddressChangeClient.tsx`/`NearbyBanksFinder.tsx`/`RoadTripClient.tsx`/`UpNextClient.tsx` and
+  `BankForm.tsx`'s own inline version, so there's one canonical implementation everywhere now.
+- **INT-04 — restoring a single trashed account never checked whether its bank was still trashed.**
+  `deleteBank`/`restoreBank` already cascade correctly together (confirmed by reading both before
+  assuming this needed a fix) — the real gap was `restoreAccount`, reachable independently from
+  Trash's separate Accounts list. Now blocks with "This account's bank is also in Trash — restore the
+  bank first" if the parent bank is still trashed. `TrashClient.tsx`'s restore-account handler, which
+  previously discarded the action's result entirely, now surfaces that error via toast.
+- **UX-13 — the closed mobile nav drawer was still reachable by keyboard Tab.** `TopNav.tsx`'s
+  slide-out panel had `aria-hidden={!open}`, which only affects assistive tech, not native focus —
+  a keyboard user (sighted or not) could tab into off-screen links with no visual indication where
+  focus went, a pattern the ARIA spec explicitly warns against. Added `inert={!open}`, the native
+  primitive that handles both focusability and accessibility-tree presence together. Confirmed
+  React 19's types support it directly (no workaround needed) and verified live: `aside.inert` is
+  `true` while closed, flips to `false` on open.
+- **PERF-04 — the biggest, most clearly measured win of this round.** `HoldingCompaniesClient.tsx`
+  statically imported the NIC file parsers (`lib/nicParse.ts`, which pulls in JSZip + the full
+  `xlsx`/SheetJS library) at module scope, so every visitor paid for that weight even just browsing
+  the existing list, never touching the sync wizard's file upload. Confirmed via the build output
+  before touching anything: `/holding-companies` was 178 kB / 370 kB First Load JS, roughly double
+  every other page in the app. Moved the parser imports to `await import("@/lib/nicParse")` inside
+  the 3 handlers that actually parse a file, mirroring the pdfjs/pdf-lib dynamic-import pattern
+  already established in `AccountDocuments.tsx`. Result, measured the same way: **8.66 kB / 194
+  kB** — back in line with every other page. Verified live that the sync wizard (including the
+  DATA-09 stale-link review step from two rounds ago) still works correctly end-to-end.
+- **UX-20 — idle logout gave zero warning before it happened.** Added a 60-second countdown modal
+  ("Stay signed in") before the actual redirect, on top of the existing shared cross-tab activity
+  clock. Genuinely careful engineering here paid off: **two real races were caught and fixed during
+  code review, before ever running the app** — (1) an initial draft had the "Stay signed in" button
+  clear only React state (`setSecondsLeft(null)`) without touching the effect's own still-running 1s
+  warning interval, which would immediately recompute a *full 8-hour* remaining value on its next
+  tick and pop the modal right back up with a nonsense countdown; fixed by routing the button through
+  a ref pointing at the exact same internal `stopWarning()` the effect itself uses. (2) The same
+  interval had no handling for activity resuming in a *different* tab (the shared localStorage clock
+  updates, but there's no local event in this tab to catch it) — a stale tick would just display a
+  huge leftover countdown instead of dismissing; fixed by having every tick re-check whether it's
+  still actually within the warning window before displaying anything, dismissing instead if not.
+  **A third, real, pre-existing gap was found via live testing** (not code review this time): the
+  existing `logout()` function's `fetch("/auth/signout", ...)` had no timeout at all — in DEMO_MODE
+  (a fake Supabase URL), this fetch simply hangs, and a full test run against real timing confirmed
+  the redirect never happened within any reasonable wait. This isn't a DEMO_MODE-only artifact — any
+  hung request (a network blip, a slow auth provider) would have the same effect in production,
+  silently defeating the idle-logout feature entirely. Added a 5-second `AbortController` bound,
+  directly motivated by this round's own new countdown promising "you'll be signed out in Ns" — that
+  promise needs the logout to actually complete reliably, not just eventually redirect if nothing
+  goes wrong.
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (84/84) all clean. PERF-04's bundle
+drop and UX-13's `inert` toggle were both confirmed live via a headless-browser pass against
+DEMO_MODE, not just asserted from the build log or diff — including a direct regression check that
+DATA-09's stale-link wizard section (built two rounds ago) still renders correctly after the
+dynamic-import refactor. UX-20 got the most thorough live testing of anything so far this session:
+temporarily overrode its timing constants to a testable scale (`IDLE_MS`/`WARNING_MS`/`CHECK_MS` from
+8h/60s/20s down to 12s/9s/1s) and its DEMO_MODE-gated `enabled` prop (both reverted immediately after,
+confirmed via diff against the pre-test backup), specifically to exercise the *actual* state machine
+rather than trust a read-through: the countdown appearing and visibly ticking down, "Stay signed in"
+dismissing it and *staying* dismissed across multiple subsequent ticks (the exact race this caught),
+and — after fixing the signout-timeout gap — the real expiry actually completing a redirect to
+`/login?reason=timeout` within the new bound. The first test run (before the AbortController fix)
+correctly failed this last check, which is what surfaced the pre-existing gap in the first place.
+UX-17/INT-04 are narrow, mechanical changes verified by reading the diff against the original code.
+`DEMO_MODE` was flipped to `true` for this round's verification and flipped back to `false` before
+finishing, per the standing rule. A stale dev-server process from an earlier round was found still
+bound to port 3939 partway through this round's testing and cleaned up before continuing. Skipped
+changelog/Guide — all five are bug fixes/hardening with no new user-visible feature, per the standing
+features-only policy (UX-20's countdown modal is arguably user-visible, but it's a fix to an existing
+mechanism's behavior, not a new feature — consistent with how SEC-11's earlier idle-timeout tuning was
+also excluded).
+
 **2026-07-24 (external audit — round 15: next-5 triage #3 — INT-05 warned, UX-05/DATA-14/PERF-01/
 DATA-20 fixed)** — Direct continuation of round 14, same day: user asked for the next 5 again, and
 gave per-item instructions this time rather than a blanket "fix all" — most notably "for 1 build a

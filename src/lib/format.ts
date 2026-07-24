@@ -44,6 +44,16 @@ export function maskAccountNumber(value: string | null | undefined): string {
   return `••${trimmed.slice(-4)}`;
 }
 
+/** A bank's stored website (from the FDIC API or manual entry) is often
+ *  scheme-less ("www.examplebank.com") — used as a raw href, that resolves as
+ *  a broken relative link against the current page instead of navigating out
+ *  (UX-17). Prepends https:// only when no scheme is already present. */
+export function withScheme(url: string | null | undefined): string {
+  const trimmed = (url ?? "").trim();
+  if (!trimmed) return "";
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
 /** Format total assets, which arrive in thousands of dollars, as $1.8B / $475M. */
 export function formatAssets(thousands: number | null | undefined): string {
   if (thousands === null || thousands === undefined) return "—";

@@ -31,6 +31,7 @@ import type {
 } from "@/app/(app)/road-trip/actions";
 import { refreshBranchLocations } from "@/app/(app)/fdic-sync/actions";
 import { STATUS_LABELS } from "@/lib/types";
+import { withScheme } from "@/lib/format";
 import {
   orderStops,
   cheapestInsertion,
@@ -925,7 +926,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                                   </span>
                                 )}
                                 {stop.website && (
-                                  <a href={stop.website} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-blue-500">
+                                  <a href={withScheme(stop.website)} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-blue-500">
                                     <Globe className="h-3 w-3" />
                                     Website
                                   </a>

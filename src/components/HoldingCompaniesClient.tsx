@@ -27,14 +27,13 @@ import {
   type HoldingCompanyChange,
   type HoldingCompanyOverviewRow,
 } from "@/app/(app)/holding-companies/actions";
-import {
-  readNicFile,
-  parseCsvTable,
-  parseRelationships,
-  parseAttributes,
-  parseFinancials,
-  type DetectedColumns,
-} from "@/lib/nicParse";
+// nicParse.ts pulls in JSZip + the full xlsx (SheetJS) library, which was by
+// far the biggest thing in this page's bundle (178kB First Load JS, dwarfing
+// every other page in the app — PERF-04) even for someone who only browses
+// the existing holding-company list and never opens the sync wizard's file
+// upload at all. Loaded dynamically inside the 3 handlers that actually parse
+// a file instead, so the browse view stays cheap.
+import type { DetectedColumns } from "@/lib/nicParse";
 import { buildHoldingCompanyDiff, type HcGroupDiff, type HcStaleLink } from "@/lib/nicDiff";
 import { formatAssets } from "@/lib/format";
 
@@ -292,6 +291,7 @@ export function HoldingCompaniesClient({
     setFileError(null);
     setDetected(null);
     try {
+      const { readNicFile, parseCsvTable, parseRelationships } = await import("@/lib/nicParse");
       const text = await readNicFile(file);
       const table = parseCsvTable(text);
       const { parentByChild: parsed, detected: det } = parseRelationships(table);
@@ -314,6 +314,7 @@ export function HoldingCompaniesClient({
     setFileError(null);
     setDetected(null);
     try {
+      const { readNicFile, parseCsvTable, parseAttributes } = await import("@/lib/nicParse");
       const text = await readNicFile(file);
       const table = parseCsvTable(text);
       const { nameByRssd: parsed, detected: det } = parseAttributes(table);
@@ -336,6 +337,7 @@ export function HoldingCompaniesClient({
     setFileError(null);
     setDetected(null);
     try {
+      const { readNicFile, parseCsvTable, parseFinancials } = await import("@/lib/nicParse");
       const text = await readNicFile(file);
       const table = parseCsvTable(text);
       const { assetsByRssd: parsed, detected: det } = parseFinancials(table);

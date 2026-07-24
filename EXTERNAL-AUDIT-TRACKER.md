@@ -71,14 +71,14 @@ decision or bigger effort before it can be safely fixed
 - [ ] UX-10 — Async actions ignore failures / can stay stuck busy
 - [ ] UX-11 — Missing form labels, icon names, live regions, target sizes
 - [ ] UX-12 — Health/activity conveyed by color-only dot
-- [ ] UX-13 — No skip link; closed mobile drawer still focusable
+- [x] UX-13 — No skip link; closed mobile drawer still focusable — fixed the focusable-drawer half (the concrete, easily-verified bug — the skip-link half is a separate, smaller a11y addition left for a future pass). `TopNav.tsx`'s slide-out mobile panel had `aria-hidden={!open}` while closed, but `aria-hidden` alone doesn't stop native keyboard Tab navigation from reaching links that are just transformed off-screen — a keyboard user could tab into invisible, off-screen nav links with no visual indication of where focus went. Added `inert={!open}`, which natively removes both focusability and accessibility-tree presence together. Verified live: `aside.inert` is `true` while closed and correctly flips to `false` when opened.
 - [ ] UX-14 — Settings can lose unsaved changes; tabs not real tabs
 - [x] UX-15 — Document viewer can fail silently / get popup-blocked — fixed: both `AccountDocuments.tsx` and `DocumentsClient.tsx`'s "View" buttons called `window.open(url, ...)` and ignored the return value — the exact same bug shape as UX-06 (just fixed the round before this one). If the browser blocks the popup, the click now sets the component's existing inline error state (reused, not a new pattern) to a clear message instead of doing nothing.
 - [x] UX-16 — UTC/local-date mixing (confirmed via exact reproduction) — fixed at every client-side "today" default: new shared `lib/date.ts#todayLocalStr()` (local Y/M/D getters, not `toISOString()`, which is always UTC and can be a full day off near midnight) now used in AccountModal, BankForm, DashboardReminders, and MoneyClient. `balances/page.tsx`'s server-guessed "today" is corrected client-side on mount if the browser's real local date differs. Server-side "today" values (cron timestamps, backup/export filenames) intentionally left as UTC — a scheduled job has no single user timezone to reference.
-- [ ] UX-17 — Website links inconsistent, scheme-less values break
+- [x] UX-17 — Website links inconsistent, scheme-less values break — fixed: grepped every spot rendering a bank's `website` field as a link. Only `BankForm.tsx` guarded against a scheme-less value (`www.examplebank.com`, plausible from the FDIC API or manual entry) — `AddressChangeClient.tsx`, `NearbyBanksFinder.tsx`, `RoadTripClient.tsx`, and `UpNextClient.tsx` all used the raw value directly as `href`, resolving as a broken relative link instead of navigating out. New shared `withScheme()` helper (`lib/format.ts`) applied consistently across all 5 spots, replacing `BankForm.tsx`'s own inline version too so there's one canonical implementation.
 - [ ] UX-18 — Onboarding walkthrough inaccessible, can target offscreen element
 - [ ] UX-19 — Calendar/map lack non-visual equivalents
-- [ ] UX-20 — Idle logout has no warning/countdown
+- [x] UX-20 — Idle logout has no warning/countdown — fixed: `IdleTimeout.tsx` silently redirected to `/login` the instant the 8-hour idle window expired, with zero notice — anything mid-edit was just gone. Now shows a countdown modal ("Stay signed in") for the last 60 seconds before it happens; the shared cross-tab activity clock (localStorage) is unchanged, and any real activity (or an explicit "Stay signed in" click) cancels the warning and resets the clock. Two real bugs caught and fixed via testing before shipping: (1) an initial version had the "Stay signed in" button clear only React state, leaving the 1s warning interval still running in the background — it would immediately recompute a full 8-hour "remaining" value and pop the modal back up with a nonsense countdown; fixed by routing the button through the exact same internal stop-warning path the effect itself uses. (2) The same interval didn't handle activity resuming in a *different* tab (the shared clock updates, but there's no local event to catch it) — a stale tick would display a huge leftover countdown instead of dismissing; fixed by having every tick re-check whether it's still actually within the warning window. A third, pre-existing (not introduced by this round) gap was also found via the same testing: `logout()`'s `fetch("/auth/signout", ...)` had no timeout at all — a hung request would block the redirect indefinitely, undermining the very promise the new countdown makes. Added a 5-second `AbortController` bound.
 - [ ] UX-21 — Installed PWA has no offline/update experience
 - [ ] UX-22 — No route-level loading states; holding-companies bundle outlier
 
@@ -92,7 +92,7 @@ decision or bigger effort before it can be safely fixed
 - [x] PERF-01 — Repeated auth/profile work, serialized queries — fixed the concrete instance: `(app)/layout.tsx` (which wraps every single page) ran 3 separate `profiles` queries (display name/onboarded, access status/last seen, vault config) as 3 sequential `await`s. They're deliberately separate queries on purpose (a missing migration on one field can't break the others) — that design is unchanged — but running them one at a time was pure wasted latency, since none of the three depends on another's result. Now runs all 3 concurrently via `Promise.all` (a Supabase query resolves `{data, error}` rather than rejecting on failure, so this is safe and preserves the exact same independent-degradation behavior and redirect precedence). Same safe concurrency pattern already used for the weekly backup's table dumps (REL-03).
 - [ ] PERF-02 — Pages over-fetch complete datasets
 - [ ] PERF-03 — Balance-as-of and batch-return scale poorly
-- [ ] PERF-04 — Holding-companies route ships parsers eagerly (bundle outlier)
+- [x] PERF-04 — Holding-companies route ships parsers eagerly (bundle outlier) — fixed, with a clearly measured before/after: `HoldingCompaniesClient.tsx` statically imported the NIC file parsers (`lib/nicParse.ts`, which pulls in JSZip + the full `xlsx`/SheetJS library) at module scope, so every visitor to `/holding-companies` paid for that weight even if they only browsed the existing list and never opened the sync wizard's file upload. Confirmed via the build output: this page was **178 kB / 370 kB First Load JS**, roughly double every other page in the app (`/banks`, the next biggest, is 14.7 kB / 226 kB total). Switched to `await import("@/lib/nicParse")` inside the 3 handlers that actually parse an uploaded file, mirroring the pdfjs/pdf-lib dynamic-import pattern already used in `AccountDocuments.tsx`. Result: **8.66 kB / 194 kB** — in line with every other page. Verified live that the sync wizard (including the DATA-09 stale-link review step) still works correctly end-to-end after the refactor.
 - [x] REL-03 — Backups built as single unbounded in-memory artifact — mitigated, not a full architectural rewrite (a real streaming/temp-file rebuild was judged too large a risk to a feature this project treats as its disaster-recovery safety net, for a family app currently in the low thousands of total rows). `buildBackupZip()`'s 15+ table dumps now run concurrently via `Promise.all` instead of one at a time, meaningfully cutting the function's real wall-clock time as tables grow. Added `export const maxDuration = 60` to `api/cron/reminders/route.ts` (the Hobby-plan max) so the weekly backup — which rides this same route — can't be silently killed by the platform's much shorter default timeout partway through. The genuine "in-memory, no hard bound" architecture is unchanged; this closes the nearest-term, cheapest-to-fix failure mode (a slow/timed-out run) without touching the backup's actual correctness.
 - [x] REL-04 — External API calls lack timeout/retry/backoff policy — partially fixed (the timeout half): new shared `lib/fetchWithTimeout.ts` (the same AbortController pattern already used for bank-website verification, now extracted and reused) applied to the 2 FDIC BankFind calls that previously had no bound at all (`fetchFdic`, `fetchFdicLocations`) plus the holding-company RSSD lookup. Retry/backoff and client-side (Nominatim autocomplete) cancellation are unaddressed.
 - [ ] OBS-01 — Monitoring captures only a subset of real failures
@@ -105,7 +105,7 @@ decision or bigger effort before it can be safely fixed
 - [x] INT-01 — Denying access doesn't revoke session or FDIC-admin role (confirmed, connects to SEC-01) — fixed: `canApplyFdicChanges` now also requires `access_status === "approved"` (not just `is_fdic_admin`), and `setAccessStatus` clears `is_fdic_admin` whenever a user is denied/un-approved. A true "kill the live session" primitive isn't available for an arbitrary user via the Supabase SDK, but `(app)/layout.tsx` already blocks all page navigation for a denied user on every request, and this closes the remaining gap (privileged server actions not independently re-checking approval).
 - [x] INT-02 — Pending/denied users can receive protected note content by email (confirmed) — fixed: the community-note broadcast in `addBankComment` now excludes pending/denied users from the recipient list before sending, closing the RLS-bypassing side channel.
 - [x] INT-03 — FDIC cert used as mutable "identity" across subsystems — fixed the core danger (an ordinary form edit silently changing what the cert means to every other feature keyed by it): the cert field is now read-only once a bank already exists (still editable when first creating one, since nothing is keyed to it yet) — both in the form UI and, since Server Actions are directly callable, enforced server-side in `upsertBank` too (a submitted cert change on an existing bank is now silently dropped from the update rather than applied).
-- [ ] INT-04 — Active accounts can exist under a soft-deleted bank
+- [x] INT-04 — Active accounts can exist under a soft-deleted bank — fixed the one real remaining path into this state (`deleteBank`/`restoreBank` already cascade correctly together, confirmed by reading both). `restoreAccount` restored a single trashed account with zero check on its parent bank's state — since Trash shows banks and accounts as separate lists, restoring just an account (without also restoring its still-trashed bank) was an easy, ordinary way to end up with exactly this inconsistent state. Now blocks with a clear error ("This account's bank is also in Trash — restore the bank first") if the parent bank is still trashed, in both DEMO_MODE and real-mode. `TrashClient.tsx`'s restore-account handler, which previously discarded the action's result entirely, now surfaces that error via toast.
 - [x] INT-05 — Money-owed sweeps conflict with trash/permanent delete — fixed with a warning, not a hard block, per explicit user instruction ("build a warning so the user knows"). Confirmed via the schema: `account_sweeps.account_id references accounts(id) on delete cascade` and `accounts.bank_id references banks(id) on delete cascade` — permanently deleting an account or bank silently erases any outstanding (unreturned) sweep record along with it, with zero warning that real money-movement history was about to be destroyed. New `getOutstandingSweepWarningForAccounts`/`getOutstandingSweepWarningForBank` (`money/actions.ts`) check for unreturned sweeps before the existing Trash-page confirm dialogs (`TrashClient.tsx`) fire, and append a specific dollar-amount warning to the confirm text when any exist — the delete itself is unchanged (still proceeds on confirm), this just makes sure the person clicking "delete forever" actually knows what they're about to lose.
 - [x] INT-06 — Duplicate account copies live balance/credentials as template — fixed: `accounts/actions.ts#duplicateAccount` (both DEMO_MODE and real paths) copied `balance`, `username`, `password`, and `access_notes` verbatim into the new row, clearing only the account number — reachable via a real "Duplicate" button in the bank drawer. A duplicated account silently started with the *same real dollar balance* as the source, inflating every total (dashboard, balance-by-date, holder totals) until manually corrected, plus a copy of the same real login credentials. Now clears balance/username/password/access_notes to `null` (matching how a genuinely new account starts) — `interest_rate` still carries over unchanged, per the existing deliberate precedent already documented in the code. The now-unreachable "seed an opening-balance history point" block (balance is always null on duplicate now) was removed as dead code rather than left behind.
 - [x] INT-07 — Money-move batch can silently move less than confirmed — fixed: `createSweepBatch` now compares what `sweep_accounts` actually applied per account against what was requested, and reports an honest partial-success message (with the real total moved) instead of a blanket success when a balance was lower than expected.
@@ -345,16 +345,58 @@ this round's verification — flipped back to `false` before finishing, per the 
   `claim_check_number`/`append_activity_log`. Until it's run, both DATA-14 and DATA-20 automatically
   fall back to their original (non-atomic, but already-working) behavior — nothing breaks either way,
   running it just closes the small collision/lost-entry window on concurrent access.
-- 36 findings remain open, all Medium/Low severity. Most of what's left is broader/systemic rather
+- 31 findings remain open, all Medium/Low severity. Most of what's left is broader/systemic rather
   than a single clean fix: DATA-18/DATA-19 (pagination + validation patterns spanning "most Server
-  Actions" — needs a scoping decision, not just code), INT-04 (soft-delete-state consistency —
-  real design questions about desired restore/cascade behavior, not a pure bug), and most of Part 3
-  (UX/Accessibility, 21 findings — several need a design decision, e.g. which new colors fix the
-  contrast failures, but some look like plain bugs worth a closer look). Part 4 (Performance/
-  Reliability/Ops, 15 findings — REL-02/REL-03/PERF-01 now partially addressed, see above) is mostly
-  bigger-effort infrastructure work (CI, monitoring, query tuning) rather than quick fixes. Worth a
-  dedicated round to scope out the next no-decision-needed batch from these once this round is
-  reviewed.
+  Actions" — needs a scoping decision, not just code), and most of Part 3 (UX/Accessibility, 19
+  findings — several need a design decision, e.g. which new colors fix the WCAG contrast failures
+  or how to label a color-only status dot, but a few individual bugs may still be findable with more
+  digging). Part 4 (Performance/Reliability/Ops, 14 findings — REL-02/REL-03/PERF-01/PERF-04 now
+  partially addressed, see above) is mostly bigger-effort infrastructure work (CI, monitoring, query
+  tuning) rather than quick fixes; TYPE-01 (generated DB types) specifically needs the Supabase CLI,
+  which needs a real Postgres connection this sandbox's egress policy blocks (see the earlier
+  migration-0043 connection attempt in this file's session history) — untested whether it's
+  achievable from here at all. Worth a dedicated round to scope out the next no-decision-needed batch
+  from these once this round is reviewed — the pool of clean, no-decision bugs is visibly thinning at
+  this point in the audit.
+
+**Round 16 (next-10 request, narrowed to the 5 well-grounded ones — UX-17/INT-04/UX-13/PERF-04/UX-20
+all fixed)** — Asked for the next 10 biggest remaining findings; reported 5 well-grounded ones (each
+confirmed against real code) plus was explicit that the remaining slots would need either more
+investigation or a genuine design/scope decision rather than padding the list — user asked to fix the
+5 solid ones first.
+
+- **UX-17** — grepped every spot rendering a bank `website` as a link; only 1 of 5 already guarded
+  against a scheme-less value. Extracted the guard into a shared `withScheme()` helper, applied
+  consistently.
+- **INT-04** — `restoreAccount` had zero check on whether its parent bank was still trashed, an easy
+  path into "active account under a trashed bank" given Trash shows the two as separate lists. Now
+  blocks with a clear reason.
+- **UX-13** — `aria-hidden` on the closed mobile drawer doesn't stop keyboard Tab from reaching its
+  off-screen links. Added `inert`, the native primitive that handles both together. Verified live.
+- **PERF-04** — the biggest win of the round, and clearly measured, not just asserted: `/holding-
+  companies` dropped from 178 kB / 370 kB First Load JS to 8.66 kB / 194 kB (roughly half the
+  page's total weight) by moving the NIC parser imports (JSZip + full `xlsx`) behind `import()` in
+  the 3 handlers that actually use them, instead of loading them for every visitor. Verified the
+  sync wizard still works correctly end-to-end after the refactor, including DATA-09's stale-link
+  review step from two rounds ago.
+- **UX-20** — added a 60-second countdown warning before the idle logout actually happens, instead
+  of a silent redirect with zero notice. Testing this one live (rather than just reading the diff)
+  caught two real races before shipping — see CLAUDE.md's Current state entry for the full detail —
+  plus a third, pre-existing gap unrelated to this round's own change: the signout `fetch()` had no
+  timeout at all, which could block the redirect indefinitely on a hung request. Fixed alongside it
+  since it directly undermines the promise the new countdown makes.
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (84/84) all clean. PERF-04's bundle
+drop and UX-13's `inert` toggle were both confirmed live via a headless-browser pass against DEMO_MODE
+— not just asserted from the build log/diff. UX-20 got the most thorough live testing of anything in
+this session: temporarily overrode its timing constants to a testable scale (12s/9s/1s instead of
+8h/60s/20s) and its DEMO_MODE-gated `enabled` prop, both reverted immediately after, to directly
+exercise the full state machine — the countdown appearing and ticking, "Stay signed in" dismissing it
+and *staying* dismissed (the exact race this caught), and the real timeout actually completing a
+redirect within the new 5s bound. UX-17/INT-04 are narrow, mechanical changes verified by reading the
+diff against the original code. `DEMO_MODE` was flipped to `true` for this round's verification and
+flipped back to `false` before finishing, per the standing rule — a stale dev-server process from an
+earlier round was also found still bound to port 3939 partway through and cleaned up.
 
 **Round 15 (next-5 triage #3 — INT-05 warned, UX-05/DATA-14/PERF-01/DATA-20 fixed)** — Asked for the
 next 5 biggest remaining findings a third time; user approved all 5 with specific instructions on one

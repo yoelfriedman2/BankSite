@@ -381,6 +381,11 @@ export async function deleteAccount(id: string): Promise<{ error?: string }> {
 
 export async function restoreAccount(id: string): Promise<{ error?: string }> {
   if (DEMO_MODE) {
+    const acc = getDemoAccounts().find((a) => a.id === id);
+    const bank = acc ? getDemoBanks().find((b) => b.id === acc.bank_id) : undefined;
+    if (bank?.deleted_at) {
+      return { error: "This account's bank is also in Trash — restore the bank first." };
+    }
     restoreDemoAccount(id);
     revalidate();
     return {};
@@ -391,6 +396,19 @@ export async function restoreAccount(id: string): Promise<{ error?: string }> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
+
+  // Restoring an account whose bank is STILL trashed would leave an active
+  // account sitting under a soft-deleted bank (INT-04) — the Trash page shows
+  // banks and accounts as separate lists, so restoring just the account
+  // (without also restoring its bank) is an easy way to end up in exactly
+  // that inconsistent state. Block it with a clear reason instead.
+  const { data: acc } = await supabase.from("accounts").select("bank_id").eq("id", id).maybeSingle();
+  if (acc?.bank_id) {
+    const { data: bank } = await supabase.from("banks").select("deleted_at").eq("id", acc.bank_id).maybeSingle();
+    if (bank?.deleted_at) {
+      return { error: "This account's bank is also in Trash — restore the bank first." };
+    }
+  }
 
   const { error } = await supabase
     .from("accounts")

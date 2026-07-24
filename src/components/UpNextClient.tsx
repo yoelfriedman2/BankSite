@@ -13,7 +13,7 @@ import {
 } from "@/app/(app)/up-next/actions";
 import { StatusBadge, PriorityBadge } from "@/components/badges";
 import { OPEN_METHOD_LABELS, ELIGIBILITY_LABELS } from "@/lib/types";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, withScheme } from "@/lib/format";
 
 function InfoLine({ bank }: { bank: QueueBank }) {
   const parts: string[] = [];
@@ -37,7 +37,7 @@ function ContactLinks({ bank }: { bank: QueueBank }) {
       )}
       {bank.website && (
         <a
-          href={bank.website}
+          href={withScheme(bank.website)}
           target="_blank"
           rel="noopener noreferrer"
           className="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 hover:underline"

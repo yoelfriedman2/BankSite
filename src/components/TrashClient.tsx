@@ -64,7 +64,8 @@ export function TrashClient({ banks, accounts }: Props) {
     if (!window.confirm("Restore this account?")) return;
     setBusyId(id);
     startTransition(async () => {
-      await restoreAccount(id);
+      const res = await restoreAccount(id);
+      if (res.error) toast.error(res.error);
       setBusyId(null);
       router.refresh();
     });

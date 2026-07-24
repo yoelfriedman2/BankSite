@@ -10,7 +10,7 @@ import {
   cancelAddressChange,
   type AddressChangeData,
 } from "@/app/(app)/address-change/actions";
-import { formatDate } from "@/lib/format";
+import { formatDate, withScheme } from "@/lib/format";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 
 const inputClass =
@@ -199,7 +199,7 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
               )}
               {item.website && (
                 <a
-                  href={item.website}
+                  href={withScheme(item.website)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 hover:underline"
