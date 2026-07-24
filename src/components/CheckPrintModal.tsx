@@ -11,6 +11,7 @@ import {
   type PrintedCheck,
 } from "@/app/(app)/checks/actions";
 import { formatCurrency } from "@/lib/format";
+import { useToast } from "@/components/Toast";
 
 // ── number → words ────────────────────────────────────────────────────────────
 const ONES = [
@@ -257,6 +258,8 @@ export function CheckPrintModal({
   /** Called when a check is deleted from the log inside the modal. */
   onDeleted?: (id: string) => void;
 }) {
+  const toast = useToast();
+
   const today = new Date().toLocaleDateString("en-US", {
     month: "2-digit", day: "2-digit", year: "numeric",
   });
@@ -313,15 +316,31 @@ export function CheckPrintModal({
   const accountNum = account.account_number ?? "";
 
   function handlePrint() {
+    // A check with no payee or no real amount isn't a valid instrument — don't
+    // let it print silently as a blank/zero check.
+    const payeeTrimmed = payee.trim();
+    if (!payeeTrimmed) {
+      toast.error("Enter a payee before printing.");
+      return;
+    }
+    const amt = parseFloat(amount);
+    if (isNaN(amt) || amt <= 0) {
+      toast.error("Enter an amount greater than $0 before printing.");
+      return;
+    }
+
     // Never print a check with no number — fall back to the default if cleared.
     const cn = checkNum.trim() || defaultCheckNum;
     if (cn !== checkNum) setCheckNum(cn);
 
     const win = window.open("", "_blank", "width=900,height=600");
-    if (!win) return;
+    if (!win) {
+      toast.error("Your browser blocked the print window — allow pop-ups for this site and try again.");
+      return;
+    }
     win.document.write(
       buildPrintHTML(
-        { holder, bankName, bankCity, routing, accountNum, payee, amount, amountW: words, memo, checkNum: cn, date },
+        { holder, bankName, bankCity, routing, accountNum, payee: payeeTrimmed, amount, amountW: words, memo, checkNum: cn, date },
         { mode, dx: Number(dx) || 0, dy: Number(dy) || 0 },
       ),
     );
@@ -333,14 +352,19 @@ export function CheckPrintModal({
       setCheckNum(String(num + 1));
     }
 
-    // Log the printed check. Best-effort: printing must work even if this fails.
+    // Log the printed check. Best-effort: printing must work even if this fails
+    // (the print window is already open by this point) — but a silent failure
+    // here means the check register quietly stops matching what was actually
+    // printed, so surface a real failure instead of swallowing it. DEMO_MODE
+    // returns `{}` on purpose (no fake printed_checks store) — that's a no-op
+    // success, not a failure, so only `error` (never a missing `check`) means
+    // something actually went wrong.
     if (account.id) {
-      const amt = parseFloat(amount);
       recordPrintedCheck({
         accountId: account.id,
         checkNumber: !isNaN(num) && num > 0 ? num : null,
-        payee,
-        amount: !isNaN(amt) && amt > 0 ? Math.round(amt * 100) / 100 : null,
+        payee: payeeTrimmed,
+        amount: Math.round(amt * 100) / 100,
         memo,
         date,
       })
@@ -348,9 +372,11 @@ export function CheckPrintModal({
           if (res?.check) {
             setHistory((prev) => [res.check!, ...prev]);
             onRecorded?.(res.check);
+          } else if (res?.error) {
+            toast.error(res.error);
           }
         })
-        .catch(() => {});
+        .catch(() => toast.error("Check printed, but couldn't be added to the log."));
     }
   }
 

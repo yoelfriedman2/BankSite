@@ -33,23 +33,31 @@ const TABLES = [
 
 type Row = Record<string, unknown>;
 
+/** Pages through a Supabase query past the default 1000-row PostgREST page
+ *  cap by repeatedly appending .range() — shared by every full-table-or-
+ *  filtered-query dump in this app (the weekly admin backup here, and the
+ *  personal "Full backup" export in api/export/full/route.ts) so neither one
+ *  can silently truncate once a table grows past one page (DATA-06). */
+export async function fetchAllRows<T>(
+  buildPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<{ rows: T[]; error?: string }> {
+  const rows: T[] = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await buildPage(from, from + PAGE - 1);
+    if (error) return { rows, error: error.message };
+    rows.push(...(data ?? []));
+    if (!data || data.length < PAGE) break;
+  }
+  return { rows: rows as T[] };
+}
+
 /** Reads a whole table past the 1000-row PostgREST page cap. */
 async function dumpTable(
   admin: ReturnType<typeof createAdminClient>,
   table: string,
 ): Promise<{ rows: Row[]; error?: string }> {
-  const rows: Row[] = [];
-  const PAGE = 1000;
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await admin
-      .from(table)
-      .select("*")
-      .range(from, from + PAGE - 1);
-    if (error) return { rows, error: error.message };
-    rows.push(...(data ?? []));
-    if (!data || data.length < PAGE) break;
-  }
-  return { rows };
+  return fetchAllRows<Row>((from, to) => admin.from(table).select("*").range(from, to));
 }
 
 export async function buildBackupZip(): Promise<{
@@ -62,16 +70,22 @@ export async function buildBackupZip(): Promise<{
   const dump: Record<string, Row[]> = {};
   const tableCounts: Record<string, number> = {};
 
-  for (const table of TABLES) {
-    const { rows, error } = await dumpTable(admin, table);
+  // Dump every table concurrently rather than one at a time — with 15+ tables
+  // each potentially spanning several 1000-row pages, doing this sequentially
+  // risked eating enough of the function's time budget to add real timeout
+  // risk as the data grows (REL-03). Order doesn't matter for correctness
+  // (each table writes to its own key), only for keeping warnings readable.
+  const dumps = await Promise.all(TABLES.map((table) => dumpTable(admin, table)));
+  TABLES.forEach((table, i) => {
+    const { rows, error } = dumps[i];
     // A missing table (migration not run yet) shouldn't sink the whole backup.
     if (error) {
       warnings.push(`${table}: ${error}`);
-      continue;
+      return;
     }
     dump[table] = rows;
     tableCounts[table] = rows.length;
-  }
+  });
 
   // Emails come from auth, not a public table — include them so rows can be
   // mapped back to people during a restore.

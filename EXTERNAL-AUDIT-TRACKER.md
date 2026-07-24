@@ -39,7 +39,7 @@ decision or bigger effort before it can be safely fixed
 - [x] DATA-03 — Concurrent sweeps/returns can corrupt balances (no row lock) — fixed: migration 0041 adds `for update` row locks on the accounts row in both `sweep_accounts` and `return_sweep`, so two concurrent operations on the same account now serialize instead of racing.
 - [~] DATA-04 — Non-atomic cron fee/interest (already fixed)
 - [~] DATA-05 — Backup/restore incomplete (2 missing tables already fixed; rest open)
-- [ ] DATA-06 — Personal "full backup" export is silently partial
+- [x] DATA-06 — Personal "full backup" export is silently partial — fixed: every one of the 8 queries in `api/export/full/route.ts` (banks, accounts, documents, sweeps, checks, reminders, campaigns, campaign items) used a plain unbounded `.select("*")`, relying on PostgREST's default 1000-row page. Fine at today's per-user row counts, but a silent truncation in a file someone trusts as their own personal backup is worse than no backup — now pages through every query via a new shared `fetchAllRows()` helper (`lib/backup.ts`, exported and reused by the admin weekly backup too) until each table is fully read, with a per-table `console.error` if a page genuinely fails partway through. Also added `export const maxDuration = 60` (the Hobby-plan max) so a larger export can't be silently killed by the platform's short default timeout as data grows.
 - [x] DATA-07 — FDIC closed-bank deletion fails open on count-query error — fixed: `deleteClosedBank` now treats a failed/null account count as "skip this bank" (fail closed) instead of silently reading it as zero accounts.
 - [x] DATA-08 — Branch refresh can erase data on insert failure — fixed: migration 0041's `refresh_bank_branches` does delete+insert inside one Postgres function call (one transaction), so an insert failure rolls the delete back instead of leaving that batch erased.
 - [ ] DATA-09 — Holding-company sync never unlinks stale relationships
@@ -64,7 +64,7 @@ decision or bigger effort before it can be safely fixed
 - [ ] UX-03 — Color contrast fails WCAG minimum (confirmed via exact math)
 - [x] UX-04 — DateInput can silently discard input, unstyled in places — partially fixed (the 3 narrowest bugs): Enter committed the typed date but didn't `preventDefault()`, so a parent `<form>` could submit in the same event before the new value propagated — now prevented. Omitting `className` produced a borderless, unstyled field (2 call sites the audit named, plus 2 more found the same way) — `DateInput` now defaults to the app's standard input styling instead of empty. `AccountModal`'s balance field had a native `min="0"` that could fail HTML5 validation and block saving on an account a monthly fee had legitimately driven negative — removed. The silent-revert-on-invalid-input (no error state) and the hidden-fallback-picker parts of this finding are unaddressed.
 - [ ] UX-05 — Import "Cancel" doesn't stop the server-side import
-- [ ] UX-06 — Check printing allows invalid checks, hides failures
+- [x] UX-06 — Check printing allows invalid checks, hides failures — fixed: `CheckPrintModal.tsx`'s `handlePrint()` had zero validation (a blank payee or a $0/negative amount printed a real check onto real check stock) and hid its one real failure mode entirely (`if (!win) return;` when the browser blocks the print popup — nothing happened, no error, no explanation). Now blocks printing with a clear toast (`useToast`, the same pattern already used in `SettingsForm.tsx`) for an empty payee or a non-positive amount, and shows a toast instead of silently returning when `window.open` is blocked. Also surfaces a (non-blocking — the check is already printed by that point) toast if the best-effort check-log write fails, instead of swallowing it — careful to only treat a real `error` as a failure, since DEMO_MODE's intentional `{}` no-op (no fake `printed_checks` store) must not read as one.
 - [ ] UX-07 — Search/autocomplete missing semantics, stale results possible
 - [ ] UX-08 — Search URL changes don't sync existing client list state
 - [x] UX-09 — Rapid balance-date changes can show wrong date's rows — fixed: `BalancesClient` now versions each date-change request and ignores a slower, older response that resolves after a newer one (previously the last response to arrive won, regardless of which date it was for). A selected holder that doesn't exist in the new date's rows now resets to "all" instead of silently producing an empty list.
@@ -85,7 +85,7 @@ decision or bigger effort before it can be safely fixed
 ## Part 4 — Performance / Reliability / Ops (15)
 
 - [x] REL-01 — Missing email config reported as successful delivery (confirmed, serious) — fixed: `sendEmail` now returns `{ skipped: true }` (distinct from success) when `RESEND_API_KEY` is unset; the cron reminders route and the settings feedback form both now check for it and correctly avoid marking something as "sent" when nothing was.
-- [ ] REL-02 — Cron is a non-durable monolith, can partially fail silently
+- [x] REL-02 — Cron is a non-durable monolith, can partially fail silently — fixed the concrete gap: `api/cron/reminders/route.ts`'s per-profile and per-account loops (activity reminders, due reminders, monthly fee, monthly interest) had no isolation — an unexpected throw on one account (not just an RPC error, which was already handled) would abort the whole loop, silently skipping every remaining account/profile for that entire run with nothing logged. Each loop body is now wrapped in its own `try/catch` that logs and continues to the next item instead of aborting the run. Also added `export const maxDuration = 60` (the backup section already had its own try/catch, but the route as a whole had no explicit time budget, leaving it subject to Vercel's much shorter platform default). Doesn't attempt the larger "non-durable" half of this finding (a real job queue with per-item retry/backoff) — that's a genuine architecture change, out of scope for this pass.
 - [ ] OPS-01 — Schema deployment manual/undocumented, hidden by fallbacks
 - [ ] QA-01 — No automated regression suite or CI
 - [ ] CFG-01 — Env contract incomplete/unvalidated (docs partially fixed)
@@ -93,7 +93,7 @@ decision or bigger effort before it can be safely fixed
 - [ ] PERF-02 — Pages over-fetch complete datasets
 - [ ] PERF-03 — Balance-as-of and batch-return scale poorly
 - [ ] PERF-04 — Holding-companies route ships parsers eagerly (bundle outlier)
-- [ ] REL-03 — Backups built as single unbounded in-memory artifact
+- [x] REL-03 — Backups built as single unbounded in-memory artifact — mitigated, not a full architectural rewrite (a real streaming/temp-file rebuild was judged too large a risk to a feature this project treats as its disaster-recovery safety net, for a family app currently in the low thousands of total rows). `buildBackupZip()`'s 15+ table dumps now run concurrently via `Promise.all` instead of one at a time, meaningfully cutting the function's real wall-clock time as tables grow. Added `export const maxDuration = 60` to `api/cron/reminders/route.ts` (the Hobby-plan max) so the weekly backup — which rides this same route — can't be silently killed by the platform's much shorter default timeout partway through. The genuine "in-memory, no hard bound" architecture is unchanged; this closes the nearest-term, cheapest-to-fix failure mode (a slow/timed-out run) without touching the backup's actual correctness.
 - [x] REL-04 — External API calls lack timeout/retry/backoff policy — partially fixed (the timeout half): new shared `lib/fetchWithTimeout.ts` (the same AbortController pattern already used for bank-website verification, now extracted and reused) applied to the 2 FDIC BankFind calls that previously had no bound at all (`fetchFdic`, `fetchFdicLocations`) plus the holding-company RSSD lookup. Retry/backoff and client-side (Nominatim autocomplete) cancellation are unaddressed.
 - [ ] OBS-01 — Monitoring captures only a subset of real failures
 - [ ] OPS-02 — Maintenance scripts have hard-coded paths, weak safety
@@ -302,6 +302,27 @@ reading of every changed branch against both the "migration run" and "migration 
 confirming each fallback tier degrades to exactly the previously-working behavior with nothing new
 required to keep working.
 
+**Round 13 (DATA-15 explicitly declined; UX-06, REL-02, REL-03, DATA-06 fixed)** — Asked for the next
+5 biggest remaining items and reported them ranked, each grounded by reading the actual current code
+(not just the tracker's original text) rather than trusting stale descriptions:
+DATA-15 (public road-trip plans can leak a home address) was explicitly declined — "I don't care,
+this is a family app" — and left open on purpose, not by oversight. The other four were all approved
+("if it needs fixing, just fix it" / "I need to have proper backups") and fixed — see UX-06, REL-02,
+REL-03, DATA-06 above for the detail. All four are pure application/config code, no migration.
+Verified via `tsc --noEmit`, `npm run build`, and `npm test` (84/84) — all clean. UX-06 is genuinely
+UI-testable (unlike the RPC-dependent DATA-01/DATA-02 work) — verified with a hand-rolled CDP driver
+against a real DEMO_MODE dev server (this sandbox has no Playwright package installed and installing
+one wasn't attempted, matching this project's established workaround from earlier sessions): confirmed
+blank payee and non-positive amount both block printing with a clear toast, valid input does NOT
+trigger those same errors, and — genuinely useful signal from headless Chrome having no popup UI at
+all — a valid print attempt correctly surfaced the new "browser blocked the print window" toast
+instead of silently doing nothing, exercising the exact failure path the fix targets. REL-02/REL-03/
+DATA-06 are per-request Server-side logic with no new UI surface — verified by reading the diff
+against the original code, confirming each is a narrow, additive change (a try/catch per loop
+iteration, a pagination helper, a maxDuration bump) with no alteration to any already-correct success
+path. `DEMO_MODE` was found already `=true` in `.env.local` from an earlier session at the start of
+this round's verification — flipped back to `false` before finishing, per the standing rule.
+
 ## What's still pending
 
 - ~~Migrations 0040 and 0041~~ — both confirmed run by the user. SEC-01 (Critical) is now fully
@@ -315,14 +336,18 @@ required to keep working.
   closed (balance + history writes are atomic on every path going forward).
 - **All 22 Part 1 (Security) findings are now resolved** — either fixed, closed as a non-issue,
   or a deliberate accepted-risk decision made with the user (see each item above for which).
-- **Both remaining High-severity findings (DATA-01, DATA-02) are now resolved.** No High-severity
-  findings remain open anywhere in the tracker.
-- 50 findings remain open, all Medium/Low severity. Most of what's left is broader/systemic rather
+- **Both High-severity findings (DATA-01, DATA-02) are resolved.** No High-severity findings remain
+  open anywhere in the tracker.
+- **DATA-15 (public road-trip plans can leak a home address) is open by explicit user decision, not
+  an oversight** — "I don't care, this is a family app." Don't re-surface this as a priority item
+  without the user raising it again.
+- 46 findings remain open, all Medium/Low severity. Most of what's left is broader/systemic rather
   than a single clean fix: DATA-18/DATA-19 (pagination + validation patterns spanning "most Server
   Actions" — needs a scoping decision, not just code), INT-04/INT-05/INT-06 (soft-delete-state
   consistency across many call sites — real design questions about desired restore/cascade behavior,
   not pure bugs), and most of Part 3 (UX/Accessibility, 22 findings — several need a design decision,
   e.g. which new colors fix the contrast failures, but some like UX-04/UX-05/UX-10 look like plain
-  bugs worth a closer look). Part 4 (Performance/Reliability/Ops, 15 findings) is mostly bigger-effort
-  infrastructure work (CI, monitoring, query tuning) rather than quick fixes. Worth a dedicated round
-  to scope out the next no-decision-needed batch from these once this round is reviewed.
+  bugs worth a closer look). Part 4 (Performance/Reliability/Ops, 15 findings — REL-02/REL-03 now
+  partially addressed, see above) is mostly bigger-effort infrastructure work (CI, monitoring, query
+  tuning) rather than quick fixes. Worth a dedicated round to scope out the next no-decision-needed
+  batch from these once this round is reviewed.

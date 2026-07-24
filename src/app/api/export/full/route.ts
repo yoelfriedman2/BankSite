@@ -5,9 +5,16 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildExportRows } from "@/lib/export";
 import { isOwnerEmail } from "@/lib/isOwner";
+import { fetchAllRows } from "@/lib/backup";
 import type { Account, Bank } from "@/lib/types";
 
 const BUCKET = "account-documents";
+
+// Same reasoning as the admin backup's own maxDuration (api/cron/reminders) —
+// this now pages through every table in full rather than trusting a single
+// unbounded query, so it can take longer as someone's data grows. 60s is the
+// max the Hobby/free plan allows.
+export const maxDuration = 60;
 
 /** Full personal backup: an Excel workbook plus every uploaded document, zipped. */
 export async function GET() {
@@ -17,25 +24,55 @@ export async function GET() {
   } = await supabase.auth.getUser();
   if (!user) return new NextResponse("Unauthorized", { status: 401 });
 
+  // Every query here previously used a plain, unbounded .select("*") — fine
+  // while each table stayed under PostgREST's default 1000-row page cap, but
+  // a silent truncation past that point in a file someone trusts as their own
+  // personal backup is worse than no backup at all (DATA-06). fetchAllRows
+  // pages through .range() until a table is fully read, same pattern already
+  // used for the admin weekly backup in lib/backup.ts.
   const [
-    { data: banks },
-    { data: accounts },
-    { data: docs },
-    { data: sweeps },
-    { data: checks },
-    { data: reminders },
-    { data: campaigns },
-    { data: campaignItems },
+    { rows: banks, error: banksErr },
+    { rows: accounts, error: acctsErr },
+    { rows: docs, error: docsErr },
+    { rows: sweeps, error: sweepsErr },
+    { rows: checks, error: checksErr },
+    { rows: reminders, error: remindersErr },
+    { rows: campaigns, error: campaignsErr },
+    { rows: campaignItems, error: campaignItemsErr },
   ] = await Promise.all([
-    supabase.from("banks").select("*").is("deleted_at", null).order("name", { ascending: true }),
-    supabase.from("accounts").select("*").is("deleted_at", null),
-    supabase.from("account_documents").select("*").order("uploaded_at", { ascending: false }),
-    supabase.from("account_sweeps").select("*").order("moved_out_at", { ascending: false }),
-    supabase.from("printed_checks").select("*").order("created_at", { ascending: false }),
-    supabase.from("reminders").select("*").order("due_date", { ascending: false }),
-    supabase.from("address_campaigns").select("*").order("created_at", { ascending: false }),
-    supabase.from("address_campaign_items").select("*"),
+    fetchAllRows<Bank>((from, to) =>
+      supabase.from("banks").select("*").is("deleted_at", null).order("name", { ascending: true }).range(from, to),
+    ),
+    fetchAllRows<Account>((from, to) => supabase.from("accounts").select("*").is("deleted_at", null).range(from, to)),
+    fetchAllRows<Record<string, unknown>>((from, to) =>
+      supabase.from("account_documents").select("*").order("uploaded_at", { ascending: false }).range(from, to),
+    ),
+    fetchAllRows<Record<string, unknown>>((from, to) =>
+      supabase.from("account_sweeps").select("*").order("moved_out_at", { ascending: false }).range(from, to),
+    ),
+    fetchAllRows<Record<string, unknown>>((from, to) =>
+      supabase.from("printed_checks").select("*").order("created_at", { ascending: false }).range(from, to),
+    ),
+    fetchAllRows<Record<string, unknown>>((from, to) =>
+      supabase.from("reminders").select("*").order("due_date", { ascending: false }).range(from, to),
+    ),
+    fetchAllRows<Record<string, unknown>>((from, to) =>
+      supabase.from("address_campaigns").select("*").order("created_at", { ascending: false }).range(from, to),
+    ),
+    fetchAllRows<Record<string, unknown>>((from, to) => supabase.from("address_campaign_items").select("*").range(from, to)),
   ]);
+  for (const [table, err] of [
+    ["banks", banksErr],
+    ["accounts", acctsErr],
+    ["account_documents", docsErr],
+    ["account_sweeps", sweepsErr],
+    ["printed_checks", checksErr],
+    ["reminders", remindersErr],
+    ["address_campaigns", campaignsErr],
+    ["address_campaign_items", campaignItemsErr],
+  ] as const) {
+    if (err) console.error(`[export/full] ${table} read failed partway through for user ${user.id}:`, err);
+  }
 
   const bankList = (banks ?? []) as Bank[];
   const acctList = (accounts ?? []) as Account[];

@@ -174,6 +174,82 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-24 (external audit — round 13: next-5 triage — UX-06/REL-02/REL-03/DATA-06 fixed, DATA-15
+explicitly declined)** — Direct continuation of round 12, same day: with DATA-01/DATA-02 shipped and
+migration 0043 confirmed run, user asked for the next 5 biggest remaining findings. Ranked and
+reported 5 (DATA-15 home-address leak in public road trips, UX-06 check-printing validation, REL-02
+cron resilience, REL-03 backup memory risk, DATA-06 personal-export truncation risk), each grounded
+by reading the actual current code rather than trusting the tracker's original one-line descriptions
+— confirmed all 5 were still real and current before presenting them. User made a real call on each:
+explicitly declined DATA-15 ("I don't care, this is a family app") and approved the other 4 without
+needing the specifics explained ("if it needs fixing, just fix it" / for DATA-06 specifically, "I
+need to have proper backups").
+
+- **UX-06 — check printing allowed a blank/zero-amount check and hid its one real failure mode.**
+  `CheckPrintModal.tsx`'s `handlePrint()` had no validation at all (an empty payee or a $0/negative
+  amount printed straight onto real check stock) and `if (!win) return;` silently did nothing when
+  the browser blocked the print popup — no error, no explanation, the user just clicks and nothing
+  happens. Now blocks with a clear `useToast` error (the same toast pattern `SettingsForm.tsx` already
+  uses) for a blank payee or non-positive amount, and shows a toast instead of silently returning when
+  `window.open` is blocked. Also surfaces a toast (non-blocking — the check is already printed by that
+  point, so this can't stop the print) if the best-effort check-log write fails, rather than
+  swallowing it — careful to only treat a real `.error` as a failure, since DEMO_MODE's deliberate
+  `{}` no-op (no fake `printed_checks` store exists) must not read as one and spam a false error toast
+  every single time in demo mode.
+- **REL-02 — one bad account/profile could silently abort the whole daily cron run.** Every loop in
+  `api/cron/reminders/route.ts` (per-profile activity reminders, per-account nested inside that,
+  per-user due reminders, per-account monthly fee, per-account monthly interest) had zero isolation —
+  an unexpected throw (not just an RPC error, which was already handled by the DATA-02 fallback chain)
+  on one item would abort the entire loop, silently skipping every remaining item for that whole run
+  with nothing logged anywhere. Each loop body now wraps its own logic in a `try/catch` that logs via
+  `console.error` and moves to the next item instead of aborting. Also added `export const maxDuration
+  = 60` (the Hobby/free-plan max) — the route as a whole (reminders + fee/interest accrual + the
+  weekly backup, all riding one daily cron) had no explicit time budget, leaving it subject to
+  Vercel's much shorter platform default. Doesn't attempt the larger "durable job queue with per-item
+  retry" rework this finding's title implies — that's a real architecture change, left for later.
+- **REL-03 — the weekly backup builds one unbounded in-memory ZIP.** `lib/backup.ts#buildBackupZip`
+  dumps 15+ tables (each already paginated past PostgREST's 1000-row cap, but everything held in
+  memory at once with no bound) into a single `JSZip` object, then calls `generateAsync()` once — a
+  real Vercel serverless memory/time ceiling with no chunking or streaming underneath it. A full
+  streaming/temp-file rewrite was judged too large and risky for a feature this project treats as its
+  actual disaster-recovery safety net, especially given today's real data volume (low thousands of
+  total rows across all users) doesn't yet make it urgent — so this round mitigated instead of
+  rearchitected: the 15+ table dumps now run concurrently via `Promise.all` instead of one at a time
+  (meaningfully cuts real wall-clock time as tables grow), and the same `maxDuration = 60` bump above
+  protects this same route's backup section from the platform's short default timeout. The underlying
+  "in memory, no hard bound" architecture is unchanged — this closes the nearest-term, cheapest risk
+  (a slow run getting silently killed) without touching backup correctness.
+- **DATA-06 — the personal "Full backup" export could silently truncate.** Every one of the 8 queries
+  in `api/export/full/route.ts` (banks, accounts, documents, sweeps, checks, reminders, campaigns,
+  campaign items) used a plain unbounded `.select("*")`, trusting PostgREST's default 1000-row page.
+  Fine at today's per-user row counts (a full seeded bank list is ~426 rows, well under the cap), but
+  a silently-incomplete personal backup is worse than no backup — you don't know to distrust it. New
+  exported `fetchAllRows()` helper in `lib/backup.ts` (factored out of the existing `dumpTable`, which
+  now calls it too) pages through `.range()` until each query is fully read; every one of the 8
+  queries in the export route now uses it, with a `console.error` per table if a page genuinely fails
+  partway through. Also added the same `export const maxDuration = 60` — this is a synchronous,
+  user-triggered download, so a platform timeout here means a failed download with zero indication
+  why. Both this and REL-03 above now share one pagination helper, so neither can drift out of sync
+  with the other on this specific bug again.
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (84/84) all clean. UX-06 is the one
+change in this round that's genuinely UI-testable (unlike DATA-01/DATA-02/REL-02/REL-03/DATA-06, which
+are all real-Supabase-RPC/server-request-dependent with no new UI surface) — verified with a
+hand-rolled CDP driver (`scratchpad/cdp.mjs`, reused from an earlier session — this sandbox has no
+`playwright` package installed) against a real DEMO_MODE dev server: confirmed a blank payee and a
+non-positive amount both correctly block printing with a toast, confirmed valid input does NOT trigger
+those same errors, and — a genuinely useful signal from headless Chrome having no popup UI at all by
+design — confirmed a valid print attempt correctly surfaced the new "browser blocked the print window"
+toast instead of silently doing nothing, which exercises exactly the failure path this fix targets.
+Found `.env.local`'s `DEMO_MODE` already set to `true` from an earlier session at the start of this
+verification pass — flipped back to `false` before finishing, per the standing rule. REL-02/REL-03/
+DATA-06 were verified by reading the diff against the original code, confirming each is a narrow,
+additive change (a try/catch per loop iteration, a shared pagination helper, a `maxDuration` bump)
+with no alteration to any already-correct success path. Skipped changelog/Guide — all four are
+bug fixes/hardening with no new user-visible feature, per the standing features-only policy. DATA-15
+left open on purpose per the user's explicit call, not an oversight — noted in the tracker so a future
+round doesn't re-surface it as a priority without being asked.
+
 **2026-07-24 (external audit — round 12: DATA-01 and DATA-02 fixed — both remaining High-severity
 findings now closed)** — Direct continuation of round 11, same day: with all 22 Part 1 Security
 findings resolved, user asked what the next biggest thing to fix was. DATA-01 and DATA-02 were the
