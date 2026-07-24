@@ -923,9 +923,18 @@ export function ImportDialog({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
+              disabled={isPending}
+              title={isPending ? "The import is still running server-side and can't be interrupted — wait for it to finish." : undefined}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-40"
             >
-              {stage === "done" ? "Close" : "Cancel"}
+              {/* isPending only overlaps with "review" (mid-import) — "done" never
+                  has isPending true, so this doesn't change the Close label. Closing
+                  used to silently do nothing to stop an in-flight import (UX-05):
+                  the dialog closed but importBanks() kept running and writing
+                  server-side with no way to actually cancel it (Server Actions have
+                  no cancellation token once invoked) — disabling this is honest
+                  about that instead of pretending Cancel stops anything. */}
+              {stage === "done" ? "Close" : isPending ? "Importing…" : "Cancel"}
             </button>
             {stage === "review" && (
               <button

@@ -4,6 +4,14 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 
 ## One-time setup pending
 
+- **Run migration `0044_check_number_and_activity_log_atomicity.sql`** — adds
+  `claim_check_number` (DATA-14) and `append_activity_log` (DATA-20) Postgres functions. Fixes two
+  read-then-write races: two near-simultaneous check prints could silently store the same check
+  number, and two near-simultaneous "log activity" clicks could silently drop one entry. Degrades
+  gracefully until run — both paths automatically fall back to their exact original (non-atomic, but
+  already-working) behavior, so nothing breaks either way; running it just closes the small collision/
+  lost-entry window.
+
 - ~~Run migration `0043_atomic_balance_history.sql`~~ — confirmed run. Closes DATA-02: adds
   `charge_monthly_fee_with_history`, `credit_monthly_interest_with_history`, and
   `update_account_balance` Postgres functions so a balance change and its `account_balance_history`

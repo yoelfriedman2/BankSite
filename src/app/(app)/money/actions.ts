@@ -116,6 +116,36 @@ export async function getOutstandingSweeps(): Promise<OutstandingSweep[]> {
   }));
 }
 
+export type SweepWarning = { count: number; total: number };
+
+/** Outstanding (unreturned) sweeps tied to a set of accounts — used before a
+ *  PERMANENT delete, since account_sweeps cascades on account/bank deletion
+ *  (on delete cascade) and a hard delete would silently erase that money-
+ *  movement record with no way to recover it (INT-05). Doesn't block the
+ *  delete — just surfaces what's actually at risk so the decision is
+ *  informed instead of silent. */
+export async function getOutstandingSweepWarningForAccounts(accountIds: string[]): Promise<SweepWarning | null> {
+  if (DEMO_MODE || !accountIds.length) return null;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("account_sweeps")
+    .select("amount")
+    .in("account_id", accountIds)
+    .is("returned_at", null);
+  if (!data || data.length === 0) return null;
+  return { count: data.length, total: data.reduce((sum, r) => sum + Number(r.amount), 0) };
+}
+
+/** Same check, scoped to every account under a bank — permanently deleting a
+ *  bank cascades to its accounts, which cascades to their sweeps too. */
+export async function getOutstandingSweepWarningForBank(bankId: string): Promise<SweepWarning | null> {
+  if (DEMO_MODE) return null;
+  const supabase = await createClient();
+  const { data: accts } = await supabase.from("accounts").select("id").eq("bank_id", bankId);
+  const accountIds = (accts ?? []).map((a) => a.id as string);
+  return getOutstandingSweepWarningForAccounts(accountIds);
+}
+
 /** Move money out of one or more accounts under a single reason. Updates each
  *  account's balance, logs the activity (keeps it from going dormant), and records
  *  a dated balance-history point. */

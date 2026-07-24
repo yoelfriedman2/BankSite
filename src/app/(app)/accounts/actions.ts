@@ -525,17 +525,42 @@ export async function duplicateAccount(
   return {};
 }
 
-/** Persist the last check number used for an account so the next print starts from last+1. */
-export async function saveLastCheckNumber(accountId: string, num: number): Promise<void> {
-  if (DEMO_MODE || !accountId || !Number.isInteger(num) || num < 0) return;
+/** Claims a check number for an account, returning the number actually
+ *  claimed — which may be higher than proposed if a concurrent print already
+ *  claimed it or something past it (DATA-14). Uses the atomic
+ *  claim_check_number RPC (migration 0044) so two near-simultaneous prints
+ *  can never silently store the same number; falls back to the original
+ *  plain update (today's existing behavior, no atomicity) if that migration
+ *  hasn't run yet. */
+export async function saveLastCheckNumber(
+  accountId: string,
+  num: number,
+): Promise<{ claimed?: number; error?: string }> {
+  if (!accountId || !Number.isInteger(num) || num < 0) return {};
+  if (DEMO_MODE) return { claimed: num };
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return;
-  await supabase.from("accounts").update({ last_check_number: num }).eq("id", accountId);
+  if (!user) return { error: "You are not signed in." };
+
+  const { data: claimed, error: rpcErr } = await supabase.rpc("claim_check_number", {
+    p_account_id: accountId,
+    p_proposed_number: num,
+  });
   revalidatePath("/checks");
   revalidatePath("/banks");
+  if (!rpcErr) {
+    return claimed == null ? {} : { claimed: Number(claimed) };
+  }
+  console.warn(
+    `[saveLastCheckNumber] claim_check_number RPC unavailable (migration 0044 not run yet?), falling back for account ${accountId}:`,
+    rpcErr.message,
+  );
+
+  const { error: updateErr } = await supabase.from("accounts").update({ last_check_number: num }).eq("id", accountId);
+  if (updateErr) return { error: friendlyDbError(updateErr.message) };
+  return { claimed: num };
 }
 
 export type VaultFieldSet = {
@@ -633,6 +658,27 @@ export async function logActivityToday(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
+
+  // Atomic read+append+write via RPC (migration 0044) — the whole operation
+  // happens inside one locked row read, so two near-simultaneous quick-log
+  // clicks can't silently drop one entry (DATA-20, the same read-modify-write
+  // race class already fixed for balances in 0043). Falls back to the
+  // original plain read-then-write if the migration hasn't run yet, so this
+  // can never regress below what already worked.
+  const { error: rpcErr } = await supabase.rpc("append_activity_log", {
+    p_account_id: id,
+    p_date: today,
+    p_note: null,
+    p_type: type,
+  });
+  if (!rpcErr) {
+    revalidate();
+    return {};
+  }
+  console.warn(
+    `[logActivityToday] append_activity_log RPC unavailable (migration 0044 not run yet?), falling back for account ${id}:`,
+    rpcErr.message,
+  );
 
   const { data: acc } = await supabase
     .from("accounts")

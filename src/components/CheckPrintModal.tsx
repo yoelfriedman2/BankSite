@@ -345,10 +345,24 @@ export function CheckPrintModal({
       ),
     );
     win.document.close();
-    // Persist the check number so next print defaults to this+1
+    // Persist the check number so next print defaults to this+1. The check is
+    // already physically printed by this point (nothing can undo that), but
+    // the claim itself is atomic (DATA-14) — if a concurrent print already
+    // claimed this exact number, the server bumps the STORED value forward
+    // past it instead of silently recording a duplicate, and tells us so here
+    // so the discrepancy is visible instead of silently wrong.
     const num = parseInt(cn, 10);
     if (account.id && !isNaN(num) && num > 0) {
-      saveLastCheckNumber(account.id, num).catch(() => {});
+      saveLastCheckNumber(account.id, num)
+        .then((res) => {
+          if (res.claimed != null && res.claimed !== num) {
+            toast.error(
+              `Heads up: check #${num} was just printed, but #${res.claimed} is now on file as the last used number — a check may have been printed at the same time elsewhere. Double-check your records.`,
+            );
+            setCheckNum(String(res.claimed + 1));
+          }
+        })
+        .catch(() => {});
       setCheckNum(String(num + 1));
     }
 

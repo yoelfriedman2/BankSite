@@ -47,13 +47,13 @@ decision or bigger effort before it can be safely fixed
 - [x] DATA-11 — Spreadsheet import date/status mapping bugs — partially fixed (the two narrowest, clearest bugs): `parseStatus` matched the bare substring "can" ahead of "open", so a plain "Can open" became `cannot_open` — now matches the actual negative phrasing ("cannot"/"can't"/"unable") instead. A row matching a *trashed* existing bank by cert/name fell through to the insert path and hit the unique `(user_id, cert)` constraint the trashed row still occupied — now restores the trashed bank instead (real-mode and demo-mode both). The broader per-row-non-atomic-apply and column-mapping-ambiguity parts of this finding are unaddressed — see notes below.
 - [x] DATA-12 — APY formula overstates actual annual yield — fixed: `monthlyInterestAmount` now derives the monthly periodic rate from the entered APY via `(1+APY)^(1/12)-1` instead of a naive `rate/12`, so 12 months of compounding lands on the labeled APY instead of overshooting it (verified: 4.5% now compounds to $10,449.99 on a $10,000 balance over a year, not the old $10,459.40 / 4.594% effective yield).
 - [x] DATA-13 — Dormancy rules disagree across pages — fixed: `getAttentionReasons` added its standard "No activity in N months" warning unconditionally, ignoring `alertNoActivity` (the preference only ever gated a *different*, missing-date reason) — now gated the same way. The dormancy-window floor silently clamped to 3 months even though Settings validates and accepts as low as 1 — now floors at 1, matching what Settings actually allows. The calendar's `Date.setMonth` end-of-month rollover (Jan 31 + 1 month silently becoming March 3) also fixed with clamped, timezone-independent Y/M/D arithmetic. Account-type-exemption and cron-boundary disagreements noted in the finding are unaddressed.
-- [ ] DATA-14 — Address campaign/queue/check-number races
+- [x] DATA-14 — Address campaign/queue/check-number races — fixed the check-number slice specifically (the part with a real financial consequence — two printed checks sharing a number — rather than the broader "address campaign/queue races," which are lower-stakes display-ordering races left open). `saveLastCheckNumber` was a plain unconditional `.update()` with no locking — two near-simultaneous prints could both read the same `last_check_number`, both compute the same "next" number, and both silently store it, producing two real checks with an identical number. New migration **`0044_check_number_and_activity_log_atomicity.sql`**: `claim_check_number` locks the account row, reads the current value, and claims `greatest(proposed, current+1)` — a concurrent second caller always gets bumped past whatever the first just claimed. Can't prevent the physical print itself (the check is already on paper by the time this runs, same as before — printing happens immediately on click to avoid a popup-blocker regression from awaiting a network call first), but the app now detects a real collision and warns via toast instead of silently storing a wrong/duplicate number.
 - [ ] DATA-15 — Public road-trip plans can expose private locations
 - [x] DATA-16 — Audit log doesn't check insert errors — fixed: `logAudit` now checks the insert's own `{ error }` result (not just thrown exceptions) and logs it, so a failed audit write leaves a trace instead of vanishing silently.
 - [x] DATA-17 — Document metadata/storage can desync — fixed: `documents.ts#deleteDocument` deleted the `account_documents` metadata row FIRST, then removed the storage file LAST with no error check — a failed (silently ignored) storage removal left an orphaned file with nothing left pointing to it, forever. Reordered so the storage file is removed (and its error checked) before the metadata row is deleted — a storage-removal failure now leaves the row in place (with its correct path) so the delete can simply be retried, instead of silently reporting "deleted" while the real file lingers unreachable.
 - [ ] DATA-18 — Unpaginated reads silently truncate data
 - [ ] DATA-19 — Missing affected-row/value validation
-- [ ] DATA-20 — Activity log read-modify-write loses concurrent entries
+- [x] DATA-20 — Activity log read-modify-write loses concurrent entries — fixed: `logActivityToday` read `accounts.activity_log`, appended one entry in JS, and wrote the whole array back — a classic read-modify-write race where two near-simultaneous quick-log clicks (two tabs, a slow retry) could silently drop one entry. New `append_activity_log` function (same migration 0044 as DATA-14) does the read+append+write inside one locked row read, so two concurrent calls can't stomp each other. Falls back to the original two-step behavior if the migration hasn't run yet.
 - [x] DATA-21 — Permanent delete bypasses Trash state requirement — fixed: `permanentlyDeleteBank`/`permanentlyDeleteAccount` now require the row to already be soft-deleted (`deleted_at is not null`) and check the actual affected row before reporting success, instead of hard-deleting an active bank/account on a direct/stale request.
 - [ ] DATA-22 — Comment/read-marker edge cases
 
@@ -63,7 +63,7 @@ decision or bigger effort before it can be safely fixed
 - [ ] UX-02 — Inconsistent keyboard interaction on list cards
 - [ ] UX-03 — Color contrast fails WCAG minimum (confirmed via exact math)
 - [x] UX-04 — DateInput can silently discard input, unstyled in places — partially fixed (the 3 narrowest bugs): Enter committed the typed date but didn't `preventDefault()`, so a parent `<form>` could submit in the same event before the new value propagated — now prevented. Omitting `className` produced a borderless, unstyled field (2 call sites the audit named, plus 2 more found the same way) — `DateInput` now defaults to the app's standard input styling instead of empty. `AccountModal`'s balance field had a native `min="0"` that could fail HTML5 validation and block saving on an account a monthly fee had legitimately driven negative — removed. The silent-revert-on-invalid-input (no error state) and the hidden-fallback-picker parts of this finding are unaddressed.
-- [ ] UX-05 — Import "Cancel" doesn't stop the server-side import
+- [x] UX-05 — Import "Cancel" doesn't stop the server-side import — fixed the honest half of this finding, not full mid-flight cancellation (that isn't achievable — Server Actions have no cancellation token once invoked, and restructuring the import into a client-driven, resumable batch process to support real cancellation is a genuinely bigger architecture change, out of scope here). Confirmed `ImportDialog.tsx`'s Cancel button just called `onClose()` unconditionally — clicking it while `importBanks()` was still running closed the dialog while the import kept writing server-side, with the user having no idea "cancel" hadn't actually stopped anything. Now disabled (and relabeled "Importing…") while `isPending`, matching the identical `disabled={isPending}` pattern the dialog's own "← Change file" button already used — the UI can no longer imply an interruption that doesn't happen.
 - [x] UX-06 — Check printing allows invalid checks, hides failures — fixed: `CheckPrintModal.tsx`'s `handlePrint()` had zero validation (a blank payee or a $0/negative amount printed a real check onto real check stock) and hid its one real failure mode entirely (`if (!win) return;` when the browser blocks the print popup — nothing happened, no error, no explanation). Now blocks printing with a clear toast (`useToast`, the same pattern already used in `SettingsForm.tsx`) for an empty payee or a non-positive amount, and shows a toast instead of silently returning when `window.open` is blocked. Also surfaces a (non-blocking — the check is already printed by that point) toast if the best-effort check-log write fails, instead of swallowing it — careful to only treat a real `error` as a failure, since DEMO_MODE's intentional `{}` no-op (no fake `printed_checks` store) must not read as one.
 - [ ] UX-07 — Search/autocomplete missing semantics, stale results possible
 - [ ] UX-08 — Search URL changes don't sync existing client list state
@@ -89,7 +89,7 @@ decision or bigger effort before it can be safely fixed
 - [ ] OPS-01 — Schema deployment manual/undocumented, hidden by fallbacks
 - [ ] QA-01 — No automated regression suite or CI
 - [ ] CFG-01 — Env contract incomplete/unvalidated (docs partially fixed)
-- [ ] PERF-01 — Repeated auth/profile work, serialized queries
+- [x] PERF-01 — Repeated auth/profile work, serialized queries — fixed the concrete instance: `(app)/layout.tsx` (which wraps every single page) ran 3 separate `profiles` queries (display name/onboarded, access status/last seen, vault config) as 3 sequential `await`s. They're deliberately separate queries on purpose (a missing migration on one field can't break the others) — that design is unchanged — but running them one at a time was pure wasted latency, since none of the three depends on another's result. Now runs all 3 concurrently via `Promise.all` (a Supabase query resolves `{data, error}` rather than rejecting on failure, so this is safe and preserves the exact same independent-degradation behavior and redirect precedence). Same safe concurrency pattern already used for the weekly backup's table dumps (REL-03).
 - [ ] PERF-02 — Pages over-fetch complete datasets
 - [ ] PERF-03 — Balance-as-of and batch-return scale poorly
 - [ ] PERF-04 — Holding-companies route ships parsers eagerly (bundle outlier)
@@ -106,7 +106,7 @@ decision or bigger effort before it can be safely fixed
 - [x] INT-02 — Pending/denied users can receive protected note content by email (confirmed) — fixed: the community-note broadcast in `addBankComment` now excludes pending/denied users from the recipient list before sending, closing the RLS-bypassing side channel.
 - [x] INT-03 — FDIC cert used as mutable "identity" across subsystems — fixed the core danger (an ordinary form edit silently changing what the cert means to every other feature keyed by it): the cert field is now read-only once a bank already exists (still editable when first creating one, since nothing is keyed to it yet) — both in the form UI and, since Server Actions are directly callable, enforced server-side in `upsertBank` too (a submitted cert change on an existing bank is now silently dropped from the update rather than applied).
 - [ ] INT-04 — Active accounts can exist under a soft-deleted bank
-- [ ] INT-05 — Money-owed sweeps conflict with trash/permanent delete
+- [x] INT-05 — Money-owed sweeps conflict with trash/permanent delete — fixed with a warning, not a hard block, per explicit user instruction ("build a warning so the user knows"). Confirmed via the schema: `account_sweeps.account_id references accounts(id) on delete cascade` and `accounts.bank_id references banks(id) on delete cascade` — permanently deleting an account or bank silently erases any outstanding (unreturned) sweep record along with it, with zero warning that real money-movement history was about to be destroyed. New `getOutstandingSweepWarningForAccounts`/`getOutstandingSweepWarningForBank` (`money/actions.ts`) check for unreturned sweeps before the existing Trash-page confirm dialogs (`TrashClient.tsx`) fire, and append a specific dollar-amount warning to the confirm text when any exist — the delete itself is unchanged (still proceeds on confirm), this just makes sure the person clicking "delete forever" actually knows what they're about to lose.
 - [x] INT-06 — Duplicate account copies live balance/credentials as template — fixed: `accounts/actions.ts#duplicateAccount` (both DEMO_MODE and real paths) copied `balance`, `username`, `password`, and `access_notes` verbatim into the new row, clearing only the account number — reachable via a real "Duplicate" button in the bank drawer. A duplicated account silently started with the *same real dollar balance* as the source, inflating every total (dashboard, balance-by-date, holder totals) until manually corrected, plus a copy of the same real login credentials. Now clears balance/username/password/access_notes to `null` (matching how a genuinely new account starts) — `interest_rate` still carries over unchanged, per the existing deliberate precedent already documented in the code. The now-unreachable "seed an opening-balance history point" block (balance is always null on duplicate now) was removed as dead code rather than left behind.
 - [x] INT-07 — Money-move batch can silently move less than confirmed — fixed: `createSweepBatch` now compares what `sweep_accounts` actually applied per account against what was requested, and reports an honest partial-success message (with the real total moved) instead of a blanket success when a balance was lower than expected.
 - [x] INT-08 — Trashed bank's reminders stay active/emailable — fixed both places reminders are surfaced: the cron's due-reminders query (`api/cron/reminders/route.ts`) now looks up each bank's `deleted_at` alongside its name and skips emailing (without stamping `emailed_at`, so it resumes normally if the bank is ever restored) any reminder whose bank is currently trashed; the dashboard's "central view" (`reminders.ts#getOpenReminders`) got the same filter. Left `getReminders(bankId)` (the bank drawer's own per-bank reminder list) unchanged on purpose — that's "show me this specific bank's reminders," which is expected to work the same regardless of trashed state, same as the rest of Trash.
@@ -341,16 +341,69 @@ this round's verification — flipped back to `false` before finishing, per the 
 - **DATA-15 (public road-trip plans can leak a home address) is open by explicit user decision, not
   an oversight** — "I don't care, this is a family app." Don't re-surface this as a priority item
   without the user raising it again.
-- 41 findings remain open, all Medium/Low severity. Most of what's left is broader/systemic rather
+- **Migration 0044_check_number_and_activity_log_atomicity.sql needs to be run** — adds
+  `claim_check_number`/`append_activity_log`. Until it's run, both DATA-14 and DATA-20 automatically
+  fall back to their original (non-atomic, but already-working) behavior — nothing breaks either way,
+  running it just closes the small collision/lost-entry window on concurrent access.
+- 36 findings remain open, all Medium/Low severity. Most of what's left is broader/systemic rather
   than a single clean fix: DATA-18/DATA-19 (pagination + validation patterns spanning "most Server
-  Actions" — needs a scoping decision, not just code), INT-04/INT-05 (soft-delete-state consistency
-  across many call sites — real design questions about desired restore/cascade behavior, not pure
-  bugs), and most of Part 3 (UX/Accessibility, 22 findings — several need a design decision, e.g.
-  which new colors fix the contrast failures, but some like UX-04/UX-05/UX-10 look like plain bugs
-  worth a closer look). Part 4 (Performance/Reliability/Ops, 15 findings — REL-02/REL-03 now partially
-  addressed, see above) is mostly bigger-effort infrastructure work (CI, monitoring, query tuning)
-  rather than quick fixes. Worth a dedicated round to scope out the next no-decision-needed batch from
-  these once this round is reviewed.
+  Actions" — needs a scoping decision, not just code), INT-04 (soft-delete-state consistency —
+  real design questions about desired restore/cascade behavior, not a pure bug), and most of Part 3
+  (UX/Accessibility, 21 findings — several need a design decision, e.g. which new colors fix the
+  contrast failures, but some look like plain bugs worth a closer look). Part 4 (Performance/
+  Reliability/Ops, 15 findings — REL-02/REL-03/PERF-01 now partially addressed, see above) is mostly
+  bigger-effort infrastructure work (CI, monitoring, query tuning) rather than quick fixes. Worth a
+  dedicated round to scope out the next no-decision-needed batch from these once this round is
+  reviewed.
+
+**Round 15 (next-5 triage #3 — INT-05 warned, UX-05/DATA-14/PERF-01/DATA-20 fixed)** — Asked for the
+next 5 biggest remaining findings a third time; user approved all 5 with specific instructions on one
+("for 1 build a warning so the user knows" — not a hard block) and general trust on the rest ("fix it
+I guess if needs fixing"). Same discipline as every round since round 13 — each grounded by reading
+the actual current schema/code before writing anything:
+
+- **INT-05** was confirmed via the schema, not guessed: `account_sweeps.account_id references
+  accounts(id) on delete cascade` and `accounts.bank_id references banks(id) on delete cascade` — a
+  permanent delete really does silently erase any outstanding sweep record with the account/bank. Per
+  the user's explicit framing, this got a warning (new `getOutstandingSweepWarningForAccounts`/
+  `getOutstandingSweepWarningForBank` in `money/actions.ts`, wired into `TrashClient.tsx`'s existing
+  confirm dialogs), not a block — the delete itself is unchanged, the person just now knows what's at
+  risk before confirming.
+- **UX-05** — confirmed the Import dialog's "Cancel" button unconditionally called `onClose()` with no
+  tie to whether an import was still running. True mid-flight cancellation of a Server Action isn't
+  achievable (no cancellation token exists once one is invoked, and restructuring the whole import
+  into a resumable client-driven batch process to support that is a genuinely bigger change) — fixed
+  the honest half instead: the button disables and relabels ("Importing…") while the import is
+  actually in flight, so the UI can no longer imply an interruption that doesn't happen.
+- **DATA-14 and DATA-20** share one new migration (`0044_check_number_and_activity_log_atomicity.sql`)
+  since both are the same bug shape — a plain read-then-write with no locking, letting two concurrent
+  callers silently overwrite each other. `claim_check_number` (DATA-14: two near-simultaneous check
+  prints could store the same check number) and `append_activity_log` (DATA-20: two near-simultaneous
+  quick-log clicks could drop one entry) both lock the account row and do the whole read+write inside
+  one transaction, same pattern as 0043's balance/history functions. DATA-14 specifically can't
+  prevent the physical print itself once it's already on paper — printing still happens immediately on
+  click (moving the atomic claim earlier, before printing, was considered and rejected: awaiting a
+  network call before `window.open()` would very likely get the popup blocked on every single print,
+  trading a rare collision for a constant regression) — but the stored number is now always correct,
+  and a real collision is detected and surfaced via toast instead of silently mis-recorded.
+- **PERF-01** — confirmed `(app)/layout.tsx` (wrapping every page) ran 3 separate `profiles` queries
+  as 3 sequential `await`s, each deliberately kept separate on purpose (so one missing migration can't
+  break the other fields) but with no reason to run them one at a time. Switched to `Promise.all` —
+  safe because a Supabase query resolves `{data, error}` rather than rejecting on failure, so this
+  changes nothing about the existing degrade-independently behavior or redirect precedence, just cuts
+  real latency on every page load app-wide. Same safe pattern already used for the weekly backup.
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (84/84) all clean. DATA-14/DATA-20/
+PERF-01/INT-05 are all real-Supabase-RPC/schema-dependent with no meaningfully new UI beyond an
+existing confirm dialog or toast — not click-testable in DEMO_MODE (INT-05's warning functions
+explicitly return `null` in DEMO_MODE by design, same as every other real-Supabase-only check this
+project has shipped) — verified by reading each diff against the original code and confirming the
+exact same redirect/degradation/fallback behavior is preserved. UX-05 is a simple, mechanical
+`disabled`/label change reusing an already-proven pattern in the same file (the dialog's own
+"← Change file" button) — verified via a headless-browser sanity pass confirming the Import dialog
+and Trash page both still render and function correctly with the new logic in place, zero console
+errors. `DEMO_MODE` was flipped to `true` for this round's verification and flipped back to `false`
+before finishing, per the standing rule.
 
 **Round 14 (next-5 triage #2 — UX-15, DATA-17, INT-08, INT-06, DATA-09 all fixed)** — Asked for the
 next 5 biggest remaining findings again; all 5 approved this time ("fix all 5"), each grounded by

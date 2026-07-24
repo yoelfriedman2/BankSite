@@ -40,25 +40,33 @@ export default async function AppLayout({
     const adminEmail = process.env.ADMIN_EMAIL;
     isOwner = !!adminEmail && user.email?.toLowerCase() === adminEmail.toLowerCase();
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("display_name, onboarded")
-      .eq("id", user.id)
-      .maybeSingle();
+    // These three profile queries are deliberately SEPARATE selects (not one
+    // combined query) for the reason each comment below explains — a missing
+    // migration on one field must not break the others. They're independent
+    // of each other's results, though, so running them one at a time here was
+    // pure wasted latency on every single page load app-wide (PERF-01) — a
+    // Supabase query resolves with `{ data: null, error }` on failure rather
+    // than rejecting, so Promise.all is safe here and preserves the exact
+    // same independent-degradation behavior, just concurrently instead of
+    // sequentially.
+    const [{ data: profile }, { data: acc, error: accErr }, { data: vault }] = await Promise.all([
+      supabase.from("profiles").select("display_name, onboarded").eq("id", user.id).maybeSingle(),
+      // Access gate (migration 0036). Fails CLOSED: any query error, missing
+      // profile row, or non-"approved" status blocks a non-owner user — send
+      // them to /pending rather than letting a signed-in-but-unverifiable
+      // user into the app. Every migration is confirmed applied in
+      // production (see TODO.md), so a query error here means something is
+      // actually wrong, not "the migration hasn't run yet" — the previous
+      // fail-open behavior existed to protect against that now-stale
+      // scenario. The owner is always let in, regardless of what this query
+      // returns.
+      supabase.from("profiles").select("access_status, last_seen_at").eq("id", user.id).maybeSingle(),
+      // Vault encryption config (migration 0042) — a missing migration here
+      // must not break the other two fields above, same reasoning as the
+      // access gate. vaultEnabled just stays false, its own safe default.
+      supabase.from("profiles").select("vault_encryption_enabled, vault_salt, vault_check").eq("id", user.id).maybeSingle(),
+    ]);
 
-    // Access gate (migration 0036). Fails CLOSED: any query error, missing
-    // profile row, or non-"approved" status blocks a non-owner user — send
-    // them to /pending rather than letting a signed-in-but-unverifiable user
-    // into the app. Every migration is confirmed applied in production (see
-    // TODO.md), so a query error here means something is actually wrong, not
-    // "the migration hasn't run yet" — the previous fail-open behavior
-    // existed to protect against that now-stale scenario. The owner is
-    // always let in, regardless of what this query returns.
-    const { data: acc, error: accErr } = await supabase
-      .from("profiles")
-      .select("access_status, last_seen_at")
-      .eq("id", user.id)
-      .maybeSingle();
     if (!isOwner && (accErr || !acc || acc.access_status !== "approved")) {
       redirect("/pending");
     }
@@ -77,15 +85,6 @@ export default async function AppLayout({
     // New users finish setup (confirm their name) before entering the app.
     if (!profile?.onboarded) redirect("/welcome");
 
-    // Vault encryption config (migration 0042), queried separately for the
-    // same reason as the access gate above: a missing migration must not
-    // break anything else on this page — it just means the feature isn't
-    // offered yet (vaultEnabled stays false, its own safe default).
-    const { data: vault } = await supabase
-      .from("profiles")
-      .select("vault_encryption_enabled, vault_salt, vault_check")
-      .eq("id", user.id)
-      .maybeSingle();
     vaultEnabled = !!vault?.vault_encryption_enabled;
     vaultSalt = (vault?.vault_salt as string | null) ?? null;
     vaultCheck = (vault?.vault_check as string | null) ?? null;

@@ -10,8 +10,10 @@ import {
   type TrashedBank,
 } from "@/app/(app)/banks/actions";
 import { restoreAccount, permanentlyDeleteAccount } from "@/app/(app)/accounts/actions";
+import { getOutstandingSweepWarningForAccounts, getOutstandingSweepWarningForBank } from "@/app/(app)/money/actions";
 import { ACCOUNT_TYPE_LABELS, type Account } from "@/lib/types";
 import { useToast } from "@/components/Toast";
+import { formatCurrency } from "@/lib/format";
 
 type Props = {
   banks: TrashedBank[];
@@ -34,10 +36,18 @@ export function TrashClient({ banks, accounts }: Props) {
     });
   }
 
-  function handleDeleteBank(id: string, name: string) {
+  async function handleDeleteBank(id: string, name: string) {
+    // A permanent delete cascades to this bank's accounts, and from there to
+    // any of their sweeps — check first so the confirm is actually informed,
+    // not just "this cannot be undone" with no idea what "this" includes
+    // (INT-05).
+    const warning = await getOutstandingSweepWarningForBank(id);
+    const warningText = warning
+      ? `\n\nHeads up: ${warning.count} money move${warning.count === 1 ? "" : "s"} out of these accounts (${formatCurrency(warning.total)} total) ${warning.count === 1 ? "hasn't" : "haven't"} been marked as returned yet. Deleting permanently will erase that record along with everything else.`
+      : "";
     if (
       !window.confirm(
-        `Permanently delete "${name}" and all its accounts? This cannot be undone.`,
+        `Permanently delete "${name}" and all its accounts? This cannot be undone.${warningText}`,
       )
     )
       return;
@@ -60,9 +70,13 @@ export function TrashClient({ banks, accounts }: Props) {
     });
   }
 
-  function handleDeleteAccount(id: string) {
+  async function handleDeleteAccount(id: string) {
+    const warning = await getOutstandingSweepWarningForAccounts([id]);
+    const warningText = warning
+      ? `\n\nHeads up: ${warning.count} money move${warning.count === 1 ? "" : "s"} out of this account (${formatCurrency(warning.total)} total) ${warning.count === 1 ? "hasn't" : "haven't"} been marked as returned yet. Deleting permanently will erase that record too.`
+      : "";
     if (
-      !window.confirm("Permanently delete this account? This cannot be undone.")
+      !window.confirm(`Permanently delete this account? This cannot be undone.${warningText}`)
     )
       return;
     setBusyId(id);

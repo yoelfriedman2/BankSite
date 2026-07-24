@@ -174,6 +174,72 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-24 (external audit — round 15: next-5 triage #3 — INT-05 warned, UX-05/DATA-14/PERF-01/
+DATA-20 fixed)** — Direct continuation of round 14, same day: user asked for the next 5 again, and
+gave per-item instructions this time rather than a blanket "fix all" — most notably "for 1 build a
+warning so the user knows" (INT-05), explicitly choosing a warning over a hard block. Every item
+again grounded by reading the real current schema/code first:
+
+- **INT-05 — permanently deleting an account or bank silently destroys any unresolved money
+  movement, with zero warning.** Confirmed via the schema, not assumed: `account_sweeps.account_id
+  references accounts(id) on delete cascade`, and `accounts.bank_id references banks(id) on delete
+  cascade` — hard-deleting an account, or a bank (which cascades to its accounts), destroys any
+  outstanding (unreturned) sweep record along with it. Per the user's explicit instruction, this is a
+  warning, not a block: new `getOutstandingSweepWarningForAccounts`/`getOutstandingSweepWarningForBank`
+  (`money/actions.ts`) check for unreturned sweeps and, if found, append a specific dollar-amount
+  warning to `TrashClient.tsx`'s existing `window.confirm()` text before the delete — the delete
+  itself proceeds exactly as before once confirmed; this only makes sure the person clicking "delete
+  forever" actually knows what's at risk first.
+- **UX-05 — Import "Cancel" doesn't stop an in-flight import.** Confirmed `ImportDialog.tsx`'s Cancel
+  button just called `onClose()` unconditionally, with zero tie to whether `importBanks()` was still
+  running — closing the dialog mid-import didn't stop it, it just hid it, and the import kept writing
+  server-side with the user believing they'd cancelled it. True mid-flight cancellation isn't
+  achievable (Server Actions have no cancellation token once invoked, and restructuring the import
+  into a resumable, client-driven batch process to support real cancellation would be a genuinely
+  bigger architecture change) — fixed the honest half instead: the button now disables and relabels
+  ("Importing…") while `isPending`, reusing the exact `disabled={isPending}` pattern the dialog's own
+  "← Change file" button already used. The UI can no longer imply an interruption that doesn't happen.
+- **DATA-14 and DATA-20 — two more read-then-write races, same bug shape, one shared migration.**
+  New **`0044_check_number_and_activity_log_atomicity.sql`**: `claim_check_number` (DATA-14) — two
+  near-simultaneous check prints could both read the same `last_check_number`, both compute the same
+  "next" number, and both silently store it, producing two real physical checks sharing a number.
+  Locks the account row and claims `greatest(proposed, current+1)`, so a second concurrent caller is
+  always forced past whatever the first just claimed. Considered moving the claim to BEFORE printing
+  (true prevention) and rejected it — awaiting a network round-trip before `window.open()` would very
+  likely get the print popup blocked on essentially every single print (browsers expire "user
+  activation" across an intervening await), trading a common annoyance for a rare edge case. Instead,
+  printing still happens immediately on click (unchanged), and the claim happens right after — if the
+  server-claimed number differs from what was just printed, a toast now says so instead of silently
+  storing the wrong number. `append_activity_log` (DATA-20, same migration) fixes the same race shape
+  for `logActivityToday`, which read `activity_log`, appended one entry in JS, and wrote the whole
+  array back — two near-simultaneous quick-log clicks could silently drop one entry. Now the whole
+  read+append+write happens inside one locked row read. Both new functions mirror migration 0043's
+  balance/history functions exactly — new names, not replacing anything, same 2-tier fallback (RPC →
+  original plain read-then-write) if 0044 hasn't run yet.
+- **PERF-01 — every page load paid for 3 sequential database round-trips to the same profile row.**
+  Confirmed in `(app)/layout.tsx` (wraps every page): 3 separate `profiles` SELECT queries (display
+  name/onboarded, access status/last seen, vault config), each individually `await`ed rather than run
+  together. They're deliberately kept as *separate* queries on purpose — a missing migration on one
+  field must not break the others, a real property this project has leaned on repeatedly — but nothing
+  required running them one at a time. Switched to `Promise.all`: safe because a Supabase query
+  resolves `{data, error}` on failure rather than rejecting, so this preserves the exact same
+  independent-degradation behavior and redirect precedence (the `/pending` check still evaluates
+  before the `/welcome` check, same as before), just concurrently instead of sequentially. Same safe
+  pattern already used for the weekly backup's table dumps (REL-03).
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (84/84) all clean. INT-05/DATA-14/
+DATA-20/PERF-01 are all real-Supabase-schema/RPC-dependent with no meaningfully new UI beyond an
+existing confirm dialog or a toast (INT-05's warning functions explicitly return `null` in DEMO_MODE
+by design, same as every other real-Supabase-only check this project has shipped) — not click-testable
+here; verified by reading each diff against the original code, confirming the exact same fallback/
+degradation/redirect behavior is preserved with nothing new required to keep working. UX-05 is a
+simple, mechanical `disabled`/label change reusing an already-proven pattern in the same file —
+verified via a headless-browser sanity pass confirming the Import dialog and Trash page both still
+render and function correctly with the new logic in place, zero console errors. `DEMO_MODE` was
+flipped to `true` for this round's verification and flipped back to `false` before finishing, per the
+standing rule. Skipped changelog/Guide — all five are bug fixes/hardening with no new user-visible
+feature, per the standing features-only policy.
+
 **2026-07-24 (external audit — round 14: next-5 triage #2 — UX-15, DATA-17, INT-08, INT-06, DATA-09
 all fixed)** — Direct continuation of round 13, same day: user asked for the next 5 biggest remaining
 findings again and approved all 5 up front ("fix all 5"). Each was grounded by reading the actual
