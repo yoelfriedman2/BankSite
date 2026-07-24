@@ -449,12 +449,20 @@ export async function duplicateAccount(
       account_number: null,
       activity_log: [],
       last_check_number: null,
-      // A duplicate is a fresh account — it doesn't inherit the source's
+      // A duplicate is a fresh account, not a financial clone (INT-06) — it
+      // doesn't inherit the source's real balance (silently double-counting
+      // it in every total until noticed) or its saved login credentials
+      // (which are very likely specific to the original holder, not the new
+      // account being created). It also doesn't inherit the source's
       // recurring fee terms (or its charge history) automatically. The
       // interest rate itself does carry over (same bank, plausibly the same
       // rate), but its accrual bookkeeping is reset via stampOnRateChange so
       // the duplicate skips a backdated partial-month credit, same as a
       // freshly-configured rate would.
+      balance: null,
+      username: null,
+      password: null,
+      access_notes: null,
       monthly_fee: null,
       monthly_fee_day: null,
       monthly_fee_last_charged_on: null,
@@ -489,6 +497,13 @@ export async function duplicateAccount(
       ...copy,
       account_number: null,
       activity_log: [],
+      // A duplicate is a fresh account, not a financial clone (INT-06) — see
+      // the matching DEMO_MODE branch above for the full reasoning. Real
+      // balance/credentials never carry over; interest rate does.
+      balance: null,
+      username: null,
+      password: null,
+      access_notes: null,
       interest_last_accrued_on: stampOnRateChange((source as Account).interest_rate, new Date()),
       user_id: user.id,
       bank_id: bankId,
@@ -496,22 +511,6 @@ export async function duplicateAccount(
     .select("id")
     .single();
   if (error || !created) return { error: friendlyDbError(error?.message) ?? "Could not duplicate the account." };
-
-  // Seed an opening-balance history point, same as every other account-insert
-  // path (upsertAccount, importBanks) — otherwise a duplicated account is
-  // invisible on Balance-by-date until it's later edited by hand.
-  if (copy.balance != null) {
-    const { error: historyErr } = await supabase.from("account_balance_history").insert({
-      user_id: user.id,
-      account_id: created.id,
-      as_of_date: new Date().toISOString().slice(0, 10),
-      balance: copy.balance,
-      reason: "opening balance",
-    });
-    if (historyErr) {
-      console.error(`[duplicateAccount] opening-balance history insert failed for account ${created.id}:`, historyErr.message);
-    }
-  }
 
   const { data: bank } = await supabase
     .from("banks")

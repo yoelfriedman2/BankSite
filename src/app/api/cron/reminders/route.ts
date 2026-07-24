@@ -144,16 +144,21 @@ export async function GET(req: NextRequest) {
     const bankIds = [...new Set(due.map((r) => r.bank_id as string))];
     const userIds = [...new Set(due.map((r) => r.user_id as string))];
     const [{ data: banks }, { data: profs }] = await Promise.all([
-      admin.from("banks").select("id, name").in("id", bankIds),
+      admin.from("banks").select("id, name, deleted_at").in("id", bankIds),
       admin.from("profiles").select("id, display_name").in("id", userIds),
     ]);
     const bankName = new Map((banks ?? []).map((b) => [b.id as string, b.name as string]));
+    const activeBankIds = new Set((banks ?? []).filter((b) => !b.deleted_at).map((b) => b.id as string));
     const nameMap = new Map(
       (profs ?? []).map((p) => [p.id as string, (p.display_name as string | null) ?? "there"]),
     );
 
     const byUser = new Map<string, { ids: string[]; items: { note: string; bankName: string }[] }>();
     for (const r of due) {
+      // A reminder whose bank has since been trashed shouldn't keep emailing
+      // forever (INT-08) — left untouched (not stamped emailed_at) so it
+      // resumes normally if the bank is ever restored.
+      if (!activeBankIds.has(r.bank_id as string)) continue;
       const uid = r.user_id as string;
       const g = byUser.get(uid) ?? { ids: [], items: [] };
       g.ids.push(r.id as string);

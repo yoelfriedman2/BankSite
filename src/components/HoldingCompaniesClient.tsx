@@ -21,6 +21,7 @@ import {
 import {
   getBankRssdCrosswalk,
   applyHoldingCompanyChanges,
+  applyHoldingCompanyUnlinks,
   getHoldingCompaniesOverview,
   type BankRssdInfo,
   type HoldingCompanyChange,
@@ -34,7 +35,7 @@ import {
   parseFinancials,
   type DetectedColumns,
 } from "@/lib/nicParse";
-import { buildHoldingCompanyDiff, type HcGroupDiff } from "@/lib/nicDiff";
+import { buildHoldingCompanyDiff, type HcGroupDiff, type HcStaleLink } from "@/lib/nicDiff";
 import { formatAssets } from "@/lib/format";
 
 const NIC_URL = "https://www.ffiec.gov/npw/FinancialReport/DataDownload";
@@ -258,9 +259,14 @@ export function HoldingCompaniesClient({
   }>({ relationships: null, attributes: null, financials: null });
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  // Keyed by cert (not parentRssd, since a stale link by definition has no
+  // current parent) — separate from `selected` since it drives a different
+  // apply action (applyHoldingCompanyUnlinks, not applyHoldingCompanyChanges).
+  const [selectedUnlinks, setSelectedUnlinks] = useState<Set<number>>(new Set());
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [appliedCount, setAppliedCount] = useState<number | null>(null);
+  const [unlinkedCount, setUnlinkedCount] = useState<number | null>(null);
 
   const diff = useMemo(() => {
     if (!banks || !parentByChild || !nameByRssd || !assetsByRssd) return null;
@@ -360,7 +366,11 @@ export function HoldingCompaniesClient({
         const parentRssd = 900001;
         const p = new Map<number, number>();
         p.set(sample[0].rssd!, parentRssd);
-        p.set(sample[1].rssd!, parentRssd);
+        // sample[1] is deliberately left WITHOUT a parent in this fake sync
+        // data (only sample[0] gets one) — the demo seed already gives it a
+        // real holding-company link (lib/demo.ts), so this naturally exercises
+        // the stale-link detection path (DATA-09) too, not just the new-link
+        // path, when clicking through this demo shortcut.
         setParentByChild(p);
         setNameByRssd(new Map([[parentRssd, "Sample Mutual Holding Company"]]));
         setAssetsByRssd(new Map([[parentRssd, { assets: 850000, asOf: "2026 Q1" }]]));
@@ -382,6 +392,9 @@ export function HoldingCompaniesClient({
     if (diff && diff.groups.length > 0) {
       setSelected(new Set(diff.groups.map((g) => g.parentRssd)));
     }
+    if (diff && diff.staleLinks.length > 0) {
+      setSelectedUnlinks(new Set(diff.staleLinks.map((s) => s.cert)));
+    }
   }, [diff]);
 
   function toggle(parentRssd: number) {
@@ -389,6 +402,15 @@ export function HoldingCompaniesClient({
       const next = new Set(s);
       if (next.has(parentRssd)) next.delete(parentRssd);
       else next.add(parentRssd);
+      return next;
+    });
+  }
+
+  function toggleUnlink(cert: number) {
+    setSelectedUnlinks((s) => {
+      const next = new Set(s);
+      if (next.has(cert)) next.delete(cert);
+      else next.add(cert);
       return next;
     });
   }
@@ -404,15 +426,20 @@ export function HoldingCompaniesClient({
         assetsAsOf: g.assetsAsOf,
         certs: g.banks.map((b) => b.cert),
       }));
+    const unlinkCerts = diff.staleLinks.filter((s) => selectedUnlinks.has(s.cert)).map((s) => s.cert);
     setApplying(true);
     setApplyError(null);
-    applyHoldingCompanyChanges(changes).then((res) => {
+    Promise.all([
+      applyHoldingCompanyChanges(changes),
+      unlinkCerts.length ? applyHoldingCompanyUnlinks(unlinkCerts) : Promise.resolve<{ applied?: number; error?: string }>({ applied: 0 }),
+    ]).then(([linkRes, unlinkRes]) => {
       setApplying(false);
-      if (res.error) {
-        setApplyError(res.error);
+      if (linkRes.error || unlinkRes.error) {
+        setApplyError(linkRes.error ?? unlinkRes.error ?? "Something went wrong.");
         return;
       }
-      setAppliedCount(res.applied ?? 0);
+      setAppliedCount(linkRes.applied ?? 0);
+      setUnlinkedCount(unlinkRes.applied ?? 0);
       setStep("done");
     });
   }
@@ -762,6 +789,39 @@ export function HoldingCompaniesClient({
             ))}
           </div>
 
+          {diff.staleLinks.length > 0 && (
+            <div className="mt-5">
+              <p className="mb-1 text-sm font-semibold text-slate-800">Stale links to remove</p>
+              <p className="mb-2 text-xs text-slate-500">
+                These banks currently show a holding company on the Banks page, but the file you just
+                uploaded no longer lists a parent for them — their real ownership likely changed.
+                Uncheck anything you&apos;d rather leave as-is.
+              </p>
+              <div className="max-h-52 space-y-1.5 overflow-y-auto pr-1">
+                {diff.staleLinks.map((s: HcStaleLink) => (
+                  <label
+                    key={s.cert}
+                    className="flex cursor-pointer items-start gap-3 rounded-lg border border-rose-200 bg-rose-50/40 p-3 hover:bg-rose-50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedUnlinks.has(s.cert)}
+                      onChange={() => toggleUnlink(s.cert)}
+                      className="mt-1 h-4 w-4 rounded border-slate-300 text-rose-500 focus:ring-rose-400"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <span className="font-medium text-slate-800">{s.name}</span>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        Currently linked to <span className="font-medium">{s.previousHcName}</span> — will be
+                        unlinked
+                      </p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
           {applyError && (
             <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
               {applyError}
@@ -773,11 +833,12 @@ export function HoldingCompaniesClient({
               <button
                 type="button"
                 onClick={apply}
-                disabled={applying || selected.size === 0}
+                disabled={applying || (selected.size === 0 && selectedUnlinks.size === 0)}
                 className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-60"
               >
                 {applying && <Loader2 className="h-4 w-4 animate-spin" />}
-                Apply {selected.size} {selected.size === 1 ? "change" : "changes"}
+                Apply {selected.size + selectedUnlinks.size}{" "}
+                {selected.size + selectedUnlinks.size === 1 ? "change" : "changes"}
               </button>
             ) : (
               <p className="inline-flex items-center gap-1.5 text-sm text-slate-500">
@@ -800,11 +861,13 @@ export function HoldingCompaniesClient({
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center">
           <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-emerald-600" />
           <p className="font-medium text-emerald-800">
-            Applied {appliedCount} holding {appliedCount === 1 ? "company" : "companies"}.
+            Applied {appliedCount} holding {appliedCount === 1 ? "company" : "companies"}
+            {!!unlinkedCount && `, removed ${unlinkedCount} stale ${unlinkedCount === 1 ? "link" : "links"}`}.
           </p>
           <p className="mt-1 text-sm text-emerald-700">
             Every family member&apos;s copy of the affected banks now shows the linked holding
-            company. Come back and run this again in a few months.
+            company{!!unlinkedCount && " (or none, for banks that were unlinked)"}. Come back and run
+            this again in a few months.
           </p>
           <div className="mt-4 flex justify-center gap-2">
             <button

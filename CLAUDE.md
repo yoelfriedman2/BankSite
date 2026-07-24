@@ -174,6 +174,78 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-24 (external audit — round 14: next-5 triage #2 — UX-15, DATA-17, INT-08, INT-06, DATA-09
+all fixed)** — Direct continuation of round 13, same day: user asked for the next 5 biggest remaining
+findings again and approved all 5 up front ("fix all 5"). Each was grounded by reading the actual
+current code before writing anything, same discipline as every round since round 13's DATA-01/DATA-02
+scope-check:
+
+- **INT-06 — "Duplicate account" silently copied the source's real balance and login credentials.**
+  Confirmed in `accounts/actions.ts#duplicateAccount` (both DEMO_MODE and real paths): `fieldsFromAccount`
+  copies `balance`, `username`, `password`, `access_notes` verbatim, clearing only the account number.
+  Reachable via a real "Duplicate" button in the bank drawer (`BankForm.tsx`) — a duplicated account
+  silently started with the *same dollar balance* as the source, inflating every total (dashboard,
+  balance-by-date, holder totals) until manually corrected, plus a second copy of a real login. Now
+  clears `balance`/`username`/`password`/`access_notes` to `null` on duplicate, matching how a
+  genuinely new account starts — `interest_rate` still carries over unchanged, per the existing
+  deliberate precedent already documented in the code (same bank, plausibly the same rate). The
+  now-permanently-unreachable "seed an opening-balance history point" block in the real-mode path
+  (balance is always null on duplicate now) was removed rather than left as dead code.
+- **UX-15 — Viewing a document silently did nothing if the browser blocked the popup.** Both
+  `AccountDocuments.tsx` and `DocumentsClient.tsx`'s "View" buttons called `window.open(url, ...)` and
+  ignored the return value — the exact same bug shape as UX-06 (check printing), fixed the round
+  before this one. Fixed by reusing each component's own already-existing inline error display (not
+  introducing toast here — these components already had a working local error-state pattern) to show
+  a clear message when `window.open` returns `null`.
+- **DATA-17 — Deleting a document could silently orphan the real file.** `documents.ts#deleteDocument`
+  deleted the `account_documents` metadata row FIRST, then removed the storage file LAST with the
+  removal's error completely unchecked — a failure there left an orphaned file (with real storage
+  cost) that nothing pointed to anymore, forever. Reordered — remove the storage file (checked) before
+  deleting the metadata row — so a failure now leaves the row in place for a clean retry instead of
+  reporting false success. Same "delete-then-write, unchecked" bug class this project has now fixed
+  several times (DATA-08's branch refresh, DATA-02's balance/history atomicity) — the fix mirrors that
+  established pattern: make the recoverable step happen last, not first.
+- **INT-08 — A trashed bank's reminders kept emailing forever.** Fixed both places reminders surface,
+  not just the obvious one: the cron's due-reminders query (`api/cron/reminders/route.ts`) now looks
+  up each bank's `deleted_at` and skips (without stamping `emailed_at`, so it resumes normally if the
+  bank is ever restored) any reminder whose bank is currently trashed; the dashboard's central view
+  (`reminders.ts#getOpenReminders`) got the identical filter. Left `getReminders(bankId)` (the bank
+  drawer's own per-bank list) alone on purpose — that's "show me this specific bank's reminders,"
+  expected to work the same regardless of trashed state, same as everything else in Trash.
+- **DATA-09 — Holding-company sync never proposed unlinking a bank whose real ownership changed.**
+  The most involved of the five — a genuine new UI addition, not just a guarded query. Confirmed in
+  `lib/nicDiff.ts#buildHoldingCompanyDiff`: a bank whose RSSD resolved to no current parent in the
+  freshly-uploaded Relationships file was just skipped (`continue`) even when it currently HAD a
+  holding-company link on file — the file was explicitly saying "no current parent," not "we don't
+  know," but nothing ever proposed removing the old (now-wrong) link. Added a new `staleLinks` field
+  to the diff (only flagged when the bank's RSSD is actually known — a bank we couldn't resolve an
+  RSSD for at all stays silent, since that's missing data, not a confirmed absence), a new "Stale
+  links to remove" section in the review wizard (`HoldingCompaniesClient.tsx`, checkboxes defaulted to
+  selected, same pattern as the existing new-link groups), and a new `applyHoldingCompanyUnlinks`
+  server action that clears `holding_company_id` for the accepted certs — same cross-user propagation
+  and FDIC-admin/owner permission gate as the existing `applyHoldingCompanyChanges`. `lib/demo.ts`
+  gained a matching `applyDemoHoldingCompanyUnlinks`, and the wizard's "Load sample data (demo)"
+  shortcut was tweaked (only one of its two sample banks gets a parent in the fake sync data now,
+  instead of both) so it naturally exercises the new stale-link path too, not just the new-link path.
+
+No migration — all five fixes are pure application code, live on deploy.
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (84/84) all clean. DATA-09 — the one
+change in this round with real new interactive UI beyond a simple error message — got a dedicated
+headless-browser pass against DEMO_MODE (`scratchpad/cdp.mjs`, reused again, no `playwright` package in
+this sandbox): entered the wizard, loaded the tweaked sample data, confirmed the "Stale links to
+remove" section rendered with the correct copy, confirmed unchecking its checkbox correctly decremented
+the combined "Apply N changes" count, and confirmed applying a new link + an unlink together succeeded
+and reported both counts correctly on the done screen — zero console errors across the whole run.
+UX-15/DATA-17/INT-08/INT-06 are each either pure server-side logic with no new UI (DATA-17, INT-08,
+INT-06) or a small change reusing an already-existing local pattern (UX-15) — verified by reading each
+diff against the original code, confirming a narrow, additive change with no alteration to any
+already-correct path. `DEMO_MODE` was flipped to `true` for this round's verification and flipped back
+to `false` before finishing, per the standing rule. Skipped changelog/Guide — all five are bug fixes
+with no new user-visible feature for the family (DATA-09's new wizard UI is owner/FDIC-admin-only
+tooling, excluded from both per the standing exclusion for admin-only features), per the standing
+features-only policy.
+
 **2026-07-24 (external audit — round 13: next-5 triage — UX-06/REL-02/REL-03/DATA-06 fixed, DATA-15
 explicitly declined)** — Direct continuation of round 12, same day: with DATA-01/DATA-02 shipped and
 migration 0043 confirmed run, user asked for the next 5 biggest remaining findings. Ranked and

@@ -39,7 +39,10 @@ export function DocumentsClient({ documents }: { documents: AccountDocumentWithC
     setError(null);
     try {
       const url = await getDocumentUrl(doc.storage_path);
-      window.open(url, "_blank", "noopener,noreferrer");
+      const win = window.open(url, "_blank", "noopener,noreferrer");
+      if (!win) {
+        setError("Your browser blocked the file from opening — allow pop-ups for this site and try again.");
+      }
     } catch {
       setError("Could not open file");
     }

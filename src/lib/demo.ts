@@ -452,6 +452,21 @@ export function applyDemoHoldingCompanyChanges(
   }
   return applied;
 }
+/** Clears the holding-company link for banks the sync data confirms no longer
+ *  have a current parent (DATA-09) — mirrors applyHoldingCompanyUnlinks' real-
+ *  mode update. */
+export function applyDemoHoldingCompanyUnlinks(certs: number[]): number {
+  const certSet = new Set(certs);
+  let applied = 0;
+  store().banks = store().banks.map((b) => {
+    if (b.cert != null && certSet.has(b.cert) && b.holding_company_id != null) {
+      applied++;
+      return { ...b, holding_company_id: null };
+    }
+    return b;
+  });
+  return applied;
+}
 export function updateDemoBank(id: string, fields: Partial<BankFields>): void {
   store().banks = store().banks.map((b) =>
     b.id === id ? { ...b, ...fields, updated_at: new Date().toISOString() } : b,

@@ -30,20 +30,22 @@ export async function getOpenReminders(): Promise<OpenReminder[]> {
 
   const { data } = await supabase
     .from("reminders")
-    .select("id, note, due_date, bank:banks(name, cert)")
+    .select("id, note, due_date, bank:banks(name, cert, deleted_at)")
     .is("done_at", null)
     .order("due_date", { ascending: true });
 
-  return (data ?? []).map((r) => {
-    const bank = Array.isArray(r.bank) ? r.bank[0] : r.bank;
-    return {
+  return (data ?? [])
+    .map((r) => ({ ...r, bank: Array.isArray(r.bank) ? r.bank[0] : r.bank }))
+    // A reminder for a bank the user has since trashed shouldn't keep
+    // surfacing here — nothing left to act on (INT-08).
+    .filter((r) => !r.bank?.deleted_at)
+    .map((r) => ({
       id: r.id as string,
       note: r.note as string,
       due_date: r.due_date as string,
-      bank_name: (bank?.name as string | undefined) ?? "—",
-      cert: (bank?.cert as number | null | undefined) ?? null,
-    };
-  });
+      bank_name: (r.bank?.name as string | undefined) ?? "—",
+      cert: (r.bank?.cert as number | null | undefined) ?? null,
+    }));
 }
 
 export async function getReminders(bankId: string): Promise<Reminder[]> {

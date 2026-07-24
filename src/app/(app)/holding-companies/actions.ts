@@ -11,6 +11,7 @@ import {
   getDemoProfile,
   getDemoHoldingCompanies,
   applyDemoHoldingCompanyChanges,
+  applyDemoHoldingCompanyUnlinks,
 } from "@/lib/demo";
 import { friendlyDbError } from "@/lib/friendlyError";
 import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
@@ -272,4 +273,34 @@ export async function applyHoldingCompanyChanges(
 
   revalidatePath("/banks");
   return { applied };
+}
+
+/** Clears the holding-company link for banks the latest sync data confirms no
+ *  longer have a current parent (DATA-09) — the diff previously just skipped
+ *  these silently (buildHoldingCompanyDiff would `continue` past them), so a
+ *  bank's real ownership could change and its old link on the Banks page
+ *  would stay wrong forever. Same cross-user propagation and permission gate
+ *  as applyHoldingCompanyChanges above — it only clears a link, it never
+ *  deletes a bank or a holding company row itself. */
+export async function applyHoldingCompanyUnlinks(certs: number[]): Promise<{ applied?: number; error?: string }> {
+  const { canApply } = await getHoldingCompanySyncPermissions();
+  if (!canApply) return { error: "Not authorized." };
+  if (!certs.length) return { applied: 0 };
+
+  if (DEMO_MODE) {
+    const applied = applyDemoHoldingCompanyUnlinks(certs);
+    revalidatePath("/banks");
+    return { applied };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("banks")
+    .update({ holding_company_id: null })
+    .in("cert", certs)
+    .is("deleted_at", null);
+  if (error) return { error: friendlyDbError(error.message) };
+
+  revalidatePath("/banks");
+  return { applied: certs.length };
 }

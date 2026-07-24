@@ -160,9 +160,17 @@ export async function deleteDocument(docId: string): Promise<void> {
     .maybeSingle();
   if (!row) throw new Error("Not found");
 
+  // Remove the storage file BEFORE the metadata row, not after (DATA-17) — the
+  // previous order deleted the row first, so a failed (unchecked) storage
+  // removal left an orphaned file with nothing left pointing to it, forever.
+  // This order fails safer: if storage removal errors, the row (with its
+  // correct path) stays put so a retry can pick up where it left off, instead
+  // of silently reporting "deleted" while the real file — and its storage
+  // cost — lingers unreachable.
+  const admin = createAdminClient();
+  const { error: storageError } = await admin.storage.from(BUCKET).remove([row.storage_path as string]);
+  if (storageError) throw new Error(storageError.message);
+
   const { error } = await supabase.from("account_documents").delete().eq("id", docId);
   if (error) throw new Error(error.message);
-
-  const admin = createAdminClient();
-  await admin.storage.from(BUCKET).remove([row.storage_path as string]);
 }

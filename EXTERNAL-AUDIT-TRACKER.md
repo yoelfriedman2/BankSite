@@ -42,7 +42,7 @@ decision or bigger effort before it can be safely fixed
 - [x] DATA-06 — Personal "full backup" export is silently partial — fixed: every one of the 8 queries in `api/export/full/route.ts` (banks, accounts, documents, sweeps, checks, reminders, campaigns, campaign items) used a plain unbounded `.select("*")`, relying on PostgREST's default 1000-row page. Fine at today's per-user row counts, but a silent truncation in a file someone trusts as their own personal backup is worse than no backup — now pages through every query via a new shared `fetchAllRows()` helper (`lib/backup.ts`, exported and reused by the admin weekly backup too) until each table is fully read, with a per-table `console.error` if a page genuinely fails partway through. Also added `export const maxDuration = 60` (the Hobby-plan max) so a larger export can't be silently killed by the platform's short default timeout as data grows.
 - [x] DATA-07 — FDIC closed-bank deletion fails open on count-query error — fixed: `deleteClosedBank` now treats a failed/null account count as "skip this bank" (fail closed) instead of silently reading it as zero accounts.
 - [x] DATA-08 — Branch refresh can erase data on insert failure — fixed: migration 0041's `refresh_bank_branches` does delete+insert inside one Postgres function call (one transaction), so an insert failure rolls the delete back instead of leaving that batch erased.
-- [ ] DATA-09 — Holding-company sync never unlinks stale relationships
+- [x] DATA-09 — Holding-company sync never unlinks stale relationships — fixed: `buildHoldingCompanyDiff` (`lib/nicDiff.ts`) previously just `continue`d past a bank whose RSSD resolved to no current parent in the uploaded Relationships file — even when that bank currently HAD a holding-company link on file, the diff never proposed removing it, so a real ownership change left the old link wrong forever. Now flags it as a new `staleLinks` entry (only when the bank's RSSD is actually known and the file explicitly shows no parent for it — a bank we couldn't resolve an RSSD for at all stays silent, since that's missing data, not a confirmed absence). The review wizard (`HoldingCompaniesClient.tsx`) shows a new "Stale links to remove" section (checkboxes, defaulted to selected, same pattern as the existing groups) and a new `applyHoldingCompanyUnlinks` server action clears `holding_company_id` for the accepted certs — same cross-user propagation and FDIC-admin/owner gate as the existing apply action. Verified live end-to-end via a headless-browser test against DEMO_MODE (the demo "Load sample data" shortcut was tweaked to naturally exercise this path too, not just the new-link path): stale-link section renders, its checkbox correctly changes the combined "Apply N changes" count, and applying both a new link and an unlink together succeeds and reports both counts correctly.
 - [ ] DATA-10 — Child ownership not enforced against parent ownership
 - [x] DATA-11 — Spreadsheet import date/status mapping bugs — partially fixed (the two narrowest, clearest bugs): `parseStatus` matched the bare substring "can" ahead of "open", so a plain "Can open" became `cannot_open` — now matches the actual negative phrasing ("cannot"/"can't"/"unable") instead. A row matching a *trashed* existing bank by cert/name fell through to the insert path and hit the unique `(user_id, cert)` constraint the trashed row still occupied — now restores the trashed bank instead (real-mode and demo-mode both). The broader per-row-non-atomic-apply and column-mapping-ambiguity parts of this finding are unaddressed — see notes below.
 - [x] DATA-12 — APY formula overstates actual annual yield — fixed: `monthlyInterestAmount` now derives the monthly periodic rate from the entered APY via `(1+APY)^(1/12)-1` instead of a naive `rate/12`, so 12 months of compounding lands on the labeled APY instead of overshooting it (verified: 4.5% now compounds to $10,449.99 on a $10,000 balance over a year, not the old $10,459.40 / 4.594% effective yield).
@@ -50,7 +50,7 @@ decision or bigger effort before it can be safely fixed
 - [ ] DATA-14 — Address campaign/queue/check-number races
 - [ ] DATA-15 — Public road-trip plans can expose private locations
 - [x] DATA-16 — Audit log doesn't check insert errors — fixed: `logAudit` now checks the insert's own `{ error }` result (not just thrown exceptions) and logs it, so a failed audit write leaves a trace instead of vanishing silently.
-- [ ] DATA-17 — Document metadata/storage can desync
+- [x] DATA-17 — Document metadata/storage can desync — fixed: `documents.ts#deleteDocument` deleted the `account_documents` metadata row FIRST, then removed the storage file LAST with no error check — a failed (silently ignored) storage removal left an orphaned file with nothing left pointing to it, forever. Reordered so the storage file is removed (and its error checked) before the metadata row is deleted — a storage-removal failure now leaves the row in place (with its correct path) so the delete can simply be retried, instead of silently reporting "deleted" while the real file lingers unreachable.
 - [ ] DATA-18 — Unpaginated reads silently truncate data
 - [ ] DATA-19 — Missing affected-row/value validation
 - [ ] DATA-20 — Activity log read-modify-write loses concurrent entries
@@ -73,7 +73,7 @@ decision or bigger effort before it can be safely fixed
 - [ ] UX-12 — Health/activity conveyed by color-only dot
 - [ ] UX-13 — No skip link; closed mobile drawer still focusable
 - [ ] UX-14 — Settings can lose unsaved changes; tabs not real tabs
-- [ ] UX-15 — Document viewer can fail silently / get popup-blocked
+- [x] UX-15 — Document viewer can fail silently / get popup-blocked — fixed: both `AccountDocuments.tsx` and `DocumentsClient.tsx`'s "View" buttons called `window.open(url, ...)` and ignored the return value — the exact same bug shape as UX-06 (just fixed the round before this one). If the browser blocks the popup, the click now sets the component's existing inline error state (reused, not a new pattern) to a clear message instead of doing nothing.
 - [x] UX-16 — UTC/local-date mixing (confirmed via exact reproduction) — fixed at every client-side "today" default: new shared `lib/date.ts#todayLocalStr()` (local Y/M/D getters, not `toISOString()`, which is always UTC and can be a full day off near midnight) now used in AccountModal, BankForm, DashboardReminders, and MoneyClient. `balances/page.tsx`'s server-guessed "today" is corrected client-side on mount if the browser's real local date differs. Server-side "today" values (cron timestamps, backup/export filenames) intentionally left as UTC — a scheduled job has no single user timezone to reference.
 - [ ] UX-17 — Website links inconsistent, scheme-less values break
 - [ ] UX-18 — Onboarding walkthrough inaccessible, can target offscreen element
@@ -107,9 +107,9 @@ decision or bigger effort before it can be safely fixed
 - [x] INT-03 — FDIC cert used as mutable "identity" across subsystems — fixed the core danger (an ordinary form edit silently changing what the cert means to every other feature keyed by it): the cert field is now read-only once a bank already exists (still editable when first creating one, since nothing is keyed to it yet) — both in the form UI and, since Server Actions are directly callable, enforced server-side in `upsertBank` too (a submitted cert change on an existing bank is now silently dropped from the update rather than applied).
 - [ ] INT-04 — Active accounts can exist under a soft-deleted bank
 - [ ] INT-05 — Money-owed sweeps conflict with trash/permanent delete
-- [ ] INT-06 — Duplicate account copies live balance/credentials as template
+- [x] INT-06 — Duplicate account copies live balance/credentials as template — fixed: `accounts/actions.ts#duplicateAccount` (both DEMO_MODE and real paths) copied `balance`, `username`, `password`, and `access_notes` verbatim into the new row, clearing only the account number — reachable via a real "Duplicate" button in the bank drawer. A duplicated account silently started with the *same real dollar balance* as the source, inflating every total (dashboard, balance-by-date, holder totals) until manually corrected, plus a copy of the same real login credentials. Now clears balance/username/password/access_notes to `null` (matching how a genuinely new account starts) — `interest_rate` still carries over unchanged, per the existing deliberate precedent already documented in the code. The now-unreachable "seed an opening-balance history point" block (balance is always null on duplicate now) was removed as dead code rather than left behind.
 - [x] INT-07 — Money-move batch can silently move less than confirmed — fixed: `createSweepBatch` now compares what `sweep_accounts` actually applied per account against what was requested, and reports an honest partial-success message (with the real total moved) instead of a blanket success when a balance was lower than expected.
-- [ ] INT-08 — Trashed bank's reminders stay active/emailable
+- [x] INT-08 — Trashed bank's reminders stay active/emailable — fixed both places reminders are surfaced: the cron's due-reminders query (`api/cron/reminders/route.ts`) now looks up each bank's `deleted_at` alongside its name and skips emailing (without stamping `emailed_at`, so it resumes normally if the bank is ever restored) any reminder whose bank is currently trashed; the dashboard's "central view" (`reminders.ts#getOpenReminders`) got the same filter. Left `getReminders(bankId)` (the bank drawer's own per-bank reminder list) unchanged on purpose — that's "show me this specific bank's reminders," which is expected to work the same regardless of trashed state, same as the rest of Trash.
 - [x] INT-09 — Account edit validates one bank ID, mutates another's account — fixed: `upsertAccount` now verifies the account's actual `bank_id` matches the supplied one before proceeding, instead of only checking that the supplied bank is owned by the caller (which let a stale/crafted request edit one account while auto-promoting a different, unrelated bank's status).
 - [x] INT-10 — Missing-profile / owner-bypass false-success states — fixed: `completeOnboarding`, `requestAccess`, and admin's `setAccessStatus` all now check whether their update actually matched a row (via `.select()`) instead of reporting success on zero-rows-affected — a missing profile (signup trigger failure) previously bounced the user Welcome→/→Welcome forever with no explanation. `/welcome` now also applies the same owner-bypass exception `(app)/layout.tsx` already has, so a newly configured owner with a pending/not-onboarded profile can't get stuck Welcome→Pending with no path to Admin.
 - [ ] INT-11 — Notification-default migration can't tell opt-out from untouched
@@ -341,13 +341,49 @@ this round's verification — flipped back to `false` before finishing, per the 
 - **DATA-15 (public road-trip plans can leak a home address) is open by explicit user decision, not
   an oversight** — "I don't care, this is a family app." Don't re-surface this as a priority item
   without the user raising it again.
-- 46 findings remain open, all Medium/Low severity. Most of what's left is broader/systemic rather
+- 41 findings remain open, all Medium/Low severity. Most of what's left is broader/systemic rather
   than a single clean fix: DATA-18/DATA-19 (pagination + validation patterns spanning "most Server
-  Actions" — needs a scoping decision, not just code), INT-04/INT-05/INT-06 (soft-delete-state
-  consistency across many call sites — real design questions about desired restore/cascade behavior,
-  not pure bugs), and most of Part 3 (UX/Accessibility, 22 findings — several need a design decision,
-  e.g. which new colors fix the contrast failures, but some like UX-04/UX-05/UX-10 look like plain
-  bugs worth a closer look). Part 4 (Performance/Reliability/Ops, 15 findings — REL-02/REL-03 now
-  partially addressed, see above) is mostly bigger-effort infrastructure work (CI, monitoring, query
-  tuning) rather than quick fixes. Worth a dedicated round to scope out the next no-decision-needed
-  batch from these once this round is reviewed.
+  Actions" — needs a scoping decision, not just code), INT-04/INT-05 (soft-delete-state consistency
+  across many call sites — real design questions about desired restore/cascade behavior, not pure
+  bugs), and most of Part 3 (UX/Accessibility, 22 findings — several need a design decision, e.g.
+  which new colors fix the contrast failures, but some like UX-04/UX-05/UX-10 look like plain bugs
+  worth a closer look). Part 4 (Performance/Reliability/Ops, 15 findings — REL-02/REL-03 now partially
+  addressed, see above) is mostly bigger-effort infrastructure work (CI, monitoring, query tuning)
+  rather than quick fixes. Worth a dedicated round to scope out the next no-decision-needed batch from
+  these once this round is reviewed.
+
+**Round 14 (next-5 triage #2 — UX-15, DATA-17, INT-08, INT-06, DATA-09 all fixed)** — Asked for the
+next 5 biggest remaining findings again; all 5 approved this time ("fix all 5"), each grounded by
+reading the actual current code before starting, same as every round since round 13:
+
+- **UX-15** and **INT-06** were both real, concrete, easily-reachable bugs found by grepping for the
+  exact bug shape just fixed in round 13 (UX-06's `window.open` popup-block) and by reading the exact
+  fields a "duplicate" action copies — both confirmed current and unguarded before any code was
+  written.
+- **DATA-17**'s fix mirrors a pattern this project has now applied several times (DATA-08's branch-
+  refresh atomicity, DATA-02's balance/history atomicity): reorder a delete-then-write (or here,
+  delete-then-remove) sequence so the *recoverable* step happens last, not first.
+- **INT-08** needed checking two call sites (the cron's due-reminders query and the dashboard's
+  `getOpenReminders`) for the same gap, rather than assuming one fix covered both.
+- **DATA-09** was the most involved — it needed a real (if narrowly-scoped) UI addition, not just a
+  guarded query, since "propose an unlink" is a genuinely new user-facing action in the sync wizard
+  that didn't exist before. Built and wired end-to-end: diff detection → review-step UI → a new
+  `applyHoldingCompanyUnlinks` server action (mirroring the existing apply action's permission gate
+  and cross-user propagation) → demo-mode parity. This is the one change in this round that's
+  genuinely UI-testable beyond a simple toast, so it got a dedicated headless-browser pass (see
+  Verification below) rather than only a code read.
+
+No migration — all five fixes are pure application code, live on deploy.
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (84/84) all clean. DATA-09 was
+verified live end-to-end via a headless-browser test against DEMO_MODE (the "Load sample data" demo
+shortcut was tweaked to naturally exercise the new stale-link path too, not just the new-link path):
+confirmed the stale-link section renders with the correct copy, its checkbox correctly changes the
+combined "Apply N changes" count, and applying a new link + an unlink together succeeds and reports
+both counts correctly on the done screen — zero console errors. UX-15/DATA-17/INT-08/INT-06 are all
+either pure server-side logic with no new UI (DATA-17, INT-08, INT-06) or a small UI change reusing an
+already-existing pattern in the same component (UX-15 reuses `AccountDocuments.tsx`/`DocumentsClient.tsx`'s
+own existing inline error display, the same shape UX-06 also landed on for check printing, just not the
+same component) — verified by reading each diff against the original code, confirming each is a narrow,
+additive change with no alteration to any already-correct path. `DEMO_MODE` was flipped to `true` for
+this round's verification and flipped back to `false` before finishing, per the standing rule.
