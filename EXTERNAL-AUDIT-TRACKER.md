@@ -331,10 +331,9 @@ this round's verification — flipped back to `false` before finishing, per the 
 
 - ~~Migrations 0040 and 0041~~ — both confirmed run by the user. SEC-01 (Critical) is now fully
   closed, and the DATA-03/DATA-08 row-lock and atomic-branch-refresh fixes are live.
-- **Migration 0042_vault_encryption.sql needs to be run** — adds `profiles.vault_encryption_enabled`/
-  `vault_salt`/`vault_check`. Until it's run, the Settings → Account "Vault encryption" card degrades
-  gracefully (feature just isn't offered — `saveVaultSettings` returns a friendly "run the migration"
-  error if someone tries).
+- ~~Migration 0042_vault_encryption.sql~~ — confirmed run. `profiles.vault_encryption_enabled`/
+  `vault_salt`/`vault_check` are live; the Settings → Account "Vault encryption" card is now fully
+  functional (SEC-05 closed).
 - ~~Migration 0043_atomic_balance_history.sql~~ — confirmed run. `charge_monthly_fee_with_history`/
   `credit_monthly_interest_with_history`/`update_account_balance` are now live; DATA-02 is fully
   closed (balance + history writes are atomic on every path going forward).
@@ -354,14 +353,11 @@ this round's verification — flipped back to `false` before finishing, per the 
   actually deleted, so a mis-tap on the small icon only opens a confirmation dialog, not a real
   data loss — reported that plainly, and the user chose to skip the resize on that basis. Don't
   re-surface this as a priority item without the user raising it again.
-- **Migration 0044_check_number_and_activity_log_atomicity.sql needs to be run** — adds
-  `claim_check_number`/`append_activity_log`. Until it's run, both DATA-14 and DATA-20 automatically
-  fall back to their original (non-atomic, but already-working) behavior — nothing breaks either way,
-  running it just closes the small collision/lost-entry window on concurrent access.
-- **Migration 0045_search_and_rls_indexes.sql needs to be run** — adds the `pg_trgm` extension and
-  trigram/btree indexes closing PERF-05. Purely additive and safe to run any time — an index never
-  changes query results, only how fast Postgres can find them, so nothing degrades if it hasn't run
-  yet; it just means search and `account_documents` reads stay unindexed until it does.
+- ~~Migration 0044_check_number_and_activity_log_atomicity.sql~~ — confirmed run.
+  `claim_check_number`/`append_activity_log` are live; DATA-14 and DATA-20 are fully closed (both
+  now go through the atomic RPC path instead of the non-atomic fallback).
+- ~~Migration 0045_search_and_rls_indexes.sql~~ — confirmed run. The `pg_trgm` extension and
+  trigram/btree indexes are live; PERF-05 is fully closed.
 - **8 findings remain open**, all Medium/Low severity. Round 20 picked the 5 easiest of the remaining
   13 (grounded in the real code, not just the one-line description, before starting) and fixed all 5:
   OPS-02, UX-18, PERF-03 (the batch-return half), PERF-05, OBS-01. What's left, by area: DATA-15 and

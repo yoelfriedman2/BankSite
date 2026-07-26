@@ -4,21 +4,15 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 
 ## One-time setup pending
 
-- **Run migration `0045_search_and_rls_indexes.sql`** — adds the `pg_trgm` extension and GIN trigram
-  indexes on `banks.name`/`city` and `accounts.holder`/`account_number` (columns searched via
-  leading-wildcard `.ilike`, which a plain btree index can't speed up at all), plus plain btree
-  indexes on `account_documents.user_id`/`account_id` (previously had zero indexes despite being
-  RLS-filtered and looked up directly on every real read path). Closes PERF-05. Purely additive and
-  safe to run any time — an index never changes query results, only how fast Postgres can find them —
-  so nothing breaks either way; running it just speeds up search and document reads as data grows.
+- ~~Run migration `0045_search_and_rls_indexes.sql`~~ — confirmed run. Closes PERF-05: adds the
+  `pg_trgm` extension and GIN trigram indexes on `banks.name`/`city` and `accounts.holder`/
+  `account_number` (columns searched via leading-wildcard `.ilike`), plus plain btree indexes on
+  `account_documents.user_id`/`account_id` (previously had zero indexes at all).
 
-- **Run migration `0044_check_number_and_activity_log_atomicity.sql`** — adds
-  `claim_check_number` (DATA-14) and `append_activity_log` (DATA-20) Postgres functions. Fixes two
-  read-then-write races: two near-simultaneous check prints could silently store the same check
-  number, and two near-simultaneous "log activity" clicks could silently drop one entry. Degrades
-  gracefully until run — both paths automatically fall back to their exact original (non-atomic, but
-  already-working) behavior, so nothing breaks either way; running it just closes the small collision/
-  lost-entry window.
+- ~~Run migration `0044_check_number_and_activity_log_atomicity.sql`~~ — confirmed run. Adds
+  `claim_check_number` (DATA-14) and `append_activity_log` (DATA-20) Postgres functions, closing two
+  read-then-write races: two near-simultaneous check prints silently storing the same check number,
+  and two near-simultaneous "log activity" clicks silently dropping one entry.
 
 - ~~Run migration `0043_atomic_balance_history.sql`~~ — confirmed run. Closes DATA-02: adds
   `charge_monthly_fee_with_history`, `credit_monthly_interest_with_history`, and
@@ -26,12 +20,10 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
   record can no longer drift apart. Does not backfill the 356 accounts already missing history rows
   (existing data intentionally untouched) — only prevents new drift going forward.
 
-- **Run migration `0042_vault_encryption.sql`** — adds `profiles.vault_encryption_enabled`,
-  `vault_salt`, `vault_check` (all additive/nullable/safe-default). Powers the new opt-in "Vault
-  encryption" feature in Settings → Account (encrypts saved account usernames/passwords/access
-  notes with a user-chosen master password the server never sees). Degrades gracefully until run —
-  the Settings card just isn't offered, and `saveVaultSettings` returns a friendly error pointing at
-  this migration if it's somehow reached anyway.
+- ~~Run migration `0042_vault_encryption.sql`~~ — confirmed run. Adds `profiles.vault_encryption_enabled`,
+  `vault_salt`, `vault_check`. Powers the opt-in "Vault encryption" feature in Settings → Account
+  (encrypts saved account usernames/passwords/access notes with a user-chosen master password the
+  server never sees).
 
 - ~~Run migration `0041_sweep_row_locks_and_branch_refresh_atomicity.sql`~~ — confirmed run. Closes
   two data-safety findings from the external audit. DATA-03: `sweep_accounts`/`return_sweep` now take
