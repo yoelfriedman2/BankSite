@@ -19,11 +19,12 @@ type BankRef = { id: string; name: string; state: string | null; cert: number | 
 export default async function AccountsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ attention?: string; q?: string }>;
+  searchParams: Promise<{ attention?: string; q?: string; openId?: string }>;
 }) {
   const sp = await searchParams;
   const initialAttention = sp.attention === "1";
   const initialQuery = typeof sp.q === "string" ? sp.q : undefined;
+  const initialOpenId = typeof sp.openId === "string" ? sp.openId : undefined;
 
   let banks: BankRef[];
   let accounts: Account[];
@@ -91,6 +92,7 @@ export default async function AccountsPage({
       attentionPrefs={prefs}
       initialAttention={initialAttention}
       initialQuery={initialQuery}
+      initialOpenId={initialOpenId}
     />
   );
 }

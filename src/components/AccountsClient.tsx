@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
-  Search,
   Pencil,
   AlertTriangle,
   CalendarCheck,
@@ -41,11 +40,10 @@ import { AccountViewModal } from "@/components/AccountViewModal";
 import { ImportDialog } from "@/components/ImportDialog";
 import { FocusTrapPanel } from "@/components/FocusTrapPanel";
 import { useToast } from "@/components/Toast";
+import { SearchInput } from "@/components/SearchInput";
 import { logActivityToday } from "@/app/(app)/accounts/actions";
 
 type BankRef = { id: string; name: string; cert: number | null };
-
-const ACTIVITY_TYPES = ["checking", "savings", "money_market"];
 
 type SortKey = "bank" | "holder" | "type" | "balance" | "lastActivity";
 type SortDir = "asc" | "desc";
@@ -388,6 +386,7 @@ export function AccountsClient({
   attentionPrefs = DEFAULT_ATTENTION_PREFS,
   initialAttention,
   initialQuery,
+  initialOpenId,
 }: {
   rows: AccountRow[];
   banks?: BankRef[];
@@ -396,6 +395,7 @@ export function AccountsClient({
   attentionPrefs?: AttentionPrefs;
   initialAttention: boolean;
   initialQuery?: string;
+  initialOpenId?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -438,6 +438,17 @@ export function AccountsClient({
   const [viewing, setViewing] = useState<AccountRow | null>(null);
   const [logPendingId, setLogPendingId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+
+  // Deep link: /accounts?openId=<account id> (from the global search) opens
+  // that specific account's read-only view directly, rather than just
+  // dropping its holder/bank name into the text filter — a substring match
+  // isn't guaranteed to resolve to exactly one account.
+  useEffect(() => {
+    if (!initialOpenId) return;
+    const target = rows.find((r) => r.id === initialOpenId);
+    if (target) setViewing(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialOpenId]);
 
   function handleLogToday(r: AccountRow, type: ActivityType | null) {
     setLogPendingId(r.id);
@@ -615,15 +626,12 @@ export function AccountsClient({
             {attentionCount}
           </span>
         </button>
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search accounts…"
-            className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-          />
-        </div>
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          placeholder="Search accounts…"
+          wrapperClassName="flex-1"
+        />
       </div>
         <button
           type="button"
@@ -733,7 +741,7 @@ export function AccountsClient({
                   <span className="min-w-0 flex-1 truncate font-medium text-slate-900">
                     {r.bankName}
                   </span>
-                  {r.account_type && ACTIVITY_TYPES.includes(r.account_type) && (
+                  {r.account_type !== "cd" && (
                     <QuickLogButton
                       pending={logPendingId === r.id}
                       onLog={(type) => handleLogToday(r, type)}
@@ -890,13 +898,12 @@ export function AccountsClient({
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
-                        {r.account_type &&
-                          ACTIVITY_TYPES.includes(r.account_type) && (
-                            <QuickLogButton
-                              pending={logPendingId === r.id}
-                              onLog={(type) => handleLogToday(r, type)}
-                            />
-                          )}
+                        {r.account_type !== "cd" && (
+                          <QuickLogButton
+                            pending={logPendingId === r.id}
+                            onLog={(type) => handleLogToday(r, type)}
+                          />
+                        )}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();

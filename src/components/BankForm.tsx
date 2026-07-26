@@ -54,6 +54,7 @@ import {
 import { useUnsavedChanges, confirmDiscard } from "@/components/useUnsavedChanges";
 import { useFocusTrap } from "@/lib/useFocusTrap";
 import { useToast } from "@/components/Toast";
+import { SearchInput } from "@/components/SearchInput";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -969,11 +970,11 @@ export function BankForm({
                           </div>
                         )}
                         <div className="relative">
-                          <input
-                            className={`${inputClass} text-sm`}
-                            placeholder="Search to link a bank…"
+                          <SearchInput
                             value={relSearch}
-                            onChange={(e) => setRelSearch(e.target.value)}
+                            onChange={setRelSearch}
+                            placeholder="Search to link a bank…"
+                            showIcon={false}
                             disabled={relBusy}
                           />
                           {relResults.length > 0 && (

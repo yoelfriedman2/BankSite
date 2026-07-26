@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Pencil, X, ArrowUpRight } from "lucide-react";
 import { ACCOUNT_TYPE_LABELS, type Account } from "@/lib/types";
@@ -8,6 +9,7 @@ import { Box, BoxHeader, Frow } from "@/components/DetailBox";
 import { getActivityLevel, daysUntil } from "@/lib/dormancy";
 import { ActivityDot } from "@/components/badges";
 import { useFocusTrap } from "@/lib/useFocusTrap";
+import { getBalanceHistory, type BalancePoint } from "@/app/(app)/money/actions";
 
 /** Read-only "look but don't touch" view of an account — for family members who
  *  just want to check a balance/account number without risking an accidental
@@ -32,6 +34,11 @@ export function AccountViewModal({
   const cdColor =
     cdDays == null ? "" : cdDays < 0 ? "text-slate-600" : cdDays <= 30 ? "text-rose-600" : cdDays <= 90 ? "text-amber-700" : "";
   const dialogRef = useFocusTrap<HTMLDivElement>(onClose);
+
+  const [balanceHistory, setBalanceHistory] = useState<BalancePoint[]>([]);
+  useEffect(() => {
+    getBalanceHistory(account.id).then(setBalanceHistory).catch(() => {});
+  }, [account.id]);
   return (
     <div
       className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4"
@@ -128,6 +135,34 @@ export function AccountViewModal({
               <p className="whitespace-pre-wrap rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
                 {account.notes}
               </p>
+            </Box>
+          )}
+
+          {balanceHistory.length > 0 && (
+            <Box>
+              <BoxHeader title="Balance history" />
+              <ul className="space-y-1.5">
+                {balanceHistory.map((p, i) => (
+                  <li
+                    key={i}
+                    className="flex items-center gap-2 rounded-md bg-slate-50 px-2 py-1.5 text-sm"
+                  >
+                    <span className="w-16 shrink-0 text-xs text-slate-500">{formatDate(p.as_of_date)}</span>
+                    <span className="flex-1 truncate text-xs text-slate-600">{p.reason ?? ""}</span>
+                    {p.change_amount != null && (
+                      <span
+                        className={`shrink-0 text-xs tabular-nums ${p.change_amount < 0 ? "text-rose-500" : "text-emerald-700"}`}
+                      >
+                        {p.change_amount < 0 ? "−" : "+"}
+                        {formatCurrency(Math.abs(p.change_amount))}
+                      </span>
+                    )}
+                    <span className="w-24 shrink-0 text-right font-medium tabular-nums text-slate-800">
+                      {formatCurrency(p.balance)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </Box>
           )}
         </div>

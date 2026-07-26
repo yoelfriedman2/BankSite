@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   Plus,
-  Search,
   Trash2,
   Loader2,
   Download,
@@ -48,6 +47,7 @@ import { BankLogo } from "@/components/BankLogo";
 import { ImportDialog } from "@/components/ImportDialog";
 import { FocusTrapPanel } from "@/components/FocusTrapPanel";
 import { useToast } from "@/components/Toast";
+import { SearchInput } from "@/components/SearchInput";
 import { exportToExcel, exportCommentsToExcel } from "@/lib/export";
 import { setBankStatus, deleteBank, getAllBankComments, type RelatedRef } from "@/app/(app)/banks/actions";
 
@@ -349,6 +349,7 @@ export function BanksClient({
   initialStatus,
   initialQuery,
   initialOpenCert,
+  initialOpenId,
   isOwner = false,
 }: {
   banks: Bank[];
@@ -362,6 +363,7 @@ export function BanksClient({
   initialStatus?: BankStatusFilter;
   initialQuery?: string;
   initialOpenCert?: number;
+  initialOpenId?: string;
   isOwner?: boolean;
 }) {
   const [localReadCerts, setLocalReadCerts] = useState<Set<number>>(() => new Set());
@@ -578,6 +580,17 @@ export function BanksClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialOpenCert]);
 
+  // Deep link: /banks?openId=<bank id> (used by the global search — a plain
+  // ?q= text filter can't reliably resolve to one specific bank, and a bank
+  // with no FDIC cert, e.g. one manually added by the user, has no `cert` to
+  // deep-link with at all) opens that bank directly by its own row id.
+  useEffect(() => {
+    if (!initialOpenId) return;
+    const target = banks.find((b) => b.id === initialOpenId);
+    if (target) openBank(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialOpenId]);
+
   /** Always-visible, clickable related-bank chips for a row. Styled distinctly
    *  from the gray holding-company line (link icon + indigo pills). Clicking a
    *  chip opens that bank's drawer instead of the row's own. */
@@ -702,15 +715,12 @@ export function BanksClient({
           (desktop); mobile gets a single Filters button since cards have no
           header row to attach them to. */}
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search banks or holders…"
-            className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-          />
-        </div>
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          placeholder="Search banks or holders…"
+          wrapperClassName="flex-1"
+        />
         <button
           type="button"
           onClick={() => setMobileFiltersOpen(true)}

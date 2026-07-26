@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Search } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { DateInput } from "@/components/DateInput";
 import { formatCurrency } from "@/lib/format";
 import { todayLocalStr } from "@/lib/date";
 import { getBalanceAsOf, type BalanceAsOfRow } from "@/app/(app)/money/actions";
 import { useToast } from "@/components/Toast";
+import { SearchInput } from "@/components/SearchInput";
 
 export function BalancesClient({
   initialRows,
@@ -94,15 +95,12 @@ export function BalancesClient({
           {loading && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
         </div>
         <div className="flex flex-1 gap-2">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search banks or holders…"
-              className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-            />
-          </div>
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Search banks or holders…"
+            wrapperClassName="flex-1"
+          />
           <select
             value={holder}
             onChange={(e) => setHolder(e.target.value)}

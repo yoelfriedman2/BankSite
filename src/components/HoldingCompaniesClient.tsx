@@ -13,7 +13,6 @@ import {
   Lock,
   ExternalLink,
   RefreshCw,
-  Search,
   ChevronUp,
   ChevronDown,
   ChevronsUpDown,
@@ -27,6 +26,7 @@ import {
   type HoldingCompanyChange,
   type HoldingCompanyOverviewRow,
 } from "@/app/(app)/holding-companies/actions";
+import { SearchInput } from "@/components/SearchInput";
 // nicParse.ts pulls in JSZip + the full xlsx (SheetJS) library, which was by
 // far the biggest thing in this page's bundle (178kB First Load JS, dwarfing
 // every other page in the app — PERF-04) even for someone who only browses
@@ -547,15 +547,12 @@ export function HoldingCompaniesClient({
 
         {!overviewLoading && overview && overview.length > 0 && (
           <>
-            <div className="relative mb-4">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                value={browseQuery}
-                onChange={(e) => setBrowseQuery(e.target.value)}
-                placeholder="Search holding companies or banks…"
-                className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-              />
-            </div>
+            <SearchInput
+              value={browseQuery}
+              onChange={setBrowseQuery}
+              placeholder="Search holding companies or banks…"
+              wrapperClassName="mb-4"
+            />
 
             {filteredOverview && filteredOverview.length === 0 && (
               <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-600">

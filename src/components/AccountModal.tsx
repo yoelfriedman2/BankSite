@@ -25,8 +25,6 @@ const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
 const labelClass = "mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500";
 
-const DORMANCY_TYPES = ["checking", "savings", "money_market"];
-
 function toValues(
   bankId: string,
   a: Account | null,
@@ -213,7 +211,7 @@ export function AccountModal({
     });
   }
 
-  const showActivity = DORMANCY_TYPES.includes(values.account_type);
+  const showActivity = values.account_type !== "cd";
   const showCd = values.account_type === "cd";
   // Same green/orange/red signal shown on the Accounts list — recomputed
   // live from the in-progress form values so it updates as you edit, not

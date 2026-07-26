@@ -35,7 +35,7 @@ const VALID_STATUSES: Array<BankStatusFilter> = [
 export default async function BanksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string; cert?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; cert?: string; openId?: string }>;
 }) {
   const sp = await searchParams;
   const initialStatus = VALID_STATUSES.includes(
@@ -46,6 +46,7 @@ export default async function BanksPage({
   const initialQuery = typeof sp.q === "string" ? sp.q : undefined;
   const certNum = sp.cert ? parseInt(sp.cert, 10) : NaN;
   const initialOpenCert = Number.isFinite(certNum) ? certNum : undefined;
+  const initialOpenId = typeof sp.openId === "string" ? sp.openId : undefined;
 
   if (DEMO_MODE) {
     const [unreadCerts, relatedByCert] = await Promise.all([
@@ -66,6 +67,7 @@ export default async function BanksPage({
         initialStatus={initialStatus}
         initialQuery={initialQuery}
         initialOpenCert={initialOpenCert}
+        initialOpenId={initialOpenId}
         isOwner={isOwnerEmail(DEMO_USER.email)}
       />
     );
@@ -137,6 +139,7 @@ export default async function BanksPage({
       initialStatus={initialStatus}
       initialQuery={initialQuery}
       initialOpenCert={initialOpenCert}
+      initialOpenId={initialOpenId}
       isOwner={isOwnerEmail(user.email)}
     />
   );

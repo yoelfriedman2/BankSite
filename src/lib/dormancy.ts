@@ -11,13 +11,6 @@ import { formatCurrency } from "./format";
  */
 export type ActivityLevel = "green" | "orange" | "red" | "none";
 
-/** Account types that can go dormant from inactivity (CDs/other do not). */
-const DORMANCY_TYPES = new Set<Account["account_type"]>([
-  "checking",
-  "savings",
-  "money_market",
-]);
-
 /** The dormancy window that applies to an account (override beats the global default). */
 export function effectiveDormancyMonths(
   account: Pick<Account, "dormancy_months_override">,
@@ -48,15 +41,20 @@ export function daysUntil(dateStr: string, now: Date = new Date()): number {
   return Math.round((target.getTime() - today.getTime()) / 86_400_000);
 }
 
-/** Compute the activity health for an account. */
+/** Compute the activity health for an account.
+ *
+ * Every account type is dormancy-eligible by default — an account with no
+ * type set yet (common right after import, or before the user has picked
+ * one) is treated the same as checking/savings/money_market/other, so it
+ * still gets a real green/orange/red signal instead of silently opting out
+ * of the whole feature. Only an explicit "cd" is exempt (CDs are tracked by
+ * maturity date, not activity — see isCdMaturingSoon). */
 export function getActivityLevel(
   account: Account,
   defaultMonths: number,
   now: Date = new Date(),
 ): ActivityLevel {
-  if (!account.account_type || !DORMANCY_TYPES.has(account.account_type)) {
-    return "none";
-  }
+  if (account.account_type === "cd") return "none";
   const activityDate = account.last_activity_date ?? account.date_opened;
   if (!activityDate) return "none";
 

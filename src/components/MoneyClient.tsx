@@ -14,6 +14,7 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { todayLocalStr } from "@/lib/date";
 import { useFocusTrap } from "@/lib/useFocusTrap";
 import { useToast } from "@/components/Toast";
+import { SearchInput } from "@/components/SearchInput";
 import {
   createSweepBatch,
   returnSweep,
@@ -288,11 +289,12 @@ function NewMoveModal({
           </div>
 
           <div>
-            <input
-              className={`${inputClass} mb-2`}
-              placeholder="Search accounts…"
+            <SearchInput
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={setQuery}
+              placeholder="Search accounts…"
+              showIcon={false}
+              wrapperClassName="mb-2"
             />
             <div className="max-h-72 overflow-y-auto rounded-lg border border-slate-200">
               {filtered.length === 0 ? (

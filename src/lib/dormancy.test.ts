@@ -119,6 +119,16 @@ describe("getActivityLevel", () => {
     const acc = makeAccount({ last_activity_date: null, date_opened: "2024-01-01" });
     expect(getActivityLevel(acc, 12, now)).toBe("red");
   });
+
+  it("is dormancy-eligible with no account_type set, not 'none' (defaults to checking/savings-like behavior until explicitly set to CD)", () => {
+    const acc = makeAccount({ account_type: null, last_activity_date: "2025-12-15" });
+    expect(getActivityLevel(acc, 12, now)).toBe("green");
+  });
+
+  it("is dormancy-eligible for 'other', not just checking/savings/money_market", () => {
+    const acc = makeAccount({ account_type: "other", last_activity_date: "2024-12-01" }); // 13 months, window 12
+    expect(getActivityLevel(acc, 12, now)).toBe("red");
+  });
 });
 
 describe("isBelowMinBalance", () => {

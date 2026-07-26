@@ -11,8 +11,6 @@ import { effectiveDormancyMonths } from "@/lib/dormancy";
 import { fetchAllRows } from "@/lib/pagination";
 import type { Account, Bank } from "@/lib/types";
 
-const DORMANCY_TYPES = ["checking", "savings", "money_market"];
-
 /** Adds calendar months to a YYYY-MM-DD date, staying timezone-independent
  *  (pure Y/M/D arithmetic — never round-trips through toISOString(), which
  *  would shift the result by a day depending on the server's local timezone
@@ -126,9 +124,11 @@ export default async function CalendarPage() {
         href: "/accounts",
       });
 
-    // Dormancy due date — fall back to date_opened if no last_activity_date
+    // Dormancy due date — fall back to date_opened if no last_activity_date.
+    // Every type except an explicit CD is dormancy-eligible (see
+    // getActivityLevel in lib/dormancy.ts for the same rule).
     const dormancyRef = a.last_activity_date ?? a.date_opened;
-    if (a.account_type && DORMANCY_TYPES.includes(a.account_type) && dormancyRef)
+    if (a.account_type !== "cd" && dormancyRef)
       events.push({
         date: addMonths(dormancyRef, effectiveDormancyMonths(a, defaultMonths)),
         type: "activity",

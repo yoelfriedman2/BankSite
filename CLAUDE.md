@@ -174,6 +174,80 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-26 (4 user-reported bugs: search deep-linking, dormancy defaulting to "no type = CD",
+balance history hidden until edit, and a shared search-clear affordance)** — User reported four
+issues from live use, all fixed together:
+
+- **Global search didn't actually open the bank/account it found** — reported specifically against a
+  manually-added credit union. Root cause: `GlobalSearch.tsx`'s bank/account results linked to
+  `/banks?q=<name>`/`/accounts?q=<name>` — a plain text-filter query, not a real deep link. That's a
+  silent best-effort match, not a guaranteed one: a manually-added bank has no FDIC `cert` (left
+  blank when added — `integer(values.cert)` returns `null` for an empty field), so the only existing
+  deep-link mechanism (`/banks?cert=<n>`, used elsewhere e.g. from the Activity log) couldn't reach it
+  at all, and a plain name filter isn't guaranteed to resolve to exactly one row for every bank/account
+  in every case. Fixed by deep-linking on the row's own id instead: both `BanksClient.tsx` and
+  `AccountsClient.tsx` gained a new `initialOpenId` prop (threaded through `banks/page.tsx` and
+  `accounts/page.tsx`'s existing searchParams pattern, alongside the pre-existing `cert`/`q` ones) that
+  opens the exact bank drawer / account view modal by id on load. `GlobalSearch.tsx` now links to
+  `/banks?openId=<id>` / `/accounts?openId=<id>` instead of the old `?q=` filter links. **New
+  convention**: `?openId=<row id>` is now the reliable way to deep-link to one specific bank or
+  account from anywhere in the app — prefer it over `?q=` (a text filter, no open guarantee) for any
+  future "take me to this exact record" link; `?cert=` still works for banks that have one.
+- **An account with no `account_type` set got no dormancy color at all.** `getActivityLevel()`
+  (`lib/dormancy.ts`) only treated `checking`/`savings`/`money_market` as dormancy-eligible — a brand
+  new account (or one imported without a type column) fell through the `!account.account_type` check
+  straight to `"none"`, silently opting out of the "needs attention" feature entirely until a type was
+  chosen. Per the user's explicit framing ("shouldn't by default assume it's a CD... every account
+  needs attention checked at least once a year unless you actually mark it a CD"), inverted the logic:
+  every account type is now dormancy-eligible by default; only an explicit `"cd"` is exempt (CDs are
+  tracked by maturity date, not activity). Two duplicated copies of the same allow-list
+  (`calendar/page.tsx`'s `DORMANCY_TYPES`, `AccountModal.tsx`'s `DORMANCY_TYPES`/`ACTIVITY_TYPES` in
+  `AccountsClient.tsx`) had the identical bug and got the same fix, so the calendar's "activity due"
+  event, the account editor's live color preview, and the Accounts list's quick-log button all agree
+  with the one shared `getActivityLevel()` rule now instead of three separately-drifting copies of it.
+  Added regression tests in `dormancy.test.ts` for `null` and `"other"` account types.
+- **Balance history only showed up in the *edit* form, never the read-only view.** `AccountViewModal.tsx`
+  (opened by clicking an account row, before "Edit" is clicked) had no balance-history fetch or display
+  at all — `AccountModal.tsx`'s edit form already had this exact box. Added the identical fetch
+  (`getBalanceHistory()` from `money/actions.ts`) and box to `AccountViewModal.tsx` too, so the history
+  is visible without needing to open the editor.
+- **New shared `src/components/SearchInput.tsx`**, applied to every search box in the app (Banks,
+  Accounts, Balances, Holding companies, Money's account-search, Road trip's two bank searches,
+  BankForm's relationship-link search, and GlobalSearch's own combobox): adds a clear "✕" button once
+  there's text typed, so clearing a search no longer means holding backspace. **New convention: any
+  future search input should use `<SearchInput>` instead of a raw `<input>` + manually-positioned
+  `<Search>` icon** — it takes `value`/`onChange(value: string)` instead of an `onChange(event)`, plus
+  optional `wrapperClassName`, `showIcon` (for the rare icon-less case), and `focusRing` ("amber"
+  default, "blue" for the road-trip pages' blue theme); any other native input prop (placeholder,
+  disabled, aria-*, onKeyDown, etc.) passes straight through.
+
+No migration — all four fixes are pure application code, live on deploy. Skipped changelog/Guide —
+all four are bug fixes/consistency fixes to already-existing features (search, dormancy tracking,
+balance history, search UX), not new capabilities, per the standing features-only policy.
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (86/86, +2 new regression tests)
+all clean. All four fixes are genuinely UI-observable, so all four got a live pass against a real
+DEMO_MODE dev server via a hand-rolled CDP driver (Playwright isn't installable in this sandbox —
+npm registry blocks it; reused the `scratchpad/cdp.mjs` pattern from earlier sessions). One real
+methodology snag hit and fixed along the way: a plain DOM `.click()` call reliably no-opped on first
+page load in this sandbox (looked exactly like a broken button — clicking "Add bank" did nothing)
+until replaced with a genuine dispatched mouse event via CDP's `Input.dispatchMouseEvent`, after which
+every click worked correctly; a second snag was a `textIncludes: "Save"` selector matching the wrong
+button (BankForm's outer "Save bank" instead of the nested AccountModal's own submit button, since
+both dialogs were open at once and both button labels contain "Save") — fixed by scoping the selector
+to the specific dialog (`form[aria-labelledby="account-modal-title"]`). Confirmed end-to-end: added a
+brand-new bank with no cert, found it via global search, and clicking the result opened that exact
+bank's drawer (previously this exact case was the reported bug); added a new account with no
+`account_type` set and a today-dated last-activity, and confirmed a real green "Active" dot appears in
+the live edit form, the Accounts list, and the read-only view modal alike; confirmed the view modal
+renders without error with the new balance-history fetch in place (DEMO_MODE's `getBalanceHistory`
+always returns `[]` by design, so the box itself — which only renders when non-empty — couldn't be
+seen with real rows in this sandbox, same limitation as every other real-Supabase-only feature in this
+project); confirmed the clear button appears/works on Banks, Accounts, Balances, and GlobalSearch; zero
+console errors and no 375px mobile overflow across every touched page. `DEMO_MODE` was flipped to
+`true` for this round's verification (temporary `.env.local`, since none existed in this fresh
+environment) and removed entirely before finishing, per the standing rule.
+
 **2026-07-26 (external audit — round 20: 5 easiest of the remaining 13 findings — OPS-02, UX-18,
 PERF-03, PERF-05, OBS-01 all fixed)** — User asked how many findings were left (13), then asked for
 the 5 easiest to fix. Opened the actual code for each candidate before ranking rather than trusting

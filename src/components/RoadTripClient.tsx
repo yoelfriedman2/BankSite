@@ -3,7 +3,6 @@
 import { useMemo, useState, useCallback, useTransition } from "react";
 import dynamic from "next/dynamic";
 import {
-  Search,
   Star,
   X,
   Plus,
@@ -46,6 +45,7 @@ import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import type { MapPoint } from "@/components/RoadTripMap";
 import { RoadTripTrips } from "@/components/RoadTripTrips";
 import { NearbyBanksFinder } from "@/components/NearbyBanksFinder";
+import { SearchInput } from "@/components/SearchInput";
 
 const RoadTripMap = dynamic(() => import("@/components/RoadTripMap").then((m) => m.RoadTripMap), {
   ssr: false,
@@ -556,15 +556,13 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
 
       {/* ── 2. Must-visit banks ── */}
       <Card title="2. Must-visit banks" subtitle="Which banks does this trip need to cover?">
-        <div className="relative mb-3">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by name, city, or state…"
-            className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-blue-400 focus:outline-none"
-          />
-        </div>
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          placeholder="Search by name, city, or state…"
+          wrapperClassName="mb-3"
+          focusRing="blue"
+        />
 
         {mustVisitBanks.length > 0 && (
           <div className="mb-3 flex flex-wrap gap-2">
@@ -738,12 +736,11 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
           {/* ── 3. Nearby candidates + map ── */}
           <Card title="4. Add more banks nearby" subtitle={`Every tracked bank within ${radiusMiles} miles of your route, cheapest detour first.`}>
             <div className="relative mb-3">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
+              <SearchInput
                 value={addQuery}
-                onChange={(e) => setAddQuery(e.target.value)}
+                onChange={setAddQuery}
                 placeholder="Search any bank to add it, regardless of distance…"
-                className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-blue-400 focus:outline-none"
+                focusRing="blue"
               />
               {addQuery.trim() && (
                 <ul className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">

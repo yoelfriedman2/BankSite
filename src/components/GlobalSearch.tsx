@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Search } from "lucide-react";
 import { searchAll, type SearchResults } from "@/app/(app)/banks/actions";
+import { SearchInput } from "@/components/SearchInput";
 
 type FlatItem =
   | { kind: "bank"; id: string; href: string; label: string; sub: string | null }
@@ -57,14 +57,19 @@ export function GlobalSearch() {
       ...results.banks.map((b) => ({
         kind: "bank" as const,
         id: b.id,
-        href: `/banks?q=${encodeURIComponent(b.name)}`,
+        // Deep-links straight to this specific bank (opens its drawer directly)
+        // instead of just dropping the name into the Banks page's text filter —
+        // a filter match isn't guaranteed for every bank (e.g. one manually
+        // added with a name that doesn't uniquely resolve), so this is the only
+        // way a click reliably "takes you there".
+        href: `/banks?openId=${encodeURIComponent(b.id)}`,
         label: b.name,
         sub: b.state,
       })),
       ...results.accounts.map((a) => ({
         kind: "account" as const,
         id: a.id,
-        href: `/accounts?q=${encodeURIComponent(a.holder || a.bankName)}`,
+        href: `/accounts?openId=${encodeURIComponent(a.id)}`,
         label: a.holder || "—",
         sub: a.bankName,
       })),
@@ -111,22 +116,21 @@ export function GlobalSearch() {
 
   return (
     <div ref={boxRef} className="relative">
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-      <input
+      <SearchInput
         role="combobox"
         aria-expanded={open && (loading || hasResults || q.trim().length >= 2)}
         aria-controls={LISTBOX_ID}
         aria-autocomplete="list"
         aria-activedescendant={activeItem ? `${LISTBOX_ID}-${activeItem.kind}-${activeItem.id}` : undefined}
         value={q}
-        onChange={(e) => {
-          setQ(e.target.value);
+        onChange={(v) => {
+          setQ(v);
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={handleKeyDown}
         placeholder="Search banks & accounts…"
-        className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-3 text-sm text-slate-900 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+        className="bg-white focus:border-amber-400"
       />
       <span className="sr-only" role="status" aria-live="polite">{resultsSummary}</span>
       {open && q.trim().length >= 2 && (
@@ -156,7 +160,7 @@ export function GlobalSearch() {
                         id={`${LISTBOX_ID}-bank-${b.id}`}
                         role="option"
                         aria-selected={idx === activeIndex}
-                        href={`/banks?q=${encodeURIComponent(b.name)}`}
+                        href={`/banks?openId=${encodeURIComponent(b.id)}`}
                         onClick={() => setOpen(false)}
                         onMouseEnter={() => setActiveIndex(idx)}
                         className={`block truncate px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 ${idx === activeIndex ? "bg-amber-50" : ""}`}
@@ -183,7 +187,7 @@ export function GlobalSearch() {
                         id={`${LISTBOX_ID}-account-${a.id}`}
                         role="option"
                         aria-selected={idx === activeIndex}
-                        href={`/accounts?q=${encodeURIComponent(a.holder || a.bankName)}`}
+                        href={`/accounts?openId=${encodeURIComponent(a.id)}`}
                         onClick={() => setOpen(false)}
                         onMouseEnter={() => setActiveIndex(idx)}
                         className={`block truncate px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 ${idx === activeIndex ? "bg-amber-50" : ""}`}
