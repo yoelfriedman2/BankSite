@@ -198,14 +198,20 @@ function RestoreModal({ backup, onClose }: { backup: BackupFile; onClose: () => 
 
   useEffect(() => {
     let cancelled = false;
-    getBackupUsersAction(backup.path).then((res) => {
-      if (cancelled) return;
-      if (res.error) setLoadError(res.error);
-      else {
-        setUsers(res.users ?? []);
-        if (res.users?.length) setEmail(res.users[0].email);
-      }
-    });
+    getBackupUsersAction(backup.path)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.error) setLoadError(res.error);
+        else {
+          setUsers(res.users ?? []);
+          if (res.users?.length) setEmail(res.users[0].email);
+        }
+      })
+      .catch(() => {
+        // A rejected promise previously left this stuck showing "loading"
+        // forever (users stays null, no error ever set) — UX-10.
+        if (!cancelled) setLoadError("Couldn't load users from this backup. Try again.");
+      });
     return () => {
       cancelled = true;
     };
@@ -216,14 +222,21 @@ function RestoreModal({ backup, onClose }: { backup: BackupFile; onClose: () => 
     setRestoring(true);
     setError(null);
     setResult(null);
-    restoreUserFromBackupAction(backup.path, email).then((res) => {
-      setRestoring(false);
-      if (res.error) {
-        setError(res.error);
-        return;
-      }
-      setResult(res);
-    });
+    restoreUserFromBackupAction(backup.path, email)
+      .then((res) => {
+        setRestoring(false);
+        if (res.error) {
+          setError(res.error);
+          return;
+        }
+        setResult(res);
+      })
+      .catch(() => {
+        // A rejected promise previously left restoring stuck true forever,
+        // with the button disabled and no error shown (UX-10).
+        setRestoring(false);
+        setError("Something went wrong. Try again.");
+      });
   }
 
   return (
@@ -241,7 +254,7 @@ function RestoreModal({ backup, onClose }: { backup: BackupFile; onClose: () => 
       >
         <div className="mb-1 flex items-center justify-between">
           <h3 id="restore-modal-title" className="text-base font-semibold text-slate-900">Restore a user</h3>
-          <button type="button" onClick={onClose} className="rounded-lg p-1 text-slate-600 hover:bg-slate-100">
+          <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-slate-600 hover:bg-slate-100">
             <X className="h-4 w-4" />
           </button>
         </div>

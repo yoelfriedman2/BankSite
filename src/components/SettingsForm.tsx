@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, type FormEvent } from "react";
+import { useEffect, useRef, useState, useTransition, type FormEvent, type KeyboardEvent } from "react";
 import {
   Loader2,
   Check,
@@ -34,6 +34,7 @@ import { exportToExcel } from "@/lib/export";
 import { useToast } from "@/components/Toast";
 import { VaultEncryptionCard } from "@/components/VaultEncryptionCard";
 import { useFocusTrap } from "@/lib/useFocusTrap";
+import { useUnsavedChanges } from "@/components/useUnsavedChanges";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -142,6 +143,20 @@ export function SettingsForm({
   vaultEnabled?: boolean;
 }) {
   const [tab, setTab] = useState<TabId>("profile");
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  function handleTabKeyDown(e: KeyboardEvent<HTMLButtonElement>, index: number) {
+    let nextIndex: number | null = null;
+    if (e.key === "ArrowRight") nextIndex = (index + 1) % TABS.length;
+    else if (e.key === "ArrowLeft") nextIndex = (index - 1 + TABS.length) % TABS.length;
+    else if (e.key === "Home") nextIndex = 0;
+    else if (e.key === "End") nextIndex = TABS.length - 1;
+    if (nextIndex !== null) {
+      e.preventDefault();
+      setTab(TABS[nextIndex].id);
+      tabRefs.current[nextIndex]?.focus();
+    }
+  }
 
   const [name, setName] = useState(displayName);
   const [months, setMonths] = useState(String(defaultDormancyMonths));
@@ -163,6 +178,57 @@ export function SettingsForm({
   const [saved, setSaved] = useState(false);
   const [isPending, startTransition] = useTransition();
   const toast = useToast();
+
+  // Unsaved-changes guard for the fields the Profile/Alerts tabs' "Save
+  // settings" button submits — warns before a refresh/close/browser-nav
+  // discards an edit that was never saved (UX-14). Switching between
+  // Settings' own tabs doesn't lose anything (every tab's state lives in
+  // this one component regardless of which tab is currently rendered), so
+  // this only needs to watch for leaving the page itself.
+  const savedSnapshotRef = useRef({
+    name: displayName,
+    months: String(defaultDormancyMonths),
+    holdersList: holders.length ? holders : [""],
+    notify: notifyEmail,
+    reminderMonths: activityReminderMonths.length ? activityReminderMonths : [9, 12],
+    notifyComments: notifyNewComments,
+    notifyUpdates: notifyProductUpdates,
+    noActivityAlert: alertNoActivity,
+    lowBalanceAlert: alertLowBalance,
+    cdAlert: alertCdMaturity,
+    minBal: String(minBalance),
+  });
+  const [dirty, setDirty] = useState(false);
+  useUnsavedChanges(dirty);
+  useEffect(() => {
+    const s = savedSnapshotRef.current;
+    setDirty(
+      name !== s.name ||
+        months !== s.months ||
+        JSON.stringify(holdersList) !== JSON.stringify(s.holdersList) ||
+        notify !== s.notify ||
+        JSON.stringify(reminderMonths) !== JSON.stringify(s.reminderMonths) ||
+        notifyComments !== s.notifyComments ||
+        notifyUpdates !== s.notifyUpdates ||
+        noActivityAlert !== s.noActivityAlert ||
+        lowBalanceAlert !== s.lowBalanceAlert ||
+        cdAlert !== s.cdAlert ||
+        minBal !== s.minBal,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    name,
+    months,
+    holdersList,
+    notify,
+    reminderMonths,
+    notifyComments,
+    notifyUpdates,
+    noActivityAlert,
+    lowBalanceAlert,
+    cdAlert,
+    minBal,
+  ]);
 
   // Delete-account flow
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -293,6 +359,20 @@ export function SettingsForm({
         toast.error(result.error);
         return;
       }
+      savedSnapshotRef.current = {
+        name,
+        months,
+        holdersList,
+        notify,
+        reminderMonths,
+        notifyComments,
+        notifyUpdates,
+        noActivityAlert,
+        lowBalanceAlert,
+        cdAlert,
+        minBal,
+      };
+      setDirty(false);
       setSaved(true);
       toast.success("Settings saved");
     });
@@ -323,12 +403,19 @@ export function SettingsForm({
       <h1 className="mb-4 text-2xl font-semibold text-slate-900">Settings</h1>
 
       {/* ── Tabs ── */}
-      <div className="mb-6 flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
-        {TABS.map((t) => (
+      <div role="tablist" aria-label="Settings sections" className="mb-6 flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+        {TABS.map((t, i) => (
           <button
             key={t.id}
+            ref={(el) => { tabRefs.current[i] = el; }}
             type="button"
+            role="tab"
+            id={`settings-tab-${t.id}`}
+            aria-selected={tab === t.id}
+            aria-controls={`settings-panel-${t.id}`}
+            tabIndex={tab === t.id ? 0 : -1}
             onClick={() => setTab(t.id)}
+            onKeyDown={(e) => handleTabKeyDown(e, i)}
             className={`shrink-0 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${
               tab === t.id
                 ? "bg-white text-slate-900 shadow-sm"
@@ -342,7 +429,14 @@ export function SettingsForm({
 
       {/* ══ PROFILE ══ */}
       {tab === "profile" && (
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form
+          onSubmit={handleSubmit}
+          role="tabpanel"
+          id="settings-panel-profile"
+          aria-labelledby="settings-tab-profile"
+          tabIndex={0}
+          className="space-y-5"
+        >
           <Card
             title="Your profile"
             icon={<User className="h-4 w-4 text-amber-500" />}
@@ -423,7 +517,14 @@ export function SettingsForm({
 
       {/* ══ ALERTS & EMAILS ══ */}
       {tab === "alerts" && (
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form
+          onSubmit={handleSubmit}
+          role="tabpanel"
+          id="settings-panel-alerts"
+          aria-labelledby="settings-tab-alerts"
+          tabIndex={0}
+          className="space-y-5"
+        >
           <Card
             title="Needs attention"
             icon={<AlertTriangle className="h-4 w-4 text-amber-500" />}
@@ -524,6 +625,7 @@ export function SettingsForm({
                       <button
                         type="button"
                         onClick={() => removeReminderMonth(m)}
+                        aria-label={`Remove ${m}-month reminder`}
                         className="ml-1 rounded-full text-amber-500 hover:text-amber-700"
                       >
                         <X className="h-3 w-3" />
@@ -580,7 +682,13 @@ export function SettingsForm({
 
       {/* ══ YOUR DATA ══ */}
       {tab === "data" && (
-        <div className="space-y-5">
+        <div
+          role="tabpanel"
+          id="settings-panel-data"
+          aria-labelledby="settings-tab-data"
+          tabIndex={0}
+          className="space-y-5"
+        >
           <Card
             title="Full backup"
             icon={<Archive className="h-4 w-4 text-slate-500" />}
@@ -634,7 +742,13 @@ export function SettingsForm({
 
       {/* ══ ACCOUNT ══ */}
       {tab === "account" && (
-        <div className="space-y-5">
+        <div
+          role="tabpanel"
+          id="settings-panel-account"
+          aria-labelledby="settings-tab-account"
+          tabIndex={0}
+          className="space-y-5"
+        >
           <Card
             title="Security"
             icon={<ShieldAlert className="h-4 w-4 text-slate-500" />}

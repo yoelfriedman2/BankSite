@@ -6,8 +6,10 @@ import { Bell, Check } from "lucide-react";
 import { toggleReminderDone, type OpenReminder } from "@/app/(app)/reminders";
 import { formatDate } from "@/lib/format";
 import { todayLocalStr } from "@/lib/date";
+import { useToast } from "@/components/Toast";
 
 export function DashboardReminders({ reminders }: { reminders: OpenReminder[] }) {
+  const toast = useToast();
   const [items, setItems] = useState(reminders);
   const today = todayLocalStr();
 
@@ -18,9 +20,15 @@ export function DashboardReminders({ reminders }: { reminders: OpenReminder[] })
     // done but is still open (and will still be emailed when due).
     toggleReminderDone(id, true)
       .then((res) => {
-        if (res?.error) setItems(before);
+        if (res?.error) {
+          setItems(before);
+          toast.error(res.error);
+        }
       })
-      .catch(() => setItems(before));
+      .catch(() => {
+        setItems(before);
+        toast.error("Couldn't mark that reminder done. Try again.");
+      });
   }
 
   if (items.length === 0) return null;

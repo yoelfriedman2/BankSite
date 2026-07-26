@@ -262,6 +262,7 @@ export function AccountModal({
           <button
             type="button"
             onClick={attemptClose}
+            aria-label="Close"
             className="shrink-0 rounded-lg p-1 text-slate-600 hover:bg-black/5 hover:text-slate-600"
           >
             <X className="h-5 w-5" />
@@ -587,6 +588,7 @@ export function AccountModal({
                     <button
                       type="button"
                       onClick={() => removeEntry(i)}
+                      aria-label="Remove this activity entry"
                       className="shrink-0 text-slate-400 hover:text-rose-600"
                     >
                       <X className="h-3.5 w-3.5" />

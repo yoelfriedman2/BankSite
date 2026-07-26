@@ -65,14 +65,14 @@ decision or bigger effort before it can be safely fixed
 - [x] UX-04 — DateInput can silently discard input, unstyled in places — partially fixed (the 3 narrowest bugs): Enter committed the typed date but didn't `preventDefault()`, so a parent `<form>` could submit in the same event before the new value propagated — now prevented. Omitting `className` produced a borderless, unstyled field (2 call sites the audit named, plus 2 more found the same way) — `DateInput` now defaults to the app's standard input styling instead of empty. `AccountModal`'s balance field had a native `min="0"` that could fail HTML5 validation and block saving on an account a monthly fee had legitimately driven negative — removed. The silent-revert-on-invalid-input (no error state) and the hidden-fallback-picker parts of this finding are unaddressed.
 - [x] UX-05 — Import "Cancel" doesn't stop the server-side import — fixed the honest half of this finding, not full mid-flight cancellation (that isn't achievable — Server Actions have no cancellation token once invoked, and restructuring the import into a client-driven, resumable batch process to support real cancellation is a genuinely bigger architecture change, out of scope here). Confirmed `ImportDialog.tsx`'s Cancel button just called `onClose()` unconditionally — clicking it while `importBanks()` was still running closed the dialog while the import kept writing server-side, with the user having no idea "cancel" hadn't actually stopped anything. Now disabled (and relabeled "Importing…") while `isPending`, matching the identical `disabled={isPending}` pattern the dialog's own "← Change file" button already used — the UI can no longer imply an interruption that doesn't happen.
 - [x] UX-06 — Check printing allows invalid checks, hides failures — fixed: `CheckPrintModal.tsx`'s `handlePrint()` had zero validation (a blank payee or a $0/negative amount printed a real check onto real check stock) and hid its one real failure mode entirely (`if (!win) return;` when the browser blocks the print popup — nothing happened, no error, no explanation). Now blocks printing with a clear toast (`useToast`, the same pattern already used in `SettingsForm.tsx`) for an empty payee or a non-positive amount, and shows a toast instead of silently returning when `window.open` is blocked. Also surfaces a (non-blocking — the check is already printed by that point) toast if the best-effort check-log write fails, instead of swallowing it — careful to only treat a real `error` as a failure, since DEMO_MODE's intentional `{}` no-op (no fake `printed_checks` store) must not read as one.
-- [ ] UX-07 — Search/autocomplete missing semantics, stale results possible
-- [ ] UX-08 — Search URL changes don't sync existing client list state
+- [x] UX-07 — Search/autocomplete missing semantics, stale results possible — fixed both `GlobalSearch.tsx` (the page-wide bank/account search) and `AddressAutocomplete.tsx` (Nominatim address suggestions, used on the Address Change page and the road-trip planner): neither had any ARIA combobox semantics at all (no `role="combobox"`, `aria-expanded`, `aria-controls`, `aria-activedescendant`, or `role="listbox"`/`"option"` on the results), so a screen-reader user got no indication results existed or which one was highlighted, and `AddressAutocomplete` was mouse-only with zero arrow-key navigation. Both now implement the full pattern (a `role="combobox"` input driving a `role="listbox"` of `role="option"` results, ArrowUp/Down with wraparound, Enter to select, Escape to close) plus an `aria-live="polite"` sr-only status region announcing result counts. Also fixed the stale-results race in `GlobalSearch.tsx`: a slower, older search request resolving after a newer one could overwrite the dropdown with results for a query the user had already changed — added the same request-versioning pattern already used elsewhere in this codebase (`AddressAutocomplete.tsx`, `BalancesClient.tsx`) so a superseded response is discarded.
+- [x] UX-08 — Search URL changes don't sync existing client list state — fixed on both Banks and Accounts pages (the two pages with a real search box and enough result volume for a shareable/bookmarkable filtered link to matter): typing now debounced-writes the query into the URL (`?q=...`) via `router.replace(..., { scroll: false })`, and — the direction that was completely missing before — browser back/forward, a bookmarked `?q=` link, or a pasted URL now correctly re-populates the search box on load/navigation instead of being silently ignored after the first render. Both pages already declare `export const dynamic = "force-dynamic"`, so no new Suspense boundary was needed for `useSearchParams()`. A first attempt at verifying this live produced a false failure — the CDP test script's `/search/i` placeholder selector was accidentally matching the page-wide `GlobalSearch` combobox (also present on `/banks`, with a similarly-worded placeholder) instead of the Banks page's own search box; once the test targeted the exact element, typing correctly produced `?q=...` in the URL and reloading at that URL correctly repopulated the input — the underlying fix was correct the whole time, only the test selector was wrong.
 - [x] UX-09 — Rapid balance-date changes can show wrong date's rows — fixed: `BalancesClient` now versions each date-change request and ignores a slower, older response that resolves after a newer one (previously the last response to arrive won, regardless of which date it was for). A selected holder that doesn't exist in the new date's rows now resets to "all" instead of silently producing an empty list.
-- [ ] UX-10 — Async actions ignore failures / can stay stuck busy
-- [ ] UX-11 — Missing form labels, icon names, live regions, target sizes
+- [x] UX-10 — Async actions ignore failures / can stay stuck busy — went through every `.then()`/`startTransition(async...)` call site across every `src/components/*.tsx` file (16 files) rather than sampling: found two real classes of bug. (1) A small number of genuine "stuck forever" bugs — a promise chain with no `.catch()` at all, so a rejected Server Action left a loading/busy flag stuck `true` indefinitely with no error shown and no way to retry short of a full reload: `HoldingCompaniesClient.tsx` (the holding-company browse-view load, the sync wizard's crosswalk load, the demo-sample-data load, and the final apply step) and `AdminBackupsPanel.tsx` (the backup-users load and the restore action). All four now have a `.catch()` that resets the busy flag and sets a real, already-existing error-display state, plus (for the browse-view load) a "Try again" retry button. (2) A much larger population of sites that resolved correctly (no stuck state) but silently discarded a returned `{ error }` field, so a real server-side failure produced no user-facing indication at all — fixed across `BankForm.tsx` (8 handlers: toggling/deleting reminders, deleting a comment, adding/removing a bank relationship, the "share as can't-open" flow, duplicating an account, deleting an account), `TrashClient.tsx` (restoring a bank — 3 of 4 handlers already correctly wired), `AddressChangeClient.tsx` (Finish/Cancel, which checked the error only to gate a refresh but never displayed it), `RoadTripTrips.tsx` (deleting a saved trip), `AccountsClient.tsx` (log-activity-today), `BanksClient.tsx` (status change, delete), `MoneyClient.tsx` (returning a sweep, returning a batch), `BalancesClient.tsx` (added a toast to an already-correct silent catch), `CheckPrintModal.tsx` and `ChecksClient.tsx` (removing a check from the log — both components have their own copy of this handler), and `DashboardReminders.tsx` (marking a reminder done). Every fix reuses the existing `useToast()` pattern already established throughout the app — no new error-display mechanism introduced. A number of other `.then().catch(() => {})` sites were reviewed and deliberately left alone: read-only, mount-time or type-ahead background fetches (reminders, comments, related banks, holding-company info, relationship search in `BankForm.tsx`; documents in `AccountDocuments.tsx`; balance history in `AccountModal.tsx`; the check-print log in `CheckPrintModal.tsx`) where a silent failure just leaves a section empty/stale rather than stuck or misleading — consistent with the same deliberate pattern already used elsewhere in this codebase for non-critical background reads.
+- [x] UX-11 — Missing form labels, icon names, live regions, target sizes — fixed the unambiguous half (icon-only buttons with no accessible name): 9 modal close "✕" buttons across the app (`AccountModal`, `AccountViewModal`, `CheckPrintModal`, `ImportDialog`, `MoneyClient`'s new-move modal, `AdminBackupsPanel`'s restore dialog, and the Banks/Accounts mobile filter sheets) had zero `aria-label`, so a screen reader announced nothing but "button" — all now say `aria-label="Close"`. Also labeled 3 other icon-only remove/delete buttons that had the same gap: `AccountModal`'s activity-log-entry remove button, `RoadTripClient.tsx`'s must-visit-bank remove button (dynamic, includes the bank's name), and `SettingsForm.tsx`'s reminder-month-chip remove button (dynamic, includes the month value). The touch-target-sizing half of this finding was explicitly declined by the user after reviewing a real before/after visual comparison — see "Explicitly declined" below.
+- [x] UX-14 — Settings can lose unsaved changes; tabs not real tabs — fixed both halves. The tab switcher (`SettingsForm.tsx`) was 4 plain buttons + conditionally-rendered divs with no ARIA tab semantics at all — now a real `role="tablist"`/`"tab"`/`"tabpanel"` pattern (`aria-selected`, `aria-controls`/`aria-labelledby` pairing each tab to its panel, roving `tabIndex` so only the active tab is a real Tab stop) with ArrowLeft/ArrowRight/Home/End keyboard navigation that moves focus and activates the target tab together, per the WAI-ARIA APG. For "can lose unsaved changes": confirmed first that switching between Settings' own tabs doesn't actually lose anything — every tab's field state lives in one shared component regardless of which tab is currently rendered, so there was no data-loss bug there to fix, only the missing ARIA semantics. The real, reachable loss is leaving the Settings *page* entirely (a sidebar link, a refresh, a closed tab) with an edited-but-unsaved Profile/Alerts field — added a `dirty` flag that diffs the current Profile+Alerts field values against a snapshot of what was last actually saved, wired to the same `useUnsavedChanges`/`beforeunload` hook already used by `BankForm.tsx`/`AccountModal.tsx`, reset on a successful save. Deliberately did not attempt a global in-app-navigation interceptor (e.g. hooking every `<Link>` click) — nothing like that exists anywhere else in this codebase, it would be a materially bigger and riskier architecture change than every other UX-14 sub-fix, and `beforeunload` already covers the reachable real-world cases (refresh, tab close, typing a new URL, browser back/forward that triggers a full navigation) using the exact established pattern.
 - [x] UX-12 — Health/activity conveyed by color-only dot — fixed: `ActivityDot` (`components/badges.tsx`) rendered as a bare `aria-hidden` colored circle with no text alternative at all — a colorblind user, or a screen reader (which gets literally nothing from a hidden colored circle), had no way to distinguish green/orange/red/none. Added a `title`/`aria-label` (a plain-English sentence per color, e.g. "At risk of dormancy — needs attention") and `role="img"`. Verified live via CDP: the rendered DOM now carries matching `title`/`aria-label` text on every dot.
 - [x] UX-13 — No skip link; closed mobile drawer still focusable — fixed the focusable-drawer half (the concrete, easily-verified bug — the skip-link half is a separate, smaller a11y addition left for a future pass). `TopNav.tsx`'s slide-out mobile panel had `aria-hidden={!open}` while closed, but `aria-hidden` alone doesn't stop native keyboard Tab navigation from reaching links that are just transformed off-screen — a keyboard user could tab into invisible, off-screen nav links with no visual indication of where focus went. Added `inert={!open}`, which natively removes both focusability and accessibility-tree presence together. Verified live: `aside.inert` is `true` while closed and correctly flips to `false` when opened.
-- [ ] UX-14 — Settings can lose unsaved changes; tabs not real tabs
 - [x] UX-15 — Document viewer can fail silently / get popup-blocked — fixed: both `AccountDocuments.tsx` and `DocumentsClient.tsx`'s "View" buttons called `window.open(url, ...)` and ignored the return value — the exact same bug shape as UX-06 (just fixed the round before this one). If the browser blocks the popup, the click now sets the component's existing inline error state (reused, not a new pattern) to a clear message instead of doing nothing.
 - [x] UX-16 — UTC/local-date mixing (confirmed via exact reproduction) — fixed at every client-side "today" default: new shared `lib/date.ts#todayLocalStr()` (local Y/M/D getters, not `toISOString()`, which is always UTC and can be a full day off near midnight) now used in AccountModal, BankForm, DashboardReminders, and MoneyClient. `balances/page.tsx`'s server-guessed "today" is corrected client-side on mount if the browser's real local date differs. Server-side "today" values (cron timestamps, backup/export filenames) intentionally left as UTC — a scheduled job has no single user timezone to reference.
 - [x] UX-17 — Website links inconsistent, scheme-less values break — fixed: grepped every spot rendering a bank's `website` field as a link. Only `BankForm.tsx` guarded against a scheme-less value (`www.examplebank.com`, plausible from the FDIC API or manual entry) — `AddressChangeClient.tsx`, `NearbyBanksFinder.tsx`, `RoadTripClient.tsx`, and `UpNextClient.tsx` all used the raw value directly as `href`, resolving as a broken relative link instead of navigating out. New shared `withScheme()` helper (`lib/format.ts`) applied consistently across all 5 spots, replacing `BankForm.tsx`'s own inline version too so there's one canonical implementation.
@@ -142,13 +142,13 @@ decision or bigger effort before it can be safely fixed
 
 | Status | Count |
 |---|---:|
-| Fixed (code-complete) | 74 |
+| Fixed (code-complete) | 79 |
 | Already fixed by an earlier (pre-audit) round, or closed as not applicable | 8 |
 | Open, needs a decision before fixing | 0 |
-| Still open | 18 |
+| Still open | 13 |
 
-*(This table now reflects the live count as of Round 18 — see "What's still pending" below for what the
-remaining 18 open findings actually are; every finding that still needed a decision from the user has
+*(This table now reflects the live count as of Round 19 — see "What's still pending" below for what the
+remaining 13 open findings actually are; every finding that still needed a decision from the user has
 one now, one way or another.)*
 
 **Round 1 (security, Part 1)**: SEC-01, SEC-07, SEC-08, SEC-12, SEC-14, SEC-18, SEC-21 (7 IDs — SEC-14
@@ -345,24 +345,103 @@ this round's verification — flipped back to `false` before finishing, per the 
 - **DATA-15 (public road-trip plans can leak a home address) is open by explicit user decision, not
   an oversight** — "I don't care, this is a family app." Don't re-surface this as a priority item
   without the user raising it again.
+- **UX-11's touch-target-sizing half is open by explicit user decision, not an oversight** — the
+  icon-name half (9 unlabeled modal-close buttons + 3 unlabeled remove buttons) is fixed; the
+  larger-hit-area half was declined after the user reviewed a real before/after visual comparison
+  (an Artifact built specifically for this decision) and said "I don't like the after." Asked
+  directly whether the smaller current size posed any real risk: traced `BankForm.tsx`'s
+  `handleDeleteAccount` and confirmed it already requires a `window.confirm()` before anything is
+  actually deleted, so a mis-tap on the small icon only opens a confirmation dialog, not a real
+  data loss — reported that plainly, and the user chose to skip the resize on that basis. Don't
+  re-surface this as a priority item without the user raising it again.
 - **Migration 0044_check_number_and_activity_log_atomicity.sql needs to be run** — adds
   `claim_check_number`/`append_activity_log`. Until it's run, both DATA-14 and DATA-20 automatically
   fall back to their original (non-atomic, but already-working) behavior — nothing breaks either way,
   running it just closes the small collision/lost-entry window on concurrent access.
-- **18 findings remain open**, all Medium/Low severity, and every one of them is genuine bigger-effort
-  infrastructure/design work rather than a clean single fix — Round 18 closed the last of the
-  "narrow, well-scoped, no-product-decision-needed" findings (DATA-18/19/22, UX-01, UX-03). What's
-  left, by area: DATA-15 (explicitly declined by the user); most of the remaining Part 3 UX/
-  Accessibility findings (UX-07/08/10/11/14/18/19/21 — several need a real design decision, e.g. how
-  search state should sync with the URL, or are a genuinely bigger feature like offline/update support
-  for the installed PWA); the remaining Part 4 items (PERF-02/03/05, OBS-01, OPS-02, TYPE-01 —
-  infrastructure investment: query tuning, monitoring coverage, generated DB types via the Supabase
-  CLI, which needs a real Postgres connection this sandbox's egress policy blocks); INT-11 (a
-  migration-semantics ambiguity needing a product decision on what "untouched" should mean going
-  forward); GAP-02/GAP-03 (a third-party geocoding-provider policy decision, and road-trip planner
-  model disagreements deliberately left alone given how much tuning that planner has already had).
-  Any further progress on this tracker now genuinely needs the user's input on scope or design, not
-  just more code-reading time.
+- **13 findings remain open**, all Medium/Low severity. Round 19 closed every remaining Part 3 UX/
+  Accessibility finding that didn't need a product decision (UX-07/08/10/11/14 — UX-11's
+  touch-target half excepted, see above) plus UX-11's icon-name half. What's left, by area: DATA-15
+  and UX-11's touch-target half (both explicitly declined by the user, see above); UX-18/19/21
+  (onboarding-walkthrough accessibility, non-visual equivalents for the calendar/map, and
+  offline/update support for the installed PWA — each a genuinely bigger feature, not a clean single
+  fix); the remaining Part 4 items (PERF-02/03/05, OBS-01, OPS-02, TYPE-01 — infrastructure
+  investment: query tuning, monitoring coverage, generated DB types via the Supabase CLI, which needs
+  a real Postgres connection this sandbox's egress policy blocks); INT-11 (a migration-semantics
+  ambiguity needing a product decision on what "untouched" should mean going forward); GAP-02/GAP-03
+  (a third-party geocoding-provider policy decision, and road-trip planner model disagreements
+  deliberately left alone given how much tuning that planner has already had). Any further progress
+  on this tracker now genuinely needs the user's input on scope or design, not just more code-reading
+  time.
+
+**Round 19 (UX-07, UX-08, UX-10, UX-14 fixed in full; UX-11 partially fixed, touch-target sizing
+explicitly declined)** — Direct continuation of Round 18, same day: user asked for the next 5.
+Reported UX-07, UX-08, UX-10, UX-11, and UX-14 (skipping DATA-15, already declined in an earlier
+round). For UX-11, whose fix would visibly change touch-target sizing, built a real before/after
+Artifact so the user could see the layout change before deciding — the user rejected the "after"
+("No. I don't like the after.") and asked directly whether the smaller "before" size posed any real
+risk. Traced the actual delete-button code path (`BankForm.tsx`'s `handleDeleteAccount`) and
+reported plainly that it already requires a `window.confirm()` before anything is deleted, so a
+mis-tap on the small icon isn't actually a data-loss risk — just a minor inconvenience. The user
+decided to skip the resize on that basis: "that one marked as skip." For the other four findings,
+the user was explicit that there was no real product tradeoff to weigh — "if it's an issue and it'll
+make my app more robust, then yeah, do it and finish" — so all four were implemented in full,
+including the larger sub-scopes flagged as needing more effort (full combobox ARIA semantics for
+UX-07, full two-way URL sync for UX-08, an exhaustive sweep of every async call site in every
+component for UX-10, and both the ARIA-tablist rework and the unsaved-changes guard for UX-14).
+
+- **UX-07** — `GlobalSearch.tsx` and `AddressAutocomplete.tsx` both lacked any ARIA combobox
+  semantics; `AddressAutocomplete` was also mouse-only. Both now implement the full pattern
+  (`role="combobox"` input, `role="listbox"`/`"option"` results, arrow-key navigation with
+  wraparound, Enter/Escape, an `aria-live="polite"` sr-only status region) plus request-versioning
+  in `GlobalSearch.tsx` so a slower, superseded search response can't overwrite newer results.
+- **UX-08** — Banks and Accounts pages' search boxes now debounced-write `?q=...` into the URL on
+  type, and — the direction that was completely missing — correctly re-populate from the URL on
+  load, browser back/forward, or a pasted/bookmarked link. A first verification pass produced a
+  false failure caused by the test script itself (its selector matched the page-wide GlobalSearch
+  box instead of the Banks page's own search box, since both live on `/banks` with similarly-worded
+  placeholders) — once corrected, the real fix verified cleanly.
+- **UX-10** — Read every `.then()`/`startTransition(async...)` site across all 16 `src/components/
+  *.tsx` files with one. Found and fixed real "stuck forever" bugs (missing `.catch()` leaving a
+  busy flag stuck true, in `HoldingCompaniesClient.tsx` and `AdminBackupsPanel.tsx`) and a much
+  larger set of sites that resolved fine but silently discarded a returned `{ error }`, giving no
+  indication of a real server-side failure — fixed across 11 components, all reusing the existing
+  `useToast()` pattern. Deliberately left alone: read-only, mount-time/type-ahead background fetches
+  where silent failure just leaves a section empty/stale rather than stuck or misleading — matches
+  an existing, deliberate pattern already used elsewhere in this codebase.
+- **UX-11 (icon-name half only)** — labeled 9 unlabeled modal-close buttons and 3 unlabeled
+  icon-only remove buttons with `aria-label`. Touch-target sizing explicitly declined — see above
+  and "What's still pending."
+- **UX-14** — Settings' tab switcher now has real `role="tablist"/"tab"/"tabpanel"` semantics with
+  ArrowLeft/Right/Home/End keyboard navigation. Investigated the "can lose unsaved changes" half
+  before assuming it needed a fix: switching between Settings' own tabs doesn't actually lose any
+  data (every tab's field state lives in one shared component regardless of which tab is currently
+  rendered) — the real, reachable loss is leaving the page entirely with an unsaved edit, which a
+  new `dirty` flag (diffing current Profile/Alerts field values against a snapshot of what was last
+  saved) now guards via the same `useUnsavedChanges`/`beforeunload` hook already used by
+  `BankForm.tsx`/`AccountModal.tsx`. Deliberately did not build a global in-app-navigation
+  interceptor (e.g. hooking every sidebar `<Link>`) — nothing like that exists anywhere else in this
+  codebase, and it would be a materially bigger, riskier change than every other UX-14 sub-fix for a
+  case `beforeunload` doesn't already cover.
+
+No migration this round — every fix is pure application code, live on deploy.
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (84/84) all clean. All five fixes
+are genuinely UI/DOM-observable, so all five got a live CDP pass against a real DEMO_MODE dev server
+(headless Chromium via the established `scratchpad/cdp.mjs` hand-rolled driver — no `playwright`
+package in this sandbox): confirmed Settings' tablist renders correct ARIA attributes, that
+ArrowRight moves focus to and activates the next tab, that Home jumps back to the first tab, that
+only the active tab is a real Tab stop (`tabIndex=0` vs `-1` on the rest); confirmed the
+unsaved-changes guard fires a synthetic `beforeunload` while a field is dirty and disarms after a
+successful save (using a timestamp-suffixed test value specifically so a value an *earlier* run of
+this same script already saved to DEMO_MODE's persistent in-memory store couldn't produce a false
+"nothing changed" reading — a real trap this round's own testing walked into and diagnosed before
+concluding the app, not the test, was correct); confirmed the search combobox's `aria-expanded`/
+`aria-activedescendant`/`aria-selected` update correctly on typing and arrow-key navigation, and
+that Escape collapses it; confirmed the Banks page's search box writes `?q=...` to the URL on typing
+(debounced) and correctly repopulates from a direct `?q=...` load; confirmed zero console errors
+across every touched page. Also spot-checked mobile (375px) on every page touched this round — no
+overflow. `DEMO_MODE` was flipped to `true` for this round's verification and flipped back to
+`false` before finishing, per the standing rule.
 
 **Round 18 (the last well-scoped batch — DATA-18/19/22, UX-01, UX-03 all fixed)** — Direct
 continuation of Round 17, same day: user asked for what decision each of the next 5 findings needed.

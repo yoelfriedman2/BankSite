@@ -53,6 +53,7 @@ import {
 } from "@/app/(app)/reminders";
 import { useUnsavedChanges, confirmDiscard } from "@/components/useUnsavedChanges";
 import { useFocusTrap } from "@/lib/useFocusTrap";
+import { useToast } from "@/components/Toast";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -172,6 +173,7 @@ export function BankForm({
   );
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const toast = useToast();
   const [acctModal, setAcctModal] = useState<{ account: Account | null } | null>(null);
   const [printCheck, setPrintCheck] = useState<Account | null>(null);
   const [busyAcctId, setBusyAcctId] = useState<string | null>(null);
@@ -248,7 +250,8 @@ export function BankForm({
     const bankId = initial?.id;
     if (!bankId) return;
     startTransition(async () => {
-      await toggleReminderDone(r.id, !r.done_at);
+      const res = await toggleReminderDone(r.id, !r.done_at);
+      if (res.error) toast.error(res.error);
       setReminders(await getReminders(bankId));
     });
   }
@@ -256,7 +259,8 @@ export function BankForm({
     const bankId = initial?.id;
     if (!bankId) return;
     startTransition(async () => {
-      await deleteReminder(id);
+      const res = await deleteReminder(id);
+      if (res.error) toast.error(res.error);
       setReminders(await getReminders(bankId));
     });
   }
@@ -341,7 +345,8 @@ export function BankForm({
     if (cert == null || !window.confirm("Delete this note?")) return;
     setCommentDeletingId(id);
     startTransition(async () => {
-      await deleteBankComment(id);
+      const res = await deleteBankComment(id);
+      if (res.error) toast.error(res.error);
       const fresh = await getBankComments(cert);
       setComments(fresh);
       setCommentDeletingId(null);
@@ -353,7 +358,8 @@ export function BankForm({
     if (!cert) return;
     setRelBusy(true);
     startTransition(async () => {
-      await addBankRelationship(cert, targetCert);
+      const res = await addBankRelationship(cert, targetCert);
+      if (res.error) toast.error(res.error);
       const fresh = await getRelatedBanks(cert);
       setRelatedBanks(fresh);
       setRelSearch("");
@@ -366,7 +372,8 @@ export function BankForm({
     const cert = initial?.cert;
     if (!cert) return;
     startTransition(async () => {
-      await removeBankRelationship(cert, targetCert);
+      const res = await removeBankRelationship(cert, targetCert);
+      if (res.error) toast.error(res.error);
       const fresh = await getRelatedBanks(cert);
       setRelatedBanks(fresh);
     });
@@ -405,7 +412,8 @@ export function BankForm({
     }
     setSharing(true);
     startTransition(async () => {
-      await shareCannotOpen(cert, shareNote, shareNotify, propagate, initial?.name);
+      const res = await shareCannotOpen(cert, shareNote, shareNotify, propagate, initial?.name);
+      if (res.error) toast.error(res.error);
       const fresh = await getBankComments(cert);
       setComments(fresh);
       setSharing(false);
@@ -431,8 +439,12 @@ export function BankForm({
   function handleDuplicate(a: Account) {
     setBusyAcctId(a.id);
     startTransition(async () => {
-      await duplicateAccount(a.id);
+      const res = await duplicateAccount(a.id);
       setBusyAcctId(null);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
       onChanged();
     });
   }
@@ -441,8 +453,12 @@ export function BankForm({
     if (!window.confirm("Delete this account?")) return;
     setBusyAcctId(a.id);
     startTransition(async () => {
-      await deleteAccount(a.id);
+      const res = await deleteAccount(a.id);
       setBusyAcctId(null);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
       onChanged();
     });
   }
@@ -510,6 +526,7 @@ export function BankForm({
           <button
             type="button"
             onClick={attemptClose}
+            aria-label="Close"
             className="rounded-lg p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-600"
           >
             <X className="h-5 w-5" />

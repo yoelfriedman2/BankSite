@@ -12,6 +12,7 @@ import {
   type SavedTripSummary,
 } from "@/app/(app)/road-trip/actions";
 import { parseGoogleMapsLink, nearestWithinTolerance } from "@/lib/roadtrip";
+import { useToast } from "@/components/Toast";
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -36,6 +37,7 @@ export function RoadTripTrips({
   onSaved: (id: string, title: string) => void;
   justAddedCert: number | null;
 }) {
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [trips, setTrips] = useState<SavedTripSummary[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -119,8 +121,12 @@ export function RoadTripTrips({
     if (!confirm("Delete this saved trip? This can't be undone.")) return;
     setDeletingTripId(id);
     startTransition(async () => {
-      await deleteTrip(id);
+      const res = await deleteTrip(id);
       setDeletingTripId(null);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
       refreshTrips();
     });
   }

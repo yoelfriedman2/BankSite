@@ -13,6 +13,7 @@ import { DateInput } from "@/components/DateInput";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { todayLocalStr } from "@/lib/date";
 import { useFocusTrap } from "@/lib/useFocusTrap";
+import { useToast } from "@/components/Toast";
 import {
   createSweepBatch,
   returnSweep,
@@ -34,6 +35,7 @@ export function MoneyClient({
   accounts: SweepAccountOption[];
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [returningId, setReturningId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const [newOpen, setNewOpen] = useState(false);
@@ -50,8 +52,12 @@ export function MoneyClient({
   function handleReturn(id: string) {
     setReturningId(id);
     startTransition(async () => {
-      await returnSweep(id);
+      const res = await returnSweep(id);
       setReturningId(null);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
       router.refresh();
     });
   }
@@ -59,7 +65,11 @@ export function MoneyClient({
   function handleReturnGroup(items: OutstandingSweep[]) {
     if (!window.confirm(`Mark all ${items.length} as returned?`)) return;
     startTransition(async () => {
-      await returnSweepBatch(items.map((it) => it.id));
+      const res = await returnSweepBatch(items.map((it) => it.id));
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
       router.refresh();
     });
   }
@@ -245,7 +255,7 @@ function NewMoveModal({
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <h2 id="new-move-modal-title" className="text-lg font-semibold text-slate-900">New money move</h2>
-          <button onClick={onClose} className="rounded-lg p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-600">
+          <button onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-600">
             <X className="h-5 w-5" />
           </button>
         </div>

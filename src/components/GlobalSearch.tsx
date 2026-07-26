@@ -1,16 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import { searchAll, type SearchResults } from "@/app/(app)/banks/actions";
 
+type FlatItem =
+  | { kind: "bank"; id: string; href: string; label: string; sub: string | null }
+  | { kind: "account"; id: string; href: string; label: string; sub: string };
+
+const LISTBOX_ID = "global-search-listbox";
+
 export function GlobalSearch() {
+  const router = useRouter();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<SearchResults | null>(null);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const boxRef = useRef<HTMLDivElement>(null);
+  const requestId = useRef(0);
 
   useEffect(() => {
     if (q.trim().length < 2) {
@@ -19,7 +29,12 @@ export function GlobalSearch() {
     }
     setLoading(true);
     const t = setTimeout(async () => {
+      // Request versioning (same pattern as AddressAutocomplete/BalancesClient,
+      // UX-07) — without this, a slower older search could resolve after a
+      // faster newer one and silently overwrite it with stale results.
+      const thisRequest = ++requestId.current;
       const r = await searchAll(q);
+      if (thisRequest !== requestId.current) return;
       setResults(r);
       setLoading(false);
     }, 220);
@@ -36,24 +51,90 @@ export function GlobalSearch() {
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
 
-  const hasResults =
-    !!results && (results.banks.length > 0 || results.accounts.length > 0);
+  const items: FlatItem[] = useMemo(() => {
+    if (!results) return [];
+    return [
+      ...results.banks.map((b) => ({
+        kind: "bank" as const,
+        id: b.id,
+        href: `/banks?q=${encodeURIComponent(b.name)}`,
+        label: b.name,
+        sub: b.state,
+      })),
+      ...results.accounts.map((a) => ({
+        kind: "account" as const,
+        id: a.id,
+        href: `/accounts?q=${encodeURIComponent(a.holder || a.bankName)}`,
+        label: a.holder || "—",
+        sub: a.bankName,
+      })),
+    ];
+  }, [results]);
+
+  const hasResults = items.length > 0;
+
+  useEffect(() => {
+    setActiveIndex(-1);
+  }, [items]);
+
+  function selectItem(item: FlatItem) {
+    setOpen(false);
+    router.push(item.href);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!open || !hasResults) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIndex((i) => (i + 1) % items.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIndex((i) => (i <= 0 ? items.length - 1 : i - 1));
+    } else if (e.key === "Enter") {
+      if (activeIndex >= 0 && activeIndex < items.length) {
+        e.preventDefault();
+        selectItem(items[activeIndex]);
+      }
+    } else if (e.key === "Escape") {
+      setOpen(false);
+    }
+  }
+
+  const activeItem = activeIndex >= 0 ? items[activeIndex] : null;
+  const resultsSummary = !open || q.trim().length < 2
+    ? ""
+    : loading
+      ? "Searching…"
+      : hasResults
+        ? `${items.length} result${items.length === 1 ? "" : "s"} found`
+        : "No matches";
 
   return (
     <div ref={boxRef} className="relative">
       <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
       <input
+        role="combobox"
+        aria-expanded={open && (loading || hasResults || q.trim().length >= 2)}
+        aria-controls={LISTBOX_ID}
+        aria-autocomplete="list"
+        aria-activedescendant={activeItem ? `${LISTBOX_ID}-${activeItem.kind}-${activeItem.id}` : undefined}
         value={q}
         onChange={(e) => {
           setQ(e.target.value);
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
+        onKeyDown={handleKeyDown}
         placeholder="Search banks & accounts…"
         className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-3 text-sm text-slate-900 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
       />
+      <span className="sr-only" role="status" aria-live="polite">{resultsSummary}</span>
       {open && q.trim().length >= 2 && (
-        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+        <div
+          id={LISTBOX_ID}
+          role="listbox"
+          className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg"
+        >
           {loading && (
             <div className="px-3 py-2 text-sm text-slate-600">Searching…</div>
           )}
@@ -67,19 +148,26 @@ export function GlobalSearch() {
                   <div className="px-3 pb-0.5 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                     Banks
                   </div>
-                  {results!.banks.map((b) => (
-                    <Link
-                      key={b.id}
-                      href={`/banks?q=${encodeURIComponent(b.name)}`}
-                      onClick={() => setOpen(false)}
-                      className="block truncate px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-                    >
-                      {b.name}
-                      {b.state ? (
-                        <span className="text-slate-600"> · {b.state}</span>
-                      ) : null}
-                    </Link>
-                  ))}
+                  {results!.banks.map((b) => {
+                    const idx = items.findIndex((it) => it.kind === "bank" && it.id === b.id);
+                    return (
+                      <Link
+                        key={b.id}
+                        id={`${LISTBOX_ID}-bank-${b.id}`}
+                        role="option"
+                        aria-selected={idx === activeIndex}
+                        href={`/banks?q=${encodeURIComponent(b.name)}`}
+                        onClick={() => setOpen(false)}
+                        onMouseEnter={() => setActiveIndex(idx)}
+                        className={`block truncate px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 ${idx === activeIndex ? "bg-amber-50" : ""}`}
+                      >
+                        {b.name}
+                        {b.state ? (
+                          <span className="text-slate-600"> · {b.state}</span>
+                        ) : null}
+                      </Link>
+                    );
+                  })}
                 </>
               )}
               {results!.accounts.length > 0 && (
@@ -87,17 +175,24 @@ export function GlobalSearch() {
                   <div className="px-3 pb-0.5 pt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                     Accounts
                   </div>
-                  {results!.accounts.map((a) => (
-                    <Link
-                      key={a.id}
-                      href={`/accounts?q=${encodeURIComponent(a.holder || a.bankName)}`}
-                      onClick={() => setOpen(false)}
-                      className="block truncate px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-                    >
-                      {a.holder || "—"}
-                      <span className="text-slate-600"> · {a.bankName}</span>
-                    </Link>
-                  ))}
+                  {results!.accounts.map((a) => {
+                    const idx = items.findIndex((it) => it.kind === "account" && it.id === a.id);
+                    return (
+                      <Link
+                        key={a.id}
+                        id={`${LISTBOX_ID}-account-${a.id}`}
+                        role="option"
+                        aria-selected={idx === activeIndex}
+                        href={`/accounts?q=${encodeURIComponent(a.holder || a.bankName)}`}
+                        onClick={() => setOpen(false)}
+                        onMouseEnter={() => setActiveIndex(idx)}
+                        className={`block truncate px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 ${idx === activeIndex ? "bg-amber-50" : ""}`}
+                      >
+                        {a.holder || "—"}
+                        <span className="text-slate-600"> · {a.bankName}</span>
+                      </Link>
+                    );
+                  })}
                 </>
               )}
             </div>

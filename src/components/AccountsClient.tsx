@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   Search,
   Pencil,
@@ -40,6 +40,7 @@ import { AccountModal } from "@/components/AccountModal";
 import { AccountViewModal } from "@/components/AccountViewModal";
 import { ImportDialog } from "@/components/ImportDialog";
 import { FocusTrapPanel } from "@/components/FocusTrapPanel";
+import { useToast } from "@/components/Toast";
 import { logActivityToday } from "@/app/(app)/accounts/actions";
 
 type BankRef = { id: string; name: string; cert: number | null };
@@ -397,7 +398,35 @@ export function AccountsClient({
   initialQuery?: string;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const toast = useToast();
   const [query, setQuery] = useState(initialQuery ?? "");
+
+  // Keep the search box in sync with the URL both ways (UX-08): typing writes
+  // `q` into the URL (debounced, so every keystroke doesn't spam history),
+  // and browser back/forward — or a bookmarked/pasted `?q=` link — updates the
+  // box instead of being silently ignored after the first render. Skips the
+  // very first write so mounting doesn't immediately re-push the same URL.
+  const skipNextWrite = useRef(true);
+  useEffect(() => {
+    if (skipNextWrite.current) {
+      skipNextWrite.current = false;
+      return;
+    }
+    const t = setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (query.trim()) params.set("q", query);
+      else params.delete("q");
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+  useEffect(() => {
+    setQuery(initialQuery ?? "");
+  }, [initialQuery]);
   const [holderFilter, setHolderFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<SortKey>("bank");
@@ -413,8 +442,12 @@ export function AccountsClient({
   function handleLogToday(r: AccountRow, type: ActivityType | null) {
     setLogPendingId(r.id);
     startTransition(async () => {
-      await logActivityToday(r.id, type);
+      const res = await logActivityToday(r.id, type);
       setLogPendingId(null);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
       router.refresh();
     });
   }
@@ -615,7 +648,7 @@ export function AccountsClient({
           >
             <div className="mb-3 flex items-center justify-between">
               <h2 id="accounts-mobile-filters-title" className="text-base font-semibold text-slate-900">Filters &amp; sort</h2>
-              <button type="button" onClick={() => setMobileFiltersOpen(false)} className="p-1 text-slate-600">
+              <button type="button" onClick={() => setMobileFiltersOpen(false)} aria-label="Close" className="p-1 text-slate-600">
                 <X className="h-5 w-5" />
               </button>
             </div>

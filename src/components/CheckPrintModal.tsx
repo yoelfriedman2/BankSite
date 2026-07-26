@@ -294,10 +294,17 @@ export function CheckPrintModal({
     setHistory((prev) => prev.filter((c) => c.id !== id));
     deletePrintedCheck(id)
       .then((res) => {
-        if (res?.error) setHistory(before);
-        else onDeleted?.(id);
+        if (res?.error) {
+          setHistory(before);
+          toast.error(res.error);
+        } else {
+          onDeleted?.(id);
+        }
       })
-      .catch(() => setHistory(before));
+      .catch(() => {
+        setHistory(before);
+        toast.error("Couldn't remove that check from the log. Try again.");
+      });
   }
 
   useEffect(() => {
@@ -364,7 +371,7 @@ export function CheckPrintModal({
             setCheckNum(String(res.claimed + 1));
           }
         })
-        .catch(() => {});
+        .catch(() => toast.error("Check printed, but the check number couldn't be saved for next time."));
       setCheckNum(String(num + 1));
     }
 
@@ -418,6 +425,7 @@ export function CheckPrintModal({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close"
             className="rounded-lg p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-600"
           >
             <X className="h-5 w-5" />

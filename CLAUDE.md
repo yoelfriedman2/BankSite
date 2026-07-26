@@ -174,6 +174,94 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-26 (external audit — round 19: UX-07/08/10/14 fixed in full, UX-11 partially fixed,
+touch-target sizing explicitly declined)** — Direct continuation of round 18: user asked for the
+next 5. Reported UX-07, UX-08, UX-10, UX-11, UX-14 (skipping DATA-15, already declined earlier). For
+UX-11, whose fix would visibly change touch-target sizing, built a real before/after Artifact so the
+user could see the layout change before deciding — the user rejected the "after" ("No. I don't like
+the after.") and asked directly whether the smaller "before" size posed any real risk. Traced
+`BankForm.tsx`'s `handleDeleteAccount` and reported plainly that it already requires a
+`window.confirm()` before anything is deleted, so a mis-tap on the small icon isn't a data-loss risk
+— the user decided to skip the resize on that basis: "that one marked as skip." For the other four,
+the user was explicit there was no real tradeoff to weigh — "if it's an issue and it'll make my app
+more robust, then yeah, do it and finish" — so all four were implemented in full, including the
+larger sub-scopes (full combobox ARIA for UX-07, full two-way URL sync for UX-08, an exhaustive
+async-error-handling sweep for UX-10, both the ARIA-tablist rework and the unsaved-changes guard for
+UX-14).
+
+- **UX-07** — `GlobalSearch.tsx` (page-wide search) and `AddressAutocomplete.tsx` (Nominatim address
+  suggestions, used on Address Change and the road-trip planner) had zero ARIA combobox semantics —
+  no `role="combobox"`, `aria-expanded`, `aria-controls`, `aria-activedescendant`, or
+  `role="listbox"`/`"option"` on results — and `AddressAutocomplete` was mouse-only. Both now
+  implement the full pattern (arrow-key nav with wraparound, Enter/Escape, an `aria-live="polite"`
+  sr-only status region announcing result counts). Also fixed a stale-results race in
+  `GlobalSearch.tsx`: request-versioning (the same pattern already used in `AddressAutocomplete.tsx`/
+  `BalancesClient.tsx`) so a slower, older search response can't overwrite newer results.
+- **UX-08** — Banks and Accounts pages' search boxes now debounced-write `?q=...` into the URL on
+  type (`router.replace(..., { scroll: false })`), and — the direction that was completely missing —
+  correctly re-populate from the URL on load, browser back/forward, or a pasted/bookmarked link. Both
+  pages already declare `force-dynamic`, so no new Suspense boundary was needed for
+  `useSearchParams()`. A first verification pass produced a false failure traced to the test script
+  itself, not the app: its `/search/i` placeholder selector matched the page-wide `GlobalSearch`
+  combobox (also present on `/banks`, with a similarly-worded placeholder) instead of the Banks
+  page's own search box — once the test targeted the exact element, the fix verified cleanly.
+- **UX-10** — Read every `.then()`/`startTransition(async...)` call site across all 16
+  `src/components/*.tsx` files with one, rather than sampling. Found and fixed real "stuck forever"
+  bugs — a promise chain with no `.catch()` at all, leaving a busy flag stuck `true` indefinitely
+  with no error and no retry short of a reload — in `HoldingCompaniesClient.tsx` (browse-view load,
+  sync wizard's crosswalk load, demo-sample-data load, final apply step) and `AdminBackupsPanel.tsx`
+  (backup-users load, restore action). A much larger population of sites resolved fine but silently
+  discarded a returned `{ error }`, giving no indication of a real server-side failure — fixed across
+  `BankForm.tsx` (8 handlers), `TrashClient.tsx`, `AddressChangeClient.tsx`, `RoadTripTrips.tsx`,
+  `AccountsClient.tsx`, `BanksClient.tsx`, `MoneyClient.tsx`, `BalancesClient.tsx`,
+  `CheckPrintModal.tsx`/`ChecksClient.tsx` (each has its own copy of the check-log-delete handler),
+  and `DashboardReminders.tsx` — all reusing the existing `useToast()` pattern, no new mechanism
+  introduced. Deliberately left alone: read-only mount-time/type-ahead background fetches (reminders,
+  comments, related banks, holding-company info, relationship search in `BankForm.tsx`; documents in
+  `AccountDocuments.tsx`; balance history in `AccountModal.tsx`; the check-print log itself) where a
+  silent failure just leaves a section empty/stale rather than stuck or misleading — the same
+  deliberate pattern already used elsewhere in this codebase for non-critical background reads.
+- **UX-11 (icon-name half only)** — labeled 9 unlabeled modal-close "✕" buttons (`AccountModal`,
+  `AccountViewModal`, `CheckPrintModal`, `ImportDialog`, `MoneyClient`'s new-move modal,
+  `AdminBackupsPanel`'s restore dialog, Banks/Accounts mobile filter sheets — all `aria-label="Close"`)
+  and 3 other icon-only remove buttons (`AccountModal`'s activity-log-entry remove,
+  `RoadTripClient.tsx`'s must-visit-bank remove — dynamic, includes the bank name — and
+  `SettingsForm.tsx`'s reminder-month-chip remove — dynamic, includes the month). Touch-target sizing
+  explicitly declined by the user — see above.
+- **UX-14** — Settings' tab switcher (`SettingsForm.tsx`) now has real `role="tablist"`/`"tab"`/
+  `"tabpanel"` semantics (`aria-selected`, `aria-controls`/`aria-labelledby` pairing, roving
+  `tabIndex` so only the active tab is a real Tab stop) with ArrowLeft/Right/Home/End keyboard
+  navigation that moves focus and activates the target tab together. Investigated the "can lose
+  unsaved changes" half before assuming a fix was needed: switching between Settings' own tabs
+  doesn't actually lose anything (every tab's field state lives in one shared component regardless of
+  which tab is rendered) — the real, reachable loss is leaving the page entirely with an unsaved
+  Profile/Alerts edit. Added a `dirty` flag (diffs current field values against a snapshot of what
+  was last saved, reset on successful save) wired to the same `useUnsavedChanges`/`beforeunload` hook
+  already used by `BankForm.tsx`/`AccountModal.tsx`. Deliberately did not build a global
+  in-app-navigation interceptor (hooking every sidebar `<Link>`) — nothing like that exists anywhere
+  else in this codebase, and it would be a materially bigger, riskier change than every other UX-14
+  sub-fix for a case `beforeunload` already covers (refresh, tab close, typing a new URL, browser
+  back/forward that triggers a full navigation).
+
+No migration this round — every fix is pure application code, live on deploy.
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (84/84) all clean. All five fixes
+are genuinely UI/DOM-observable, so all five got a live CDP pass against a real DEMO_MODE dev server
+(headless Chromium via the established `scratchpad/cdp.mjs` hand-rolled driver): confirmed Settings'
+tablist renders correct ARIA attributes; ArrowRight moves focus to and activates the next tab; Home
+jumps back to the first tab; only the active tab has `tabIndex=0`; the unsaved-changes guard fires a
+synthetic `beforeunload` while a field is dirty and disarms after a successful save (using a
+timestamp-suffixed test value specifically so an *earlier* run of the same script that had already
+saved a fixed literal to DEMO_MODE's persistent in-memory store couldn't produce a false "nothing
+changed" reading — a real trap this round's own testing walked into and diagnosed as a test-data
+problem, not an app bug, before concluding the fix was correct); the search combobox's
+`aria-expanded`/`aria-activedescendant`/`aria-selected` update correctly on typing and arrow-key
+navigation, and Escape collapses it; the Banks page's search box writes `?q=...` to the URL on
+typing (debounced) and correctly repopulates from a direct `?q=...` load; zero console errors across
+every touched page. Also spot-checked mobile (375px) on every page touched this round — no overflow.
+`DEMO_MODE` was flipped to `true` for this round's verification and flipped back to `false` before
+finishing, per the standing rule.
+
 **2026-07-24 (external audit — round 18: the last well-scoped batch — DATA-18/19/22, UX-01, UX-03
 all fixed)** — Direct continuation of round 17, same day: user asked what decision each of the next
 5 findings needed. Reported all 5 back grounded in the real current code (a genuine research pass

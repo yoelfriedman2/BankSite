@@ -191,6 +191,7 @@ export function HoldingCompaniesClient({
   const [mode, setMode] = useState<"browse" | "wizard">("browse");
   const [overview, setOverview] = useState<HoldingCompanyOverviewRow[] | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
   const [browseQuery, setBrowseQuery] = useState("");
   const [browseSortKey, setBrowseSortKey] = useState<"name" | "assets">("assets");
   const [browseSortDir, setBrowseSortDir] = useState<"asc" | "desc">("desc");
@@ -223,10 +224,20 @@ export function HoldingCompaniesClient({
 
   function loadOverview() {
     setOverviewLoading(true);
-    getHoldingCompaniesOverview().then((rows) => {
-      setOverview(rows);
-      setOverviewLoading(false);
-    });
+    setOverviewError(null);
+    getHoldingCompaniesOverview()
+      .then((rows) => {
+        setOverview(rows);
+        setOverviewLoading(false);
+      })
+      .catch(() => {
+        // Without this, a rejected promise here (a real, reachable failure —
+        // Server Action errors reject client-side) left overviewLoading stuck
+        // true forever, showing an endless spinner with no way out but a full
+        // page reload (UX-10).
+        setOverviewLoading(false);
+        setOverviewError("Couldn't load holding companies. Try again.");
+      });
   }
   useEffect(() => {
     loadOverview();
@@ -275,15 +286,22 @@ export function HoldingCompaniesClient({
   function start() {
     setLoadingCrosswalk(true);
     setCrosswalkError(null);
-    getBankRssdCrosswalk().then((res) => {
-      setLoadingCrosswalk(false);
-      if (res.error) {
-        setCrosswalkError(res.error);
-        return;
-      }
-      setBanks(res.banks);
-      setStep("relationships");
-    });
+    getBankRssdCrosswalk()
+      .then((res) => {
+        setLoadingCrosswalk(false);
+        if (res.error) {
+          setCrosswalkError(res.error);
+          return;
+        }
+        setBanks(res.banks);
+        setStep("relationships");
+      })
+      .catch(() => {
+        // A rejected promise (not just a resolved {error}) previously left
+        // loadingCrosswalk stuck true forever with no way out (UX-10).
+        setLoadingCrosswalk(false);
+        setCrosswalkError("Something went wrong. Try again.");
+      });
   }
 
   async function handleRelationships(file: File) {
@@ -359,26 +377,32 @@ export function HoldingCompaniesClient({
     // Demo-mode shortcut so the wizard can be click-tested without real NIC
     // files (which are only downloadable by a signed-in human via a browser).
     setLoadingCrosswalk(true);
-    getBankRssdCrosswalk().then((res) => {
-      setLoadingCrosswalk(false);
-      const bankList = res.banks ?? [];
-      setBanks(bankList);
-      const sample = bankList.slice(0, 4);
-      if (sample.length >= 2) {
-        const parentRssd = 900001;
-        const p = new Map<number, number>();
-        p.set(sample[0].rssd!, parentRssd);
-        // sample[1] is deliberately left WITHOUT a parent in this fake sync
-        // data (only sample[0] gets one) — the demo seed already gives it a
-        // real holding-company link (lib/demo.ts), so this naturally exercises
-        // the stale-link detection path (DATA-09) too, not just the new-link
-        // path, when clicking through this demo shortcut.
-        setParentByChild(p);
-        setNameByRssd(new Map([[parentRssd, "Sample Mutual Holding Company"]]));
-        setAssetsByRssd(new Map([[parentRssd, { assets: 850000, asOf: "2026 Q1" }]]));
-      }
-      setStep("review");
-    });
+    setCrosswalkError(null);
+    getBankRssdCrosswalk()
+      .then((res) => {
+        setLoadingCrosswalk(false);
+        const bankList = res.banks ?? [];
+        setBanks(bankList);
+        const sample = bankList.slice(0, 4);
+        if (sample.length >= 2) {
+          const parentRssd = 900001;
+          const p = new Map<number, number>();
+          p.set(sample[0].rssd!, parentRssd);
+          // sample[1] is deliberately left WITHOUT a parent in this fake sync
+          // data (only sample[0] gets one) — the demo seed already gives it a
+          // real holding-company link (lib/demo.ts), so this naturally exercises
+          // the stale-link detection path (DATA-09) too, not just the new-link
+          // path, when clicking through this demo shortcut.
+          setParentByChild(p);
+          setNameByRssd(new Map([[parentRssd, "Sample Mutual Holding Company"]]));
+          setAssetsByRssd(new Map([[parentRssd, { assets: 850000, asOf: "2026 Q1" }]]));
+        }
+        setStep("review");
+      })
+      .catch(() => {
+        setLoadingCrosswalk(false);
+        setCrosswalkError("Something went wrong loading the sample data. Try again.");
+      });
   }
 
   // A real effect, not a useMemo side effect (useMemo is meant to calculate
@@ -434,16 +458,23 @@ export function HoldingCompaniesClient({
     Promise.all([
       applyHoldingCompanyChanges(changes),
       unlinkCerts.length ? applyHoldingCompanyUnlinks(unlinkCerts) : Promise.resolve<{ applied?: number; error?: string }>({ applied: 0 }),
-    ]).then(([linkRes, unlinkRes]) => {
-      setApplying(false);
-      if (linkRes.error || unlinkRes.error) {
-        setApplyError(linkRes.error ?? unlinkRes.error ?? "Something went wrong.");
-        return;
-      }
-      setAppliedCount(linkRes.applied ?? 0);
-      setUnlinkedCount(unlinkRes.applied ?? 0);
-      setStep("done");
-    });
+    ])
+      .then(([linkRes, unlinkRes]) => {
+        setApplying(false);
+        if (linkRes.error || unlinkRes.error) {
+          setApplyError(linkRes.error ?? unlinkRes.error ?? "Something went wrong.");
+          return;
+        }
+        setAppliedCount(linkRes.applied ?? 0);
+        setUnlinkedCount(unlinkRes.applied ?? 0);
+        setStep("done");
+      })
+      .catch(() => {
+        // A rejected promise here previously left applying stuck true forever
+        // with no error shown and no way to retry (UX-10).
+        setApplying(false);
+        setApplyError("Something went wrong. Try again.");
+      });
   }
 
   function enterWizard() {
@@ -492,7 +523,20 @@ export function HoldingCompaniesClient({
           </div>
         )}
 
-        {!overviewLoading && overview && overview.length === 0 && (
+        {!overviewLoading && overviewError && (
+          <div className="rounded-xl border border-dashed border-rose-300 bg-rose-50 p-8 text-center">
+            <p className="text-sm text-rose-700">{overviewError}</p>
+            <button
+              type="button"
+              onClick={loadOverview}
+              className="mt-3 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-sm font-medium text-rose-700 hover:bg-rose-50"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        {!overviewLoading && !overviewError && overview && overview.length === 0 && (
           <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
             <p className="text-sm text-slate-500">
               No holding companies matched yet. Click <span className="font-medium">Run sync</span>{" "}

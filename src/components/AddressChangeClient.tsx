@@ -12,12 +12,14 @@ import {
 } from "@/app/(app)/address-change/actions";
 import { formatDate, withScheme } from "@/lib/format";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
+import { useToast } from "@/components/Toast";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
 
 export function AddressChangeClient({ data }: { data: AddressChangeData }) {
   const router = useRouter();
+  const toast = useToast();
   const [, startTransition] = useTransition();
   const [newAddress, setNewAddress] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -122,7 +124,11 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
                   : "Mark this address change finished?")) return;
                 startTransition(async () => {
                   const res = await completeAddressChange(campaign.id);
-                  if (!res?.error) router.refresh();
+                  if (res?.error) {
+                    toast.error(res.error);
+                    return;
+                  }
+                  router.refresh();
                 });
               }}
               className="rounded-lg bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-800"
@@ -135,7 +141,11 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
                 if (!confirm("Cancel this address change and delete the checklist?")) return;
                 startTransition(async () => {
                   const res = await cancelAddressChange(campaign.id);
-                  if (!res?.error) router.refresh();
+                  if (res?.error) {
+                    toast.error(res.error);
+                    return;
+                  }
+                  router.refresh();
                 });
               }}
               className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-500 hover:bg-slate-50"

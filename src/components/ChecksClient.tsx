@@ -11,6 +11,7 @@ import {
   type PrintedCheckWithAccount,
 } from "@/app/(app)/checks/actions";
 import type { Account, Bank } from "@/lib/types";
+import { useToast } from "@/components/Toast";
 
 export type AccountWithBank = Account & { bank: Bank };
 
@@ -21,6 +22,7 @@ export function ChecksClient({
   accounts: AccountWithBank[];
   history: PrintedCheckWithAccount[];
 }) {
+  const toast = useToast();
   const [selected, setSelected] = useState<AccountWithBank | null>(null);
   const [log, setLog] = useState(history);
 
@@ -52,9 +54,15 @@ export function ChecksClient({
     setLog((prev) => prev.filter((c) => c.id !== id));
     deletePrintedCheck(id)
       .then((res) => {
-        if (res?.error) setLog(before);
+        if (res?.error) {
+          setLog(before);
+          toast.error(res.error);
+        }
       })
-      .catch(() => setLog(before));
+      .catch(() => {
+        setLog(before);
+        toast.error("Couldn't remove that check from the log. Try again.");
+      });
   }
 
   return (

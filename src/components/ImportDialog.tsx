@@ -683,6 +683,7 @@ export function ImportDialog({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close"
             className="rounded-lg p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-600"
           >
             <X className="h-5 w-5" />

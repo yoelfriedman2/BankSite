@@ -59,6 +59,7 @@ export function AccountViewModal({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close"
             className="shrink-0 rounded-lg p-1 text-slate-600 hover:bg-black/5 hover:text-slate-600"
           >
             <X className="h-5 w-5" />

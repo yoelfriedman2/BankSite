@@ -6,6 +6,7 @@ import { DateInput } from "@/components/DateInput";
 import { formatCurrency } from "@/lib/format";
 import { todayLocalStr } from "@/lib/date";
 import { getBalanceAsOf, type BalanceAsOfRow } from "@/app/(app)/money/actions";
+import { useToast } from "@/components/Toast";
 
 export function BalancesClient({
   initialRows,
@@ -14,6 +15,7 @@ export function BalancesClient({
   initialRows: BalanceAsOfRow[];
   initialDate: string;
 }) {
+  const toast = useToast();
   const [date, setDate] = useState(initialDate);
   const [rows, setRows] = useState<BalanceAsOfRow[]>(initialRows);
   const [loading, setLoading] = useState(false);
@@ -46,7 +48,9 @@ export function BalancesClient({
         // silently show as a confusing empty list.
         setHolder((h) => (h !== "all" && !newRows.some((r) => r.holder === h) ? "all" : h));
       })
-      .catch(() => {})
+      .catch(() => {
+        if (requestId === requestIdRef.current) toast.error("Couldn't load balances for that date. Try again.");
+      })
       .finally(() => {
         if (requestId === requestIdRef.current) setLoading(false);
       });

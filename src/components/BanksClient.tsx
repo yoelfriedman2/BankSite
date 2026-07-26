@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   Plus,
   Search,
@@ -47,6 +47,7 @@ import { BankForm } from "@/components/BankForm";
 import { BankLogo } from "@/components/BankLogo";
 import { ImportDialog } from "@/components/ImportDialog";
 import { FocusTrapPanel } from "@/components/FocusTrapPanel";
+import { useToast } from "@/components/Toast";
 import { exportToExcel, exportCommentsToExcel } from "@/lib/export";
 import { setBankStatus, deleteBank, getAllBankComments, type RelatedRef } from "@/app/(app)/banks/actions";
 
@@ -369,6 +370,9 @@ export function BanksClient({
     [unreadCerts, localReadCerts],
   );
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const toast = useToast();
   const [statusFilter, setStatusFilter] = useState<BankStatusFilter>(
     initialStatus ?? "all",
   );
@@ -376,6 +380,31 @@ export function BanksClient({
   const [stageFilter, setStageFilter] = useState<Set<ConversionStage>>(new Set());
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [query, setQuery] = useState(initialQuery ?? "");
+
+  // Keep the search box in sync with the URL both ways (UX-08): typing writes
+  // `q` into the URL (debounced, so every keystroke doesn't spam history),
+  // and browser back/forward — or a bookmarked/pasted `?q=` link — updates the
+  // box instead of being silently ignored after the first render. Skips the
+  // very first write so mounting doesn't immediately re-push the same URL.
+  const skipNextWrite = useRef(true);
+  useEffect(() => {
+    if (skipNextWrite.current) {
+      skipNextWrite.current = false;
+      return;
+    }
+    const t = setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (query.trim()) params.set("q", query);
+      else params.delete("q");
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+  useEffect(() => {
+    setQuery(initialQuery ?? "");
+  }, [initialQuery]);
   const [sort, setSort] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -597,8 +626,12 @@ export function BanksClient({
   function handleStatusChange(b: Bank, status: BankStatus) {
     setStatusPendingId(b.id);
     startTransition(async () => {
-      await setBankStatus(b.id, status);
+      const res = await setBankStatus(b.id, status);
       setStatusPendingId(null);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
       router.refresh();
     });
   }
@@ -607,8 +640,12 @@ export function BanksClient({
       return;
     setDeletePendingId(b.id);
     startTransition(async () => {
-      await deleteBank(b.id);
+      const res = await deleteBank(b.id);
       setDeletePendingId(null);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
       router.refresh();
     });
   }
@@ -697,7 +734,7 @@ export function BanksClient({
           >
             <div className="mb-3 flex items-center justify-between">
               <h2 id="banks-mobile-filters-title" className="text-base font-semibold text-slate-900">Filters &amp; sort</h2>
-              <button type="button" onClick={() => setMobileFiltersOpen(false)} className="p-1 text-slate-600">
+              <button type="button" onClick={() => setMobileFiltersOpen(false)} aria-label="Close" className="p-1 text-slate-600">
                 <X className="h-5 w-5" />
               </button>
             </div>

@@ -582,7 +582,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                   <Star className="h-3 w-3" fill={b.id === anchor?.id ? "currentColor" : "none"} />
                 </button>
                 {b.name}
-                <button type="button" onClick={() => toggleMustVisit(b.id)} className="text-blue-400 hover:text-blue-700">
+                <button type="button" onClick={() => toggleMustVisit(b.id)} aria-label={`Remove ${b.name} from must-visit`} className="text-blue-400 hover:text-blue-700">
                   <X className="h-3 w-3" />
                 </button>
               </span>
