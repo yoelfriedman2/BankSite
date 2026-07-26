@@ -60,7 +60,7 @@ export function ChecksClient({
   return (
     <>
       {accounts.length === 0 ? (
-        <div className="mt-12 text-center text-sm text-slate-400">
+        <div className="mt-12 text-center text-sm text-slate-600">
           No accounts yet. Add accounts via the Banks page and they&apos;ll appear here.
         </div>
       ) : (
@@ -80,12 +80,12 @@ export function ChecksClient({
                         <div className="flex items-center gap-2 text-sm font-medium text-slate-800">
                           {a.holder || "—"}
                           {a.account_type && (
-                            <span className="font-normal text-slate-400">
+                            <span className="font-normal text-slate-600">
                               · {ACCOUNT_TYPE_LABELS[a.account_type]}
                             </span>
                           )}
                         </div>
-                        <div className="mt-0.5 flex items-center gap-3 text-xs text-slate-400">
+                        <div className="mt-0.5 flex items-center gap-3 text-xs text-slate-600">
                           {a.account_number
                             ? <span>Acct: {maskAccountNumber(a.account_number)}</span>
                             : <span className="text-rose-400">No account #</span>}
@@ -96,7 +96,7 @@ export function ChecksClient({
                       </div>
 
                       {missingFields && (
-                        <div className="flex items-center gap-1 text-xs text-amber-600" title="Add routing and account numbers to enable printing">
+                        <div className="flex items-center gap-1 text-xs text-amber-700" title="Add routing and account numbers to enable printing">
                           <AlertCircle className="h-3.5 w-3.5" />
                           <span className="hidden sm:inline">Missing details</span>
                         </div>
@@ -127,7 +127,7 @@ export function ChecksClient({
               <BookOpen className="h-5 w-5 text-blue-600" />
               Check log
             </h2>
-            <span className="text-sm text-slate-400">{log.length}</span>
+            <span className="text-sm text-slate-600">{log.length}</span>
           </div>
           <ul>
             {log.map((c) => (
@@ -140,9 +140,9 @@ export function ChecksClient({
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium text-slate-800">
-                    {c.payee || <span className="font-normal text-slate-400">no payee</span>}
+                    {c.payee || <span className="font-normal text-slate-600">no payee</span>}
                   </p>
-                  <p className="truncate text-xs text-slate-400">
+                  <p className="truncate text-xs text-slate-600">
                     {c.bankName}
                     {c.holder ? ` · ${c.holder}` : ""}
                     {c.memo ? ` · ${c.memo}` : ""}
@@ -151,7 +151,7 @@ export function ChecksClient({
                 <span className="shrink-0 tabular-nums font-medium text-slate-800">
                   {c.amount != null ? formatCurrency(c.amount) : "—"}
                 </span>
-                <span className="w-24 shrink-0 text-right text-xs text-slate-400">
+                <span className="w-24 shrink-0 text-right text-xs text-slate-600">
                   {c.check_date ?? ""}
                 </span>
                 <button

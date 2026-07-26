@@ -10,6 +10,7 @@ import {
   restoreUserFromBackupAction,
 } from "@/app/(app)/admin/actions";
 import type { BackupFile } from "@/lib/backup";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 function downloadZip(base64: string, filename: string) {
   const bin = atob(base64);
@@ -112,7 +113,7 @@ export function AdminBackupsPanel() {
             type="button"
             onClick={backupNow}
             disabled={backingUp}
-            className="flex items-center gap-2 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
           >
             {backingUp && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             Back up now
@@ -134,7 +135,7 @@ export function AdminBackupsPanel() {
 
       {backups &&
         (backups.length === 0 ? (
-          <p className="mt-3 text-xs text-slate-400">No backups stored yet.</p>
+          <p className="mt-3 text-xs text-slate-600">No backups stored yet.</p>
         ) : (
           <div className="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-100">
             {backups.map((b) => (
@@ -144,7 +145,7 @@ export function AdminBackupsPanel() {
               >
                 <div className="min-w-0">
                   <div className="truncate font-medium text-slate-700">{b.path}</div>
-                  <div className="text-slate-400">
+                  <div className="text-slate-600">
                     {fmtWhen(b.createdAt)}
                     {b.size ? ` · ${fmtSize(b.size)}` : ""}
                   </div>
@@ -193,6 +194,7 @@ function RestoreModal({ backup, onClose }: { backup: BackupFile; onClose: () => 
     null,
   );
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useFocusTrap<HTMLDivElement>(onClose);
 
   useEffect(() => {
     let cancelled = false;
@@ -230,16 +232,20 @@ function RestoreModal({ backup, onClose }: { backup: BackupFile; onClose: () => 
       onMouseDown={onClose}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="restore-modal-title"
         className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="mb-1 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-slate-900">Restore a user</h3>
-          <button type="button" onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100">
+          <h3 id="restore-modal-title" className="text-base font-semibold text-slate-900">Restore a user</h3>
+          <button type="button" onClick={onClose} className="rounded-lg p-1 text-slate-600 hover:bg-slate-100">
             <X className="h-4 w-4" />
           </button>
         </div>
-        <p className="mt-1 text-xs text-slate-400">From {backup.path}</p>
+        <p className="mt-1 text-xs text-slate-600">From {backup.path}</p>
 
         {!result && (
           <>
@@ -267,7 +273,7 @@ function RestoreModal({ backup, onClose }: { backup: BackupFile; onClose: () => 
               </select>
             )}
 
-            <p className="mt-3 text-xs text-slate-400">
+            <p className="mt-3 text-xs text-slate-600">
               Restores banks, accounts, balances, reminders, checks, address campaigns, and road
               trips as of this backup. Community notes were never lost (they survive deletion
               already) and document files themselves were never backed up — only the record that
@@ -291,7 +297,7 @@ function RestoreModal({ backup, onClose }: { backup: BackupFile; onClose: () => 
                 type="button"
                 onClick={handleRestore}
                 disabled={restoring || !email || !users?.length}
-                className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+                className="flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
               >
                 {restoring && <Loader2 className="h-4 w-4 animate-spin" />}
                 Restore

@@ -80,7 +80,7 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
               setBusy(false);
             });
           }}
-          className="mt-4 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+          className="mt-4 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
         >
           {busy ? "Starting…" : "Start tracking"}
         </button>
@@ -111,7 +111,7 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Moving to</p>
             <p className="mt-0.5 font-semibold text-slate-900">{campaign.new_address}</p>
-            <p className="mt-1 text-xs text-slate-400">Started {formatDate(campaign.created_at.slice(0, 10))}</p>
+            <p className="mt-1 text-xs text-slate-600">Started {formatDate(campaign.created_at.slice(0, 10))}</p>
           </div>
           <div className="flex gap-2">
             <button
@@ -125,7 +125,7 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
                   if (!res?.error) router.refresh();
                 });
               }}
-              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
+              className="rounded-lg bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-800"
             >
               Finish
             </button>
@@ -185,11 +185,11 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
                 <CircleCheck className="h-4 w-4" />
               </button>
               <div className="min-w-0 flex-1">
-                <p className={`truncate font-medium ${done ? "text-slate-400 line-through" : "text-slate-900"}`}>
+                <p className={`truncate font-medium ${done ? "text-slate-600 line-through" : "text-slate-900"}`}>
                   {item.bankName}
-                  {item.state && <span className="font-normal text-slate-400"> · {item.state}</span>}
+                  {item.state && <span className="font-normal text-slate-600"> · {item.state}</span>}
                 </p>
-                <p className="truncate text-xs text-slate-400">{item.holder ?? "Unassigned"}</p>
+                <p className="truncate text-xs text-slate-600">{item.holder ?? "Unassigned"}</p>
               </div>
               {item.phone && (
                 <span className="hidden shrink-0 items-center gap-1 text-xs text-slate-500 sm:flex">
@@ -202,7 +202,7 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
                   href={withScheme(item.website)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 hover:underline"
+                  className="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-700 hover:underline"
                 >
                   <Globe className="h-3.5 w-3.5" />
                   Site
@@ -212,7 +212,7 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
           );
         })}
         {data.items.length === 0 && (
-          <li className="flex items-center gap-2 px-5 py-6 text-sm text-slate-400">
+          <li className="flex items-center gap-2 px-5 py-6 text-sm text-slate-600">
             <X className="h-4 w-4" />
             No banks in this checklist.
           </li>

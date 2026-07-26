@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { X, Printer, Trash2 } from "lucide-react";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 import type { Account } from "@/lib/types";
 import { saveLastCheckNumber } from "@/app/(app)/accounts/actions";
 import {
@@ -259,6 +260,7 @@ export function CheckPrintModal({
   onDeleted?: (id: string) => void;
 }) {
   const toast = useToast();
+  const dialogRef = useFocusTrap<HTMLDivElement>(onClose);
 
   const today = new Date().toLocaleDateString("en-US", {
     month: "2-digit", day: "2-digit", year: "numeric",
@@ -400,19 +402,23 @@ export function CheckPrintModal({
       onMouseDown={(e) => { e.stopPropagation(); onClose(); }}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="check-print-modal-title"
         className="my-8 w-full max-w-xl rounded-2xl bg-white shadow-2xl"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">Print Check</h2>
-            <p className="text-xs text-slate-400">{bankName}{holder ? ` · ${holder}` : ""}</p>
+            <h2 id="check-print-modal-title" className="text-base font-semibold text-slate-900">Print Check</h2>
+            <p className="text-xs text-slate-600">{bankName}{holder ? ` · ${holder}` : ""}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            className="rounded-lg p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-600"
           >
             <X className="h-5 w-5" />
           </button>
@@ -433,7 +439,7 @@ export function CheckPrintModal({
               <label className={labelCls}>Check number</label>
               <input className={inputCls} placeholder="e.g. 1001" value={checkNum} onChange={(e) => setCheckNum(e.target.value)} />
               {account.last_check_number != null && (
-                <p className="mt-1 text-[11px] text-slate-400">Last used: {account.last_check_number}</p>
+                <p className="mt-1 text-[11px] text-slate-600">Last used: {account.last_check_number}</p>
               )}
             </div>
             <div>
@@ -452,7 +458,7 @@ export function CheckPrintModal({
             {/* Row 1: payer · bank · check # */}
             <div className="flex items-start justify-between gap-2">
               <p className="text-sm font-bold text-[#16335f]">
-                {holder || <span className="font-normal text-slate-400">Account holder</span>}
+                {holder || <span className="font-normal text-slate-600">Account holder</span>}
               </p>
               <p className="self-center text-xs font-bold text-[#16335f]">{bankName}</p>
               <p className="text-base font-bold text-[#16335f]">{checkNum || ""}</p>
@@ -486,7 +492,7 @@ export function CheckPrintModal({
               </div>
               <div className="flex flex-col">
                 <span className="min-w-[7rem] border-b border-slate-600 pb-0.5 text-xs">&nbsp;</span>
-                <span className="mt-0.5 text-center text-[8px] uppercase tracking-wide text-slate-400">Authorized signature</span>
+                <span className="mt-0.5 text-center text-[8px] uppercase tracking-wide text-slate-600">Authorized signature</span>
               </div>
             </div>
             {/* MICR — centered group, real E-13B font */}
@@ -509,7 +515,7 @@ export function CheckPrintModal({
             <div className="flex flex-col gap-2 sm:flex-row sm:gap-5">
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input type="radio" name="checkmode" checked={mode === "blank"} onChange={() => setMode("blank")} className="accent-amber-600" />
-                Blank paper <span className="text-slate-400">(draw full check)</span>
+                Blank paper <span className="text-slate-600">(draw full check)</span>
               </label>
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input type="radio" name="checkmode" checked={mode === "preprinted"} onChange={() => setMode("preprinted")} className="accent-amber-600" />
@@ -526,7 +532,7 @@ export function CheckPrintModal({
                 <input type="number" step="0.05" value={dy} onChange={(e) => setDy(e.target.value)} className="w-16 rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-900" />
               </label>
             </div>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-600">
               {mode === "preprinted"
                 ? "Only the date, payee, amount, and memo print — onto your pre-printed check. Print a test, then nudge to line it up. Saved for next time."
                 : "Draws the whole check on blank paper, including the bottom MICR line. Use the nudge if your printer shifts it. Saved for next time."}
@@ -549,12 +555,12 @@ export function CheckPrintModal({
                       {c.check_number ?? "—"}
                     </span>
                     <span className="min-w-0 flex-1 truncate text-slate-600">
-                      {c.payee || <span className="text-slate-400">no payee</span>}
+                      {c.payee || <span className="text-slate-600">no payee</span>}
                     </span>
                     <span className="shrink-0 tabular-nums text-slate-700">
                       {c.amount != null ? formatCurrency(c.amount) : "—"}
                     </span>
-                    <span className="w-20 shrink-0 text-right text-xs text-slate-400">
+                    <span className="w-20 shrink-0 text-right text-xs text-slate-600">
                       {c.check_date ?? ""}
                     </span>
                     <button

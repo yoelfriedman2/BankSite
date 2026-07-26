@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ChecksClient, type AccountWithBank } from "@/components/ChecksClient";
 import { DEMO_MODE, getDemoBanks, getDemoAccounts } from "@/lib/demo";
 import { getAllPrintedChecks } from "@/app/(app)/checks/actions";
+import { fetchAllRows } from "@/lib/pagination";
 import type { Account, Bank } from "@/lib/types";
 
 export default async function ChecksPage() {
@@ -14,15 +15,12 @@ export default async function ChecksPage() {
       .filter((a): a is AccountWithBank => !!a.bank);
   } else {
     const supabase = await createClient();
-    const { data } = await supabase
-      .from("accounts")
-      .select("*, bank:banks(*)")
-      .is("deleted_at", null)
-      .order("bank_id");
+    // Paginated past PostgREST's default 1000-row cap (DATA-18).
+    const { rows: data } = await fetchAllRows<Account & { bank: Bank | null }>((from, to) =>
+      supabase.from("accounts").select("*, bank:banks(*)").is("deleted_at", null).order("bank_id").range(from, to),
+    );
 
-    accounts = ((data ?? []) as (Account & { bank: Bank | null })[]).filter(
-      (a) => a.bank && !a.bank.deleted_at,
-    ) as AccountWithBank[];
+    accounts = data.filter((a) => a.bank && !a.bank.deleted_at) as AccountWithBank[];
   }
 
   const history = await getAllPrintedChecks();

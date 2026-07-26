@@ -8,6 +8,7 @@ import {
   getDemoProfile,
 } from "@/lib/demo";
 import { effectiveDormancyMonths } from "@/lib/dormancy";
+import { fetchAllRows } from "@/lib/pagination";
 import type { Account, Bank } from "@/lib/types";
 
 const DORMANCY_TYPES = ["checking", "savings", "money_market"];
@@ -43,14 +44,13 @@ export default async function CalendarPage() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) redirect("/login");
-    const { data: banksData } = await supabase
-      .from("banks")
-      .select("*")
-      .is("deleted_at", null);
-    const { data: acctData } = await supabase
-      .from("accounts")
-      .select("*")
-      .is("deleted_at", null);
+    // Paginated past PostgREST's default 1000-row cap (DATA-18).
+    const { rows: banksData } = await fetchAllRows<Bank>((from, to) =>
+      supabase.from("banks").select("*").is("deleted_at", null).range(from, to),
+    );
+    const { rows: acctData } = await fetchAllRows<Account>((from, to) =>
+      supabase.from("accounts").select("*").is("deleted_at", null).range(from, to),
+    );
     const { data: profile } = await supabase
       .from("profiles")
       .select("default_dormancy_months")

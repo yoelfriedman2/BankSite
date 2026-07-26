@@ -25,7 +25,7 @@ export default function AppError({
         <button
           type="button"
           onClick={reset}
-          className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
+          className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
         >
           Try again
         </button>

@@ -19,6 +19,7 @@ import { todayLocalStr } from "@/lib/date";
 import { useVault } from "@/components/VaultKeyProvider";
 import { VaultUnlockPrompt } from "@/components/VaultUnlockPrompt";
 import { isEncryptedVaultValue, decryptVaultField, encryptVaultField } from "@/lib/vaultCrypto";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -110,6 +111,8 @@ export function AccountModal({
   function attemptClose() {
     if (confirmDiscard(dirty)) onClose();
   }
+
+  const dialogRef = useFocusTrap<HTMLFormElement>(attemptClose);
 
   useEffect(() => {
     if (initial?.id) {
@@ -230,7 +233,7 @@ export function AccountModal({
     : "none";
   const cdDays = values.cd_maturity_date ? daysUntil(values.cd_maturity_date) : null;
   const cdColor =
-    cdDays == null ? "" : cdDays < 0 ? "text-slate-400" : cdDays <= 30 ? "text-rose-600" : cdDays <= 90 ? "text-amber-700" : "";
+    cdDays == null ? "" : cdDays < 0 ? "text-slate-600" : cdDays <= 30 ? "text-rose-600" : cdDays <= 90 ? "text-amber-700" : "";
   const sortedLog = values.activity_log
     .map((e, i) => ({ e, i }))
     .sort((a, b) => b.e.date.localeCompare(a.e.date));
@@ -241,6 +244,10 @@ export function AccountModal({
       onMouseDown={(e) => { e.stopPropagation(); attemptClose(); }}
     >
       <form
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="account-modal-title"
         onSubmit={handleSubmit}
         onMouseDown={(e) => e.stopPropagation()}
         className="my-8 w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl"
@@ -248,14 +255,14 @@ export function AccountModal({
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-1">
           <div className="min-w-0 flex-1">
             <p className="truncate text-xs font-medium text-amber-700">{bankName}</p>
-            <h2 className="text-lg font-semibold text-slate-900">
+            <h2 id="account-modal-title" className="text-lg font-semibold text-slate-900">
               {initial ? "Edit account" : "Add account"}
             </h2>
           </div>
           <button
             type="button"
             onClick={attemptClose}
-            className="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-black/5 hover:text-slate-600"
+            className="shrink-0 rounded-lg p-1 text-slate-600 hover:bg-black/5 hover:text-slate-600"
           >
             <X className="h-5 w-5" />
           </button>
@@ -375,7 +382,7 @@ export function AccountModal({
                     />
                   </div>
                 </div>
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1 text-xs text-slate-600">
                   Set both to auto-deduct this amount every month on that day. Leave either blank to turn it off.
                 </p>
               </div>
@@ -391,7 +398,7 @@ export function AccountModal({
                   value={values.interest_rate}
                   onChange={(e) => set("interest_rate", e.target.value)}
                 />
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1 text-xs text-slate-600">
                   Once set, interest is credited to the balance automatically around the start of
                   each month, and shown on the Fees &amp; interest page.
                 </p>
@@ -477,7 +484,7 @@ export function AccountModal({
                   onChange={(e) => setOnlineAccessOpen(e.target.checked)}
                   className="h-4 w-4 rounded border-slate-300 accent-amber-600"
                 />
-                <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                <span className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
                   Online access
                 </span>
                 {vaultActive && (
@@ -490,7 +497,7 @@ export function AccountModal({
             </div>
             {onlineAccessOpen && vaultActive && !vault.unlocked && <VaultUnlockPrompt />}
             {onlineAccessOpen && vaultActive && vault.unlocked && vaultDecrypting && (
-              <p className="flex items-center gap-1.5 text-xs text-slate-400">
+              <p className="flex items-center gap-1.5 text-xs text-slate-600">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 Decrypting…
               </p>
@@ -589,7 +596,7 @@ export function AccountModal({
               </ul>
             )}
             {sortedLog.length === 0 && !activityAdding && (
-              <p className="text-xs text-slate-400">No activity logged yet.</p>
+              <p className="text-xs text-slate-600">No activity logged yet.</p>
             )}
             {activityAdding && (
               <div className="flex flex-wrap items-center gap-2">
@@ -622,7 +629,7 @@ export function AccountModal({
                 <button
                   type="button"
                   onClick={addEntry}
-                  className="shrink-0 rounded-lg bg-amber-500 px-3 py-2 text-sm font-medium text-white hover:bg-amber-600"
+                  className="shrink-0 rounded-lg bg-amber-700 px-3 py-2 text-sm font-medium text-white hover:bg-amber-800"
                 >
                   Add
                 </button>
@@ -640,10 +647,10 @@ export function AccountModal({
                     className="flex items-center gap-2 rounded-md bg-slate-50 px-2 py-1.5 text-sm"
                   >
                     <span className="w-16 shrink-0 text-xs text-slate-500">{formatDate(p.as_of_date)}</span>
-                    <span className="flex-1 truncate text-xs text-slate-400">{p.reason ?? ""}</span>
+                    <span className="flex-1 truncate text-xs text-slate-600">{p.reason ?? ""}</span>
                     {p.change_amount != null && (
                       <span
-                        className={`shrink-0 text-xs tabular-nums ${p.change_amount < 0 ? "text-rose-500" : "text-emerald-600"}`}
+                        className={`shrink-0 text-xs tabular-nums ${p.change_amount < 0 ? "text-rose-500" : "text-emerald-700"}`}
                       >
                         {p.change_amount < 0 ? "−" : "+"}
                         {formatCurrency(Math.abs(p.change_amount))}
@@ -685,7 +692,7 @@ export function AccountModal({
           <button
             type="submit"
             disabled={isPending}
-            className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
+            className="flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-60"
           >
             {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
             {initial ? "Save account" : "Add account"}

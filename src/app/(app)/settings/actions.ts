@@ -12,6 +12,7 @@ import {
 } from "@/lib/demo";
 import type { Account, Bank } from "@/lib/types";
 import { friendlyDbError } from "@/lib/friendlyError";
+import { fetchAllRows } from "@/lib/pagination";
 
 export async function updateSettings(values: {
   display_name: string;
@@ -198,11 +199,19 @@ export async function getMyExportData(): Promise<{ banks: Bank[]; accounts: Acco
   } = await supabase.auth.getUser();
   if (!user) return { banks: [], accounts: [] };
 
-  const [{ data: banks }, { data: accounts }] = await Promise.all([
-    supabase.from("banks").select("*").is("deleted_at", null).order("name", { ascending: true }),
-    supabase.from("accounts").select("*").is("deleted_at", null),
+  // Paginated past PostgREST's default 1000-row cap (DATA-18) — this is the
+  // one-click "export before you delete" backup, so a silent truncation here
+  // would be a worse failure mode than most, matching the reasoning already
+  // applied to the personal full-export (DATA-06) and weekly backup (REL-03).
+  const [{ rows: banks }, { rows: accounts }] = await Promise.all([
+    fetchAllRows<Bank>((from, to) =>
+      supabase.from("banks").select("*").is("deleted_at", null).order("name", { ascending: true }).range(from, to),
+    ),
+    fetchAllRows<Account>((from, to) =>
+      supabase.from("accounts").select("*").is("deleted_at", null).range(from, to),
+    ),
   ]);
-  return { banks: (banks ?? []) as Bank[], accounts: (accounts ?? []) as Account[] };
+  return { banks, accounts };
 }
 
 /**

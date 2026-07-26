@@ -12,6 +12,7 @@ import {
 } from "@/lib/demo";
 import { seedBanks, getUnreadCommentCerts, getRelatedByCert } from "./actions";
 import { isOwnerEmail } from "@/lib/isOwner";
+import { fetchAllRows } from "@/lib/pagination";
 import type { Account, Bank, BankStatusFilter } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -82,22 +83,21 @@ export default async function BanksPage({
     .eq("id", user.id)
     .maybeSingle();
 
-  let { data: banks } = await supabase
-    .from("banks")
-    .select("*")
-    .is("deleted_at", null)
-    .order("name", { ascending: true });
+  // Paginated past PostgREST's default 1000-row cap (DATA-18) — a bank list
+  // sits well under that today (~426 seeded banks/user), but not with enough
+  // margin to leave unpaginated, especially once a user imports more.
+  let { rows: banks } = await fetchAllRows<Bank>((from, to) =>
+    supabase.from("banks").select("*").is("deleted_at", null).order("name", { ascending: true }).range(from, to),
+  );
 
   // Seed the shared bank list once per user (gated by profiles.banks_seeded, not
   // bank count, so a bank propagated to a brand-new user can't suppress the seed).
   if (!profile?.banks_seeded) {
     await seedBanks();
-    const reload = await supabase
-      .from("banks")
-      .select("*")
-      .is("deleted_at", null)
-      .order("name", { ascending: true });
-    banks = reload.data ?? [];
+    const reload = await fetchAllRows<Bank>((from, to) =>
+      supabase.from("banks").select("*").is("deleted_at", null).order("name", { ascending: true }).range(from, to),
+    );
+    banks = reload.rows;
   }
 
   // If the seed hasn't produced banks yet (e.g. a cold-start timeout on the very
@@ -107,12 +107,11 @@ export default async function BanksPage({
     return <BankSetupNotice />;
   }
 
-  const { data: accounts } = await supabase
-    .from("accounts")
-    .select("*")
-    .is("deleted_at", null);
+  const { rows: accounts } = await fetchAllRows<Account>((from, to) =>
+    supabase.from("accounts").select("*").is("deleted_at", null).range(from, to),
+  );
 
-  const accountList = (accounts ?? []) as Account[];
+  const accountList = accounts;
   const knownHolders = Array.from(
     new Set([
       ...((profile?.holders ?? []) as string[]),

@@ -48,7 +48,7 @@ export function FeesInterestClient({ rows }: { rows: FeeInterestRow[] }) {
         </p>
 
         {feeRows.length === 0 ? (
-          <p className="text-sm text-slate-400">No accounts have a monthly fee configured.</p>
+          <p className="text-sm text-slate-600">No accounts have a monthly fee configured.</p>
         ) : (
           <>
             <ul className="space-y-1.5">
@@ -62,7 +62,7 @@ export function FeesInterestClient({ rows }: { rows: FeeInterestRow[] }) {
                       {r.bankName}
                       {r.holder ? ` · ${r.holder}` : ""}
                     </p>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-slate-600">
                       {r.account_type ? ACCOUNT_TYPE_LABELS[r.account_type] : "—"} · charged on
                       the {ordinal(r.monthly_fee_day ?? 1)}
                       {r.monthly_fee_last_charged_on
@@ -100,7 +100,7 @@ export function FeesInterestClient({ rows }: { rows: FeeInterestRow[] }) {
         </p>
 
         {interestRows.length === 0 ? (
-          <p className="text-sm text-slate-400">No accounts have an interest rate configured yet.</p>
+          <p className="text-sm text-slate-600">No accounts have an interest rate configured yet.</p>
         ) : (
           <>
             <ul className="space-y-1.5">
@@ -114,7 +114,7 @@ export function FeesInterestClient({ rows }: { rows: FeeInterestRow[] }) {
                       {r.bankName}
                       {r.holder ? ` · ${r.holder}` : ""}
                     </p>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-slate-600">
                       {r.account_type ? `${ACCOUNT_TYPE_LABELS[r.account_type]} · ` : ""}
                       {formatCurrency(r.balance)} balance
                       {r.account_type === "cd" && r.cd_maturity_date
@@ -126,7 +126,7 @@ export function FeesInterestClient({ rows }: { rows: FeeInterestRow[] }) {
                     <span className="font-semibold text-emerald-700">
                       {formatCurrency(((r.balance ?? 0) * r.interest_rate!) / 100)}/yr
                     </span>
-                    <span className="ml-1 text-xs text-slate-400">
+                    <span className="ml-1 text-xs text-slate-600">
                       ({r.interest_rate}% APY)
                     </span>
                   </div>

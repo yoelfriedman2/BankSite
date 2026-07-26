@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { X, Loader2, UploadCloud, FileSpreadsheet, Download, ArrowRight, Check, AlertTriangle, Plus } from "lucide-react";
 import { importBanks } from "@/app/(app)/banks/actions";
 import { downloadImportTemplate } from "@/lib/export";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 import type { ImportRow } from "@/lib/demo";
 
 /* ─── Parsing helpers ─── */
@@ -657,6 +658,7 @@ export function ImportDialog({
   }
 
   const totalAccounts = review.reduce((s, e) => s + e.accountCount, 0);
+  const dialogRef = useFocusTrap<HTMLDivElement>(onClose);
 
   return (
     <div
@@ -664,12 +666,16 @@ export function ImportDialog({
       onMouseDown={onClose}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="import-dialog-title"
         className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-xl"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-          <h2 className="text-lg font-semibold text-slate-900">
+          <h2 id="import-dialog-title" className="text-lg font-semibold text-slate-900">
             {stage === "upload" && "Import banks & accounts"}
             {stage === "review" && `Review ${review.length} bank${review.length === 1 ? "" : "s"}`}
             {stage === "done" && "Import complete"}
@@ -677,7 +683,7 @@ export function ImportDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            className="rounded-lg p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-600"
           >
             <X className="h-5 w-5" />
           </button>
@@ -698,7 +704,7 @@ export function ImportDialog({
               <button
                 type="button"
                 onClick={() => downloadImportTemplate()}
-                className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-amber-600 hover:underline"
+                className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-amber-700 hover:underline"
               >
                 <Download className="h-4 w-4" />
                 Download a template
@@ -706,7 +712,7 @@ export function ImportDialog({
               <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 px-4 py-8 text-center hover:border-amber-400 hover:bg-amber-50/40">
                 <UploadCloud className="h-7 w-7 text-slate-400" />
                 <span className="text-sm font-medium text-slate-700">Choose a file</span>
-                <span className="text-xs text-slate-400">.xlsx, .xls or .csv</span>
+                <span className="text-xs text-slate-600">.xlsx, .xls or .csv</span>
                 <input
                   type="file"
                   accept=".xlsx,.xls,.csv"
@@ -792,17 +798,17 @@ export function ImportDialog({
                           {/* Confidence label */}
                           <div className="mt-1 flex flex-wrap items-center gap-1">
                             {entry.confidence === "exact" && (
-                              <span className="flex items-center gap-1 text-xs text-emerald-600">
+                              <span className="flex items-center gap-1 text-xs text-emerald-700">
                                 <Check className="h-3 w-3" /> {CONF_LABELS.exact}
                               </span>
                             )}
                             {entry.confidence === "fuzzy" && (
-                              <span className="flex items-center gap-1 text-xs text-amber-600">
+                              <span className="flex items-center gap-1 text-xs text-amber-700">
                                 <AlertTriangle className="h-3 w-3" /> {CONF_LABELS.fuzzy} — verify the match
                               </span>
                             )}
                             {entry.confidence === "none" && entry.selectedId === CREATE_NEW && (
-                              <span className="flex items-center gap-1 text-xs text-slate-400">
+                              <span className="flex items-center gap-1 text-xs text-slate-600">
                                 <Plus className="h-3 w-3" /> Will be added as a new bank
                               </span>
                             )}
@@ -824,7 +830,7 @@ export function ImportDialog({
                                 </div>
                               )}
                               {notes.map((n, ni) => (
-                                <p key={ni} className="text-[10px] italic text-slate-400">
+                                <p key={ni} className="text-[10px] italic text-slate-600">
                                   📝 {n}
                                 </p>
                               ))}
@@ -941,7 +947,7 @@ export function ImportDialog({
                 type="button"
                 onClick={handleImport}
                 disabled={isPending}
-                className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
+                className="flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-60"
               >
                 {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Import {review.length} bank{review.length === 1 ? "" : "s"}

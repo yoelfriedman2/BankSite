@@ -39,6 +39,7 @@ import { ActivityDot } from "@/components/badges";
 import { AccountModal } from "@/components/AccountModal";
 import { AccountViewModal } from "@/components/AccountViewModal";
 import { ImportDialog } from "@/components/ImportDialog";
+import { FocusTrapPanel } from "@/components/FocusTrapPanel";
 import { logActivityToday } from "@/app/(app)/accounts/actions";
 
 type BankRef = { id: string; name: string; cert: number | null };
@@ -287,7 +288,7 @@ function QuickLogButton({
       </button>
       {open && (
         <div className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
-          <p className="px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-slate-400">
+          <p className="px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-slate-600">
             Log today as…
           </p>
           {(Object.keys(ACTIVITY_TYPE_LABELS) as ActivityType[]).map((t) => (
@@ -309,7 +310,7 @@ function QuickLogButton({
               setOpen(false);
               onLog(null);
             }}
-            className="block w-full border-t border-slate-100 px-3 py-1.5 text-left text-sm text-slate-400 hover:bg-slate-50"
+            className="block w-full border-t border-slate-100 px-3 py-1.5 text-left text-sm text-slate-600 hover:bg-slate-50"
           >
             No type
           </button>
@@ -343,7 +344,7 @@ function CdMaturityCell({ account }: { account: AccountRow }) {
     ? "bg-amber-400"
     : "bg-blue-400";
 
-  const textColor = matured ? "text-slate-400" : days <= 30 ? "text-rose-600 font-medium" : days <= 90 ? "text-amber-700 font-medium" : "text-slate-600";
+  const textColor = matured ? "text-slate-600" : days <= 30 ? "text-rose-600 font-medium" : days <= 90 ? "text-amber-700 font-medium" : "text-slate-600";
 
   return (
     <div className="min-w-[9rem]">
@@ -356,7 +357,7 @@ function CdMaturityCell({ account }: { account: AccountRow }) {
             <span className={`text-xs tabular-nums ${textColor}`}>
               {formatDateShort(cd_maturity_date)}
             </span>
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-slate-600">
               {matured ? "Matured" : `${days}d left`}
             </span>
           </div>
@@ -365,7 +366,7 @@ function CdMaturityCell({ account }: { account: AccountRow }) {
       {pct === null && (
         <div>
           <div className={`text-sm tabular-nums ${textColor}`}>{formatDateShort(cd_maturity_date)}</div>
-          <div className="text-xs text-slate-400">{matured ? "Matured" : `${days}d left`}</div>
+          <div className="text-xs text-slate-600">{matured ? "Matured" : `${days}d left`}</div>
         </div>
       )}
     </div>
@@ -553,7 +554,7 @@ export function AccountsClient({
                 <span className="font-semibold text-slate-900">
                   {formatCurrency(v.total)}
                 </span>{" "}
-                <span className="text-slate-400">· {v.count}</span>
+                <span className="text-slate-600">· {v.count}</span>
               </p>
             </div>
           ))}
@@ -577,7 +578,7 @@ export function AccountsClient({
         >
           <AlertTriangle className="h-4 w-4" />
           Needs attention
-          <span className={attentionOnly ? "text-amber-500" : "text-slate-400"}>
+          <span className={attentionOnly ? "text-amber-500" : "text-slate-600"}>
             {attentionCount}
           </span>
         </button>
@@ -607,28 +608,32 @@ export function AccountsClient({
 
       {mobileFiltersOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 md:hidden">
-          <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white p-4">
+          <FocusTrapPanel
+            onClose={() => setMobileFiltersOpen(false)}
+            labelledBy="accounts-mobile-filters-title"
+            className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white p-4"
+          >
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-slate-900">Filters &amp; sort</h2>
-              <button type="button" onClick={() => setMobileFiltersOpen(false)} className="p-1 text-slate-400">
+              <h2 id="accounts-mobile-filters-title" className="text-base font-semibold text-slate-900">Filters &amp; sort</h2>
+              <button type="button" onClick={() => setMobileFiltersOpen(false)} className="p-1 text-slate-600">
                 <X className="h-5 w-5" />
               </button>
             </div>
             <div className="space-y-4">
               <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Type</p>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600">Type</p>
                 <div className="rounded-lg border border-slate-200 py-1">
                   <TypeFilterOptions value={typeFilter} onChange={setTypeFilter} />
                 </div>
               </div>
               <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Holder</p>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600">Holder</p>
                 <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-200 py-1">
                   <HolderFilterOptions value={holderFilter} onChange={setHolderFilter} holders={knownHolders} />
                 </div>
               </div>
               <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Sort by</p>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600">Sort by</p>
                 <div className="flex gap-2">
                   <select
                     value={sortBy}
@@ -660,18 +665,18 @@ export function AccountsClient({
             <button
               type="button"
               onClick={() => setMobileFiltersOpen(false)}
-              className="mt-5 w-full rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
+              className="mt-5 w-full rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
             >
               Show {filtered.length} {filtered.length === 1 ? "account" : "accounts"}
             </button>
-          </div>
+          </FocusTrapPanel>
         </div>
       )}
 
       {/* Mobile cards */}
       <div className="space-y-2 md:hidden">
         {filtered.length === 0 ? (
-          <p className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center text-slate-400">
+          <p className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center text-slate-600">
             {rows.length === 0
               ? "No accounts yet. Open a bank to add one."
               : "No accounts match your filters."}
@@ -706,7 +711,7 @@ export function AccountsClient({
                       e.stopPropagation();
                       setEditing(r);
                     }}
-                    className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                    className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-700"
                     title="Edit"
                   >
                     <Pencil className="h-4 w-4" />
@@ -724,7 +729,7 @@ export function AccountsClient({
                   </span>
                 </div>
                 {r.account_number && (
-                  <div className="mt-0.5 text-xs text-slate-400">
+                  <div className="mt-0.5 text-xs text-slate-600">
                     {maskAccountNumber(r.account_number)}
                   </div>
                 )}
@@ -777,7 +782,7 @@ export function AccountsClient({
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
+                <td colSpan={8} className="px-4 py-12 text-center text-slate-600">
                   {rows.length === 0
                     ? "No accounts yet. Open a bank to add one."
                     : "No accounts match your filters."}
@@ -796,7 +801,7 @@ export function AccountsClient({
                     <td className="px-4 py-3">
                       <div className="font-medium text-slate-900">{r.bankName}</div>
                       {r.bankState && (
-                        <div className="text-xs text-slate-400">{r.bankState}</div>
+                        <div className="text-xs text-slate-600">{r.bankState}</div>
                       )}
                       <AttentionBubble reasons={reasons} />
                     </td>
@@ -831,7 +836,7 @@ export function AccountsClient({
                               <ActivityDot level={level} />
                               <div>
                                 <div className="text-sm text-slate-700">{formatDateShort(activityDate)}</div>
-                                <div className="text-xs text-slate-400">
+                                <div className="text-xs text-slate-600">
                                   {mo === 0 ? "This month" : `${mo} mo ago`}
                                   {fromOpen && <span className="ml-1 text-slate-300">· opened</span>}
                                 </div>
@@ -864,7 +869,7 @@ export function AccountsClient({
                             e.stopPropagation();
                             setEditing(r);
                           }}
-                          className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                          className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-700"
                           title="Edit"
                         >
                           <Pencil className="h-4 w-4" />

@@ -115,7 +115,7 @@ export function BalancesClient({
       </div>
 
       <div className="mb-3 flex items-center justify-between text-sm">
-        <span className="text-slate-400">
+        <span className="text-slate-600">
           {recorded} of {filtered.length} account{filtered.length === 1 ? "" : "s"} have a recorded balance on this date
         </span>
         <span className="text-slate-500">
@@ -136,7 +136,7 @@ export function BalancesClient({
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-12 text-center text-slate-400">
+                <td colSpan={4} className="px-4 py-12 text-center text-slate-600">
                   {rows.length === 0 ? "No accounts yet." : "No accounts match your filters."}
                 </td>
               </tr>
@@ -145,7 +145,7 @@ export function BalancesClient({
                 <tr key={r.accountId} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70">
                   <td className="px-4 py-3">
                     <div className="font-medium text-slate-900">{r.bankName}</div>
-                    {r.bankState && <div className="text-xs text-slate-400">{r.bankState}</div>}
+                    {r.bankState && <div className="text-xs text-slate-600">{r.bankState}</div>}
                   </td>
                   <td className="px-4 py-3 text-slate-600">
                     {r.holder || <span className="text-slate-300">—</span>}

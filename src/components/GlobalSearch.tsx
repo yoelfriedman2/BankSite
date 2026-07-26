@@ -55,16 +55,16 @@ export function GlobalSearch() {
       {open && q.trim().length >= 2 && (
         <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
           {loading && (
-            <div className="px-3 py-2 text-sm text-slate-400">Searching…</div>
+            <div className="px-3 py-2 text-sm text-slate-600">Searching…</div>
           )}
           {!loading && !hasResults && (
-            <div className="px-3 py-2 text-sm text-slate-400">No matches</div>
+            <div className="px-3 py-2 text-sm text-slate-600">No matches</div>
           )}
           {!loading && hasResults && (
             <div className="max-h-80 overflow-y-auto py-1">
               {results!.banks.length > 0 && (
                 <>
-                  <div className="px-3 pb-0.5 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  <div className="px-3 pb-0.5 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                     Banks
                   </div>
                   {results!.banks.map((b) => (
@@ -76,7 +76,7 @@ export function GlobalSearch() {
                     >
                       {b.name}
                       {b.state ? (
-                        <span className="text-slate-400"> · {b.state}</span>
+                        <span className="text-slate-600"> · {b.state}</span>
                       ) : null}
                     </Link>
                   ))}
@@ -84,7 +84,7 @@ export function GlobalSearch() {
               )}
               {results!.accounts.length > 0 && (
                 <>
-                  <div className="px-3 pb-0.5 pt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  <div className="px-3 pb-0.5 pt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                     Accounts
                   </div>
                   {results!.accounts.map((a) => (
@@ -95,7 +95,7 @@ export function GlobalSearch() {
                       className="block truncate px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
                     >
                       {a.holder || "—"}
-                      <span className="text-slate-400"> · {a.bankName}</span>
+                      <span className="text-slate-600"> · {a.bankName}</span>
                     </Link>
                   ))}
                 </>

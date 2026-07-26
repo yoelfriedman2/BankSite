@@ -62,14 +62,14 @@ export function WelcomeForm({
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
-            <p className="mt-1.5 text-xs text-slate-400">
+            <p className="mt-1.5 text-xs text-slate-600">
               This is how you&apos;ll appear to your team on shared notes. You can change
               it later in Settings.
             </p>
           </div>
 
           {email && (
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-600">
               Signed in as <span className="font-medium text-slate-500">{email}</span>
             </p>
           )}
@@ -81,7 +81,7 @@ export function WelcomeForm({
           <button
             type="submit"
             disabled={isPending}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-60"
           >
             {isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />

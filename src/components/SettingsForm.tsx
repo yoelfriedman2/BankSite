@@ -33,6 +33,7 @@ import {
 import { exportToExcel } from "@/lib/export";
 import { useToast } from "@/components/Toast";
 import { VaultEncryptionCard } from "@/components/VaultEncryptionCard";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -100,7 +101,7 @@ function ToggleRow({
           {icon}
           <span className="font-medium text-slate-700">{title}</span>
         </div>
-        <span className="block text-xs text-slate-400">{description}</span>
+        <span className="block text-xs text-slate-600">{description}</span>
         {children}
       </div>
     </label>
@@ -302,13 +303,13 @@ export function SettingsForm({
       <button
         type="submit"
         disabled={isPending}
-        className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
+        className="flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-60"
       >
         {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
         Save settings
       </button>
       {saved && (
-        <span className="flex items-center gap-1 text-sm text-emerald-600">
+        <span className="flex items-center gap-1 text-sm text-emerald-700">
           <Check className="h-4 w-4" />
           Saved
         </span>
@@ -355,7 +356,7 @@ export function SettingsForm({
                   disabled
                 />
                 {lastSignInAt && (
-                  <p className="mt-1 text-xs text-slate-400">
+                  <p className="mt-1 text-xs text-slate-600">
                     Last signed in:{" "}
                     {new Date(lastSignInAt).toLocaleString("en-US", {
                       month: "short",
@@ -398,7 +399,7 @@ export function SettingsForm({
                   <button
                     type="button"
                     onClick={() => removeHolder(i)}
-                    className="shrink-0 rounded-lg border border-slate-200 px-2.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                    className="shrink-0 rounded-lg border border-slate-200 px-2.5 text-slate-600 hover:bg-rose-50 hover:text-rose-600"
                     title="Remove"
                   >
                     <X className="h-4 w-4" />
@@ -441,9 +442,9 @@ export function SettingsForm({
                   value={months}
                   onChange={(e) => setMonths(e.target.value)}
                 />
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1 text-xs text-slate-600">
                   Accounts turn{" "}
-                  <span className="font-medium text-amber-600">orange</span> ~3 months
+                  <span className="font-medium text-amber-700">orange</span> ~3 months
                   before this window and{" "}
                   <span className="font-medium text-rose-600">red</span> in the final
                   month.
@@ -509,7 +510,7 @@ export function SettingsForm({
                     Account inactivity reminders
                   </span>
                 </div>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-600">
                   Get an email when an account has had no activity for each threshold
                   below. Default is 9 and 12 months.
                 </p>
@@ -530,7 +531,7 @@ export function SettingsForm({
                     </span>
                   ))}
                   {reminderMonths.length === 0 && (
-                    <span className="text-xs text-slate-400">No thresholds — add one below.</span>
+                    <span className="text-xs text-slate-600">No thresholds — add one below.</span>
                   )}
                 </div>
                 <div className="flex gap-2 pt-1">
@@ -592,7 +593,7 @@ export function SettingsForm({
               <Download className="h-4 w-4" />
               Download full backup
             </a>
-            <p className="mt-2 text-xs text-slate-400">
+            <p className="mt-2 text-xs text-slate-600">
               Large document libraries may take a few seconds to bundle.
             </p>
           </Card>
@@ -624,7 +625,7 @@ export function SettingsForm({
             {deleteError && !deleteOpen && (
               <p className="mt-2 text-xs text-rose-600">{deleteError}</p>
             )}
-            <p className="mt-2 text-xs text-slate-400">
+            <p className="mt-2 text-xs text-slate-600">
               Your export contains only your own data — never other users&apos;.
             </p>
           </Card>
@@ -677,13 +678,13 @@ export function SettingsForm({
                 type="button"
                 onClick={handleSendFeedback}
                 disabled={feedbackSending || !feedback.trim()}
-                className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
+                className="flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-60"
               >
                 {feedbackSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 Send feedback
               </button>
               {feedbackSent && (
-                <span className="flex items-center gap-1 text-sm text-emerald-600">
+                <span className="flex items-center gap-1 text-sm text-emerald-700">
                   <Check className="h-4 w-4" />
                   Sent — thank you!
                 </span>
@@ -715,76 +716,120 @@ export function SettingsForm({
       )}
 
       {deleteOpen && (
-        <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/50 p-4"
-          onMouseDown={closeDelete}
-        >
-          <div
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="mb-1 flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-rose-500" />
-              <h3 className="text-base font-semibold text-slate-900">Delete your account?</h3>
-            </div>
-            <p className="mt-1 text-sm text-slate-500">
-              This permanently removes your banks, accounts, balances, documents, and
-              history. It cannot be undone. We recommend exporting a copy first.
-            </p>
-
-            <button
-              type="button"
-              onClick={handleExportData}
-              disabled={exporting}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
-            >
-              {exporting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : exported ? (
-                <Check className="h-4 w-4 text-emerald-600" />
-              ) : (
-                <Download className="h-4 w-4" />
-              )}
-              {exported ? "Data exported" : "Export my data first"}
-            </button>
-
-            <label className="mt-5 block text-xs font-medium text-slate-500">
-              Type <span className="font-bold text-rose-600">DELETE</span> to confirm
-            </label>
-            <input
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-              placeholder="DELETE"
-              autoComplete="off"
-            />
-
-            {deleteError && (
-              <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{deleteError}</p>
-            )}
-
-            <div className="mt-5 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={closeDelete}
-                disabled={deleting}
-                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteAccount}
-                disabled={deleting || confirmText !== "DELETE"}
-                className="flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
-              >
-                {deleting && <Loader2 className="h-4 w-4 animate-spin" />}
-                Delete permanently
-              </button>
-            </div>
-          </div>
-        </div>
+        <DeleteAccountModal
+          confirmText={confirmText}
+          setConfirmText={setConfirmText}
+          exporting={exporting}
+          exported={exported}
+          deleting={deleting}
+          deleteError={deleteError}
+          closeDelete={closeDelete}
+          handleExportData={handleExportData}
+          handleDeleteAccount={handleDeleteAccount}
+        />
       )}
+    </div>
+  );
+}
+
+/** Split out from SettingsForm so this only mounts (and traps focus) for the
+ *  dialog's actual on-screen lifetime — a hook can't be called conditionally
+ *  inside the parent's own `{deleteOpen && (...)}` block (UX-01). */
+function DeleteAccountModal({
+  confirmText,
+  setConfirmText,
+  exporting,
+  exported,
+  deleting,
+  deleteError,
+  closeDelete,
+  handleExportData,
+  handleDeleteAccount,
+}: {
+  confirmText: string;
+  setConfirmText: (v: string) => void;
+  exporting: boolean;
+  exported: boolean;
+  deleting: boolean;
+  deleteError: string | null;
+  closeDelete: () => void;
+  handleExportData: () => void;
+  handleDeleteAccount: () => void;
+}) {
+  const dialogRef = useFocusTrap<HTMLDivElement>(closeDelete);
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/50 p-4"
+      onMouseDown={closeDelete}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-account-modal-title"
+        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="mb-1 flex items-center gap-2">
+          <AlertTriangle className="h-5 w-5 text-rose-500" />
+          <h3 id="delete-account-modal-title" className="text-base font-semibold text-slate-900">Delete your account?</h3>
+        </div>
+        <p className="mt-1 text-sm text-slate-500">
+          This permanently removes your banks, accounts, balances, documents, and
+          history. It cannot be undone. We recommend exporting a copy first.
+        </p>
+
+        <button
+          type="button"
+          onClick={handleExportData}
+          disabled={exporting}
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+        >
+          {exporting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : exported ? (
+            <Check className="h-4 w-4 text-emerald-600" />
+          ) : (
+            <Download className="h-4 w-4" />
+          )}
+          {exported ? "Data exported" : "Export my data first"}
+        </button>
+
+        <label className="mt-5 block text-xs font-medium text-slate-500">
+          Type <span className="font-bold text-rose-600">DELETE</span> to confirm
+        </label>
+        <input
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          placeholder="DELETE"
+          autoComplete="off"
+        />
+
+        {deleteError && (
+          <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{deleteError}</p>
+        )}
+
+        <div className="mt-5 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={closeDelete}
+            disabled={deleting}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleDeleteAccount}
+            disabled={deleting || confirmText !== "DELETE"}
+            className="flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+          >
+            {deleting && <Loader2 className="h-4 w-4 animate-spin" />}
+            Delete permanently
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

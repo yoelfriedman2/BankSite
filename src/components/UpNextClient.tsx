@@ -22,7 +22,7 @@ function InfoLine({ bank }: { bank: QueueBank }) {
   }
   if (bank.eligibility) parts.push(ELIGIBILITY_LABELS[bank.eligibility]);
   if (bank.min_to_open != null) parts.push(`${formatCurrency(bank.min_to_open)} min`);
-  if (parts.length === 0) return <span className="text-slate-400">How to open — not filled in yet</span>;
+  if (parts.length === 0) return <span className="text-slate-600">How to open — not filled in yet</span>;
   return <>{parts.join(" · ")}</>;
 }
 
@@ -40,7 +40,7 @@ function ContactLinks({ bank }: { bank: QueueBank }) {
           href={withScheme(bank.website)}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 hover:underline"
+          className="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-700 hover:underline"
         >
           <Globe className="h-3.5 w-3.5" />
           Site
@@ -79,7 +79,7 @@ export function UpNextClient({ data }: { data: UpNextData }) {
           </p>
         </div>
         {data.queued.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-slate-400">
+          <p className="px-5 py-8 text-center text-sm text-slate-600">
             Nothing queued yet — add a few banks from Suggested below.
           </p>
         ) : (
@@ -95,7 +95,7 @@ export function UpNextClient({ data }: { data: UpNextData }) {
                 <div className="min-w-0 flex-1">
                   <p className="flex flex-wrap items-center gap-1.5 font-medium text-slate-900">
                     <span className="truncate">{bank.name}</span>
-                    {bank.state && <span className="font-normal text-slate-400">· {bank.state}</span>}
+                    {bank.state && <span className="font-normal text-slate-600">· {bank.state}</span>}
                     <StatusBadge status={bank.status} />
                     <PriorityBadge priority={bank.priority} />
                   </p>
@@ -137,7 +137,7 @@ export function UpNextClient({ data }: { data: UpNextData }) {
                     disabled={pending === bank.id}
                     title="Remove from queue"
                     onClick={() => run(bank.id, () => removeFromQueue(bank.id))}
-                    className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                    className="rounded p-1 text-slate-600 hover:bg-rose-50 hover:text-rose-600"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -163,7 +163,7 @@ export function UpNextClient({ data }: { data: UpNextData }) {
                 <div className="min-w-0 flex-1">
                   <p className="flex flex-wrap items-center gap-1.5 font-medium text-slate-900">
                     <span className="truncate">{bank.name}</span>
-                    {bank.state && <span className="font-normal text-slate-400">· {bank.state}</span>}
+                    {bank.state && <span className="font-normal text-slate-600">· {bank.state}</span>}
                     <PriorityBadge priority={bank.priority} />
                   </p>
                   {bank.notes && <p className="mt-0.5 truncate text-sm text-slate-500">{bank.notes}</p>}
@@ -194,7 +194,7 @@ export function UpNextClient({ data }: { data: UpNextData }) {
           </p>
         </div>
         {data.suggested.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-slate-400">
+          <p className="px-5 py-8 text-center text-sm text-slate-600">
             {data.suggestedTotal === 0
               ? "No banks left to suggest — nice work."
               : "Nothing to suggest right now."}
@@ -210,7 +210,7 @@ export function UpNextClient({ data }: { data: UpNextData }) {
                   <div className="min-w-0 flex-1">
                     <p className="flex flex-wrap items-center gap-1.5 font-medium text-slate-900">
                       <span className="truncate">{bank.name}</span>
-                      {bank.state && <span className="font-normal text-slate-400">· {bank.state}</span>}
+                      {bank.state && <span className="font-normal text-slate-600">· {bank.state}</span>}
                       <StatusBadge status={bank.status} />
                       <PriorityBadge priority={bank.priority} />
                     </p>
@@ -232,7 +232,7 @@ export function UpNextClient({ data }: { data: UpNextData }) {
                     type="button"
                     disabled={pending === bank.id}
                     onClick={() => run(bank.id, () => addToQueue(bank.id))}
-                    className="flex shrink-0 items-center gap-1 rounded-lg bg-amber-500 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+                    className="flex shrink-0 items-center gap-1 rounded-lg bg-amber-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Queue
@@ -244,7 +244,7 @@ export function UpNextClient({ data }: { data: UpNextData }) {
               <div className="border-t border-slate-100 px-5 py-3 text-center">
                 <Link
                   href="/up-next?all=1"
-                  className="text-sm font-medium text-amber-600 hover:underline"
+                  className="text-sm font-medium text-amber-700 hover:underline"
                 >
                   Show all {data.suggestedTotal} banks
                 </Link>

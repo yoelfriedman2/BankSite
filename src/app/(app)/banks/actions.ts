@@ -8,6 +8,7 @@ import { formatAssets } from "@/lib/format";
 import { sendCommunityNoteEmail } from "@/lib/email";
 import { logAudit, type AuditEntry } from "@/lib/audit";
 import { friendlyDbError } from "@/lib/friendlyError";
+import { fetchAllRows } from "@/lib/pagination";
 import type { User } from "@supabase/supabase-js";
 import {
   DEMO_MODE,
@@ -1784,12 +1785,19 @@ export async function getAllBankComments(): Promise<CommentExportRow[]> {
   if (!user) return [];
 
   const admin = createAdminClient();
-  const { data: comments } = await admin
-    .from("bank_comments")
-    .select("cert, author_name, body, created_at")
-    .order("cert")
-    .order("created_at", { ascending: true });
-  if (!comments?.length) return [];
+  // Paginated past PostgREST's default 1000-row cap (DATA-18) — this is every
+  // note from every user across every shared bank, the table in this app
+  // most likely to actually cross that threshold over time.
+  type CommentRow = { cert: number; author_name: string | null; body: string; created_at: string };
+  const { rows: comments } = await fetchAllRows<CommentRow>((from, to) =>
+    admin
+      .from("bank_comments")
+      .select("cert, author_name, body, created_at")
+      .order("cert")
+      .order("created_at", { ascending: true })
+      .range(from, to),
+  );
+  if (!comments.length) return [];
 
   const certs = [...new Set(comments.map((c) => c.cert as number))];
   const { data: banks } = await admin

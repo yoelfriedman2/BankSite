@@ -5,6 +5,9 @@ import "server-only";
 import * as XLSX from "xlsx";
 import JSZip from "jszip";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchAllRows } from "@/lib/pagination";
+
+export { fetchAllRows };
 
 const TABLES = [
   "profiles",
@@ -32,25 +35,6 @@ const TABLES = [
 ];
 
 type Row = Record<string, unknown>;
-
-/** Pages through a Supabase query past the default 1000-row PostgREST page
- *  cap by repeatedly appending .range() — shared by every full-table-or-
- *  filtered-query dump in this app (the weekly admin backup here, and the
- *  personal "Full backup" export in api/export/full/route.ts) so neither one
- *  can silently truncate once a table grows past one page (DATA-06). */
-export async function fetchAllRows<T>(
-  buildPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
-): Promise<{ rows: T[]; error?: string }> {
-  const rows: T[] = [];
-  const PAGE = 1000;
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await buildPage(from, from + PAGE - 1);
-    if (error) return { rows, error: error.message };
-    rows.push(...(data ?? []));
-    if (!data || data.length < PAGE) break;
-  }
-  return { rows: rows as T[] };
-}
 
 /** Reads a whole table past the 1000-row PostgREST page cap. */
 async function dumpTable(

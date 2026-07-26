@@ -38,7 +38,10 @@ async function reencryptAll(key: CryptoKey): Promise<number> {
       access_notes: needsEnc(r.access_notes) ? await encryptVaultField(key, r.access_notes as string) : r.access_notes,
     });
   }
-  if (updates.length) await updateAccountVaultFields(updates);
+  if (updates.length) {
+    const res = await updateAccountVaultFields(updates);
+    if (res.error) throw new Error(res.error);
+  }
   return updates.length;
 }
 
@@ -55,7 +58,10 @@ async function decryptAll(key: CryptoKey): Promise<void> {
       updates.push({ id: r.id, username: u, password: p, access_notes: n });
     }
   }
-  if (updates.length) await updateAccountVaultFields(updates);
+  if (updates.length) {
+    const res = await updateAccountVaultFields(updates);
+    if (res.error) throw new Error(res.error);
+  }
 }
 
 export function VaultEncryptionCard({ enabled }: { enabled: boolean }) {
@@ -154,10 +160,15 @@ export function VaultEncryptionCard({ enabled }: { enabled: boolean }) {
     if (!vault.unlocked || !vault.key) return;
     setError(null);
     startTransition(async () => {
-      setBusyLabel("Checking for unprotected logins…");
-      const n = await reencryptAll(vault.key!);
-      toast.success(n > 0 ? `Encrypted ${n} login${n === 1 ? "" : "s"} that weren't protected yet.` : "Everything is already encrypted.");
-      setBusyLabel(null);
+      try {
+        setBusyLabel("Checking for unprotected logins…");
+        const n = await reencryptAll(vault.key!);
+        toast.success(n > 0 ? `Encrypted ${n} login${n === 1 ? "" : "s"} that weren't protected yet.` : "Everything is already encrypted.");
+      } catch {
+        setError("Something went wrong encrypting your logins. Try again.");
+      } finally {
+        setBusyLabel(null);
+      }
     });
   }
 
@@ -275,7 +286,7 @@ export function VaultEncryptionCard({ enabled }: { enabled: boolean }) {
               type="button"
               onClick={handleEnable}
               disabled={isPending || !pw1 || !pw2}
-              className="flex items-center gap-2 rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
+              className="flex items-center gap-2 rounded-lg bg-amber-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-60"
             >
               {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Enable encryption
@@ -306,7 +317,7 @@ export function VaultEncryptionCard({ enabled }: { enabled: boolean }) {
                 type="button"
                 onClick={handleUnlock}
                 disabled={isPending || !unlockPw}
-                className="flex shrink-0 items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
+                className="flex shrink-0 items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-60"
               >
                 {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Unlock

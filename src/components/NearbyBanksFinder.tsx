@@ -73,9 +73,9 @@ export function NearbyBanksFinder({ banks }: { banks: RoadTripBank[] }) {
                 <li key={bank.id} className="rounded-lg border border-slate-100 px-3 py-2 text-sm">
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="min-w-0 truncate font-medium text-slate-800">{bank.name}</span>
-                    <span className="shrink-0 text-xs font-semibold text-emerald-600">{miles.toFixed(1)} mi</span>
+                    <span className="shrink-0 text-xs font-semibold text-emerald-700">{miles.toFixed(1)} mi</span>
                   </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-400">
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-600">
                     {branch.address && (
                       <span className="flex min-w-0 items-center gap-1">
                         <MapPin className="h-3 w-3 shrink-0" />
@@ -103,7 +103,7 @@ export function NearbyBanksFinder({ banks }: { banks: RoadTripBank[] }) {
                 </li>
               ))}
               {results.length === 0 && (
-                <li className="px-3 py-6 text-center text-xs text-slate-400">No tracked banks found.</li>
+                <li className="px-3 py-6 text-center text-xs text-slate-600">No tracked banks found.</li>
               )}
             </ul>
           )}

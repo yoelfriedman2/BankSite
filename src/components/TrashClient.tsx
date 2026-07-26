@@ -103,14 +103,14 @@ export function TrashClient({ banks, accounts }: Props) {
       {empty ? (
         <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-16 text-center">
           <Trash2 className="mx-auto mb-3 h-8 w-8 text-slate-300" />
-          <p className="text-slate-400">Trash is empty.</p>
+          <p className="text-slate-600">Trash is empty.</p>
         </div>
       ) : (
         <div className="space-y-6">
           {/* Trashed banks */}
           {banks.length > 0 && (
             <section>
-              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
                 Banks ({banks.length})
               </h2>
               <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
@@ -135,7 +135,7 @@ export function TrashClient({ banks, accounts }: Props) {
                             {b.name}
                           </span>
                           {b.cert && (
-                            <span className="ml-2 text-xs text-slate-400">
+                            <span className="ml-2 text-xs text-slate-600">
                               #{b.cert}
                             </span>
                           )}
@@ -146,7 +146,7 @@ export function TrashClient({ banks, accounts }: Props) {
                         <td className="px-4 py-3 text-slate-500">
                           {b.accountCount > 0 ? b.accountCount : "—"}
                         </td>
-                        <td className="px-4 py-3 text-slate-400">
+                        <td className="px-4 py-3 text-slate-600">
                           {b.deleted_at
                             ? formatDate(b.deleted_at.slice(0, 10))
                             : "—"}
@@ -188,7 +188,7 @@ export function TrashClient({ banks, accounts }: Props) {
           {/* Trashed accounts */}
           {accounts.length > 0 && (
             <section>
-              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
                 Accounts ({accounts.length})
               </h2>
               <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
@@ -217,7 +217,7 @@ export function TrashClient({ banks, accounts }: Props) {
                         <td className="px-4 py-3 text-slate-500">
                           {a.account_type ? ACCOUNT_TYPE_LABELS[a.account_type] : "—"}
                         </td>
-                        <td className="px-4 py-3 text-slate-400">
+                        <td className="px-4 py-3 text-slate-600">
                           {a.deleted_at
                             ? formatDate(a.deleted_at.slice(0, 10))
                             : "—"}

@@ -51,17 +51,17 @@ decision or bigger effort before it can be safely fixed
 - [ ] DATA-15 — Public road-trip plans can expose private locations
 - [x] DATA-16 — Audit log doesn't check insert errors — fixed: `logAudit` now checks the insert's own `{ error }` result (not just thrown exceptions) and logs it, so a failed audit write leaves a trace instead of vanishing silently.
 - [x] DATA-17 — Document metadata/storage can desync — fixed: `documents.ts#deleteDocument` deleted the `account_documents` metadata row FIRST, then removed the storage file LAST with no error check — a failed (silently ignored) storage removal left an orphaned file with nothing left pointing to it, forever. Reordered so the storage file is removed (and its error checked) before the metadata row is deleted — a storage-removal failure now leaves the row in place (with its correct path) so the delete can simply be retried, instead of silently reporting "deleted" while the real file lingers unreachable.
-- [ ] DATA-18 — Unpaginated reads silently truncate data
-- [ ] DATA-19 — Missing affected-row/value validation
+- [x] DATA-18 — Unpaginated reads silently truncate data — fixed the concrete instances found, not a full re-audit of every query in the app: the personal export (DATA-06) and weekly backup (REL-03) were already paginated past PostgREST's default 1000-row cap, but the same pattern hadn't been applied to the pages/actions that read the same tables day-to-day. Extracted the shared `fetchAllRows()` helper out of `lib/backup.ts` into a new dependency-free `lib/pagination.ts` (so pages/actions don't need to pull in `lib/backup.ts`'s xlsx/JSZip baggage just to paginate a query) and applied it to: the Banks and Accounts pages' own `banks`/`accounts` reads, the dashboard, Calendar, Fees & interest, and Print Checks pages, Settings' "export before delete" quick-export, `getAllBankComments` (every community note across every user), and the admin Users page's cross-user tallies (`profiles`/`accounts`/`account_documents`/`bank_comments`/`banks`, summed across the whole family, not just one user — the closest-to-real risk found, since it's the one place that adds counts across everyone at once). Banks/user is seeded at ~426, comfortably under the cap today, but not with much margin as data grows — this is prevention, not a fix for an already-reproduced truncation.
+- [x] DATA-19 — Missing affected-row/value validation — fixed the 2 concrete gaps found (the other cases this finding originally described — `completeOnboarding`/`requestAccess`/`setAccessStatus`, the FDIC-closed-bank count check, permanent-delete — were already fixed in earlier rounds via INT-10/DATA-07/DATA-21): `setFdicAdminRole` (grants/revokes the FDIC-sync admin role) and `updateAccountVaultFields` (the bulk re-encrypt/decrypt write when toggling vault encryption) both did `.update()` with no `.select()` check that a row actually matched, same false-success shape already fixed elsewhere. Both now check the affected row and return an error otherwise, matching `setAccessStatus`'s established pattern. `updateAccountVaultFields`'s two real callers (`VaultEncryptionCard.tsx`'s `reencryptAll`/`decryptAll`) were previously discarding its result entirely — now they throw on error so the existing try/catch (or a newly-added one, for the "Encrypt any unprotected logins" button, which had none) surfaces it instead of silently doing nothing.
 - [x] DATA-20 — Activity log read-modify-write loses concurrent entries — fixed: `logActivityToday` read `accounts.activity_log`, appended one entry in JS, and wrote the whole array back — a classic read-modify-write race where two near-simultaneous quick-log clicks (two tabs, a slow retry) could silently drop one entry. New `append_activity_log` function (same migration 0044 as DATA-14) does the read+append+write inside one locked row read, so two concurrent calls can't stomp each other. Falls back to the original two-step behavior if the migration hasn't run yet.
 - [x] DATA-21 — Permanent delete bypasses Trash state requirement — fixed: `permanentlyDeleteBank`/`permanentlyDeleteAccount` now require the row to already be soft-deleted (`deleted_at is not null`) and check the actual affected row before reporting success, instead of hard-deleting an active bank/account on a direct/stale request.
-- [ ] DATA-22 — Comment/read-marker edge cases
+- [x] DATA-22 — Comment/read-marker edge cases — fixed the one real race found (deleted-author comments were already handled, via migration 0022's denormalized `author_name`): `BankForm.tsx`'s drawer-open effect stamped `last_read_at` to "now" and fired `markCommentsRead()` in parallel with fetching the comments themselves — a comment posted by someone else in the gap between the read-marker landing and the comments fetch actually running could get silently marked "read" without ever being included in what the user saw, purely by network-timing luck. Reordered so `markCommentsRead()` only fires after `getBankComments()` resolves, narrowing the race window from "however long the page's fetches take" down to the read-marker's own single round trip — can't be fully eliminated without a server-side "mark read as of the comments I actually returned" guarantee, but this closes the realistic exposure.
 
 ## Part 3 — UX / Accessibility (22)
 
-- [ ] UX-01 — Modals lack dialog focus behavior
+- [x] UX-01 — Modals lack dialog focus behavior — fixed: confirmed via a repo-wide grep that zero of the app's 14 modal/drawer-shaped overlays had `role="dialog"`, `aria-modal`, a Tab focus trap, Escape-to-close, or focus-return-on-close. New shared `lib/useFocusTrap.ts` hook (moves focus in on open, traps Tab at the subtree's boundaries, restores focus to the triggering element on close, calls `onClose` on Escape — guarded so a nested modal's Escape/Tab doesn't also fire an outer modal's handler, since both attach a document-level listener) plus a `components/FocusTrapPanel.tsx` thin wrapper for panels with too much existing local state to cleanly extract into their own component. Wired into all 14: AccountModal, AccountViewModal, BankForm's main drawer, BankForm's "let everyone know" prompt (extracted into its own component — a hook can't be called conditionally inside a parent's `{x && (...)}` block), CheckPrintModal, ImportDialog, IdleTimeout's warning dialog (same extraction reason — IdleTimeout itself stays mounted the whole session), AdminBackupsPanel's restore dialog, AdminUsersClient's delete-user dialog (same extraction reason), SettingsForm's delete-account dialog (same extraction reason), MoneyClient's new-move modal, the Banks and Accounts pages' mobile filter sheets (via FocusTrapPanel), and TopNav's mobile nav drawer (stays mounted and toggles via the existing UX-13 `inert`, so the hook gained an `active` parameter it re-runs on instead of only at mount).
 - [x] UX-02 — Inconsistent keyboard interaction on list cards — fixed: the Banks page's desktop table row's `onKeyDown` only handled Enter, while the equivalent mobile card handled both Enter and Space — added Space handling to the desktop row to match. Deliberately scoped to just the missing key (not also adding `role="button"` to fully mirror the mobile card's ARIA shape), to avoid changing table row semantics beyond the concrete gap found. Verified live via CDP: focusing a row and dispatching a Space keydown now opens the bank drawer, matching Enter's existing behavior.
-- [ ] UX-03 — Color contrast fails WCAG minimum (confirmed via exact math)
+- [x] UX-03 — Color contrast fails WCAG minimum (confirmed via exact math) — fixed all 4 audited combos, after showing the user a real before/after visual comparison so the color change itself (not just the accessibility rationale) was an informed decision: primary buttons (`bg-amber-500`, 2.15:1) → `amber-700` (5.02:1); links/icon text on white (`text-amber-600`, 3.19:1) → `amber-700`; secondary buttons/success-toast background (`bg-emerald-600`, 3.77:1) → `emerald-700` (5.48:1); muted text (`text-slate-400`, 2.56:1) → `slate-600` (7.58:1). Scope turned out much larger than the illustrative examples shown (265 raw `text-slate-400` occurrences alone) — went through each systematically rather than a blind find-replace: excluded icon-only/decorative uses (a darker icon isn't wrong, just unnecessary — WCAG's non-text 3:1 threshold was already met), disabled-control states (WCAG explicitly exempts these, and disabled controls are supposed to look de-emphasized), and — the one genuine correctness risk found — `SideNav.tsx`/`TopNav.tsx`'s nav links, which render light-gray text directly on a solid dark sidebar/drawer background, not white; darkening those would have made them nearly unreadable, the opposite of a fix. Confirmed via a repo-wide grep for every solid (non-transparent) dark background that this was the only such case. Every genuine white/light-background instance of `text-amber-600` and `text-emerald-600` also got the same treatment for consistency, including several the original 4-combo audit didn't specifically call out (same shades, same failing ratio, found while going through this).
 - [x] UX-04 — DateInput can silently discard input, unstyled in places — partially fixed (the 3 narrowest bugs): Enter committed the typed date but didn't `preventDefault()`, so a parent `<form>` could submit in the same event before the new value propagated — now prevented. Omitting `className` produced a borderless, unstyled field (2 call sites the audit named, plus 2 more found the same way) — `DateInput` now defaults to the app's standard input styling instead of empty. `AccountModal`'s balance field had a native `min="0"` that could fail HTML5 validation and block saving on an account a monthly fee had legitimately driven negative — removed. The silent-revert-on-invalid-input (no error state) and the hidden-fallback-picker parts of this finding are unaddressed.
 - [x] UX-05 — Import "Cancel" doesn't stop the server-side import — fixed the honest half of this finding, not full mid-flight cancellation (that isn't achievable — Server Actions have no cancellation token once invoked, and restructuring the import into a client-driven, resumable batch process to support real cancellation is a genuinely bigger architecture change, out of scope here). Confirmed `ImportDialog.tsx`'s Cancel button just called `onClose()` unconditionally — clicking it while `importBanks()` was still running closed the dialog while the import kept writing server-side, with the user having no idea "cancel" hadn't actually stopped anything. Now disabled (and relabeled "Importing…") while `isPending`, matching the identical `disabled={isPending}` pattern the dialog's own "← Change file" button already used — the UI can no longer imply an interruption that doesn't happen.
 - [x] UX-06 — Check printing allows invalid checks, hides failures — fixed: `CheckPrintModal.tsx`'s `handlePrint()` had zero validation (a blank payee or a $0/negative amount printed a real check onto real check stock) and hid its one real failure mode entirely (`if (!win) return;` when the browser blocks the print popup — nothing happened, no error, no explanation). Now blocks printing with a clear toast (`useToast`, the same pattern already used in `SettingsForm.tsx`) for an empty payee or a non-positive amount, and shows a toast instead of silently returning when `window.open` is blocked. Also surfaces a (non-blocking — the check is already printed by that point) toast if the best-effort check-log write fails, instead of swallowing it — careful to only treat a real `error` as a failure, since DEMO_MODE's intentional `{}` no-op (no fake `printed_checks` store) must not read as one.
@@ -142,13 +142,13 @@ decision or bigger effort before it can be safely fixed
 
 | Status | Count |
 |---|---:|
-| Fixed (code-complete) | 69 |
+| Fixed (code-complete) | 74 |
 | Already fixed by an earlier (pre-audit) round, or closed as not applicable | 8 |
 | Open, needs a decision before fixing | 0 |
-| Still open | 23 |
+| Still open | 18 |
 
-*(This table now reflects the live count as of Round 17 — see "What's still pending" below for what the
-remaining 23 open findings actually are; every finding that still needed a decision from the user has
+*(This table now reflects the live count as of Round 18 — see "What's still pending" below for what the
+remaining 18 open findings actually are; every finding that still needed a decision from the user has
 one now, one way or another.)*
 
 **Round 1 (security, Part 1)**: SEC-01, SEC-07, SEC-08, SEC-12, SEC-14, SEC-18, SEC-21 (7 IDs — SEC-14
@@ -349,21 +349,78 @@ this round's verification — flipped back to `false` before finishing, per the 
   `claim_check_number`/`append_activity_log`. Until it's run, both DATA-14 and DATA-20 automatically
   fall back to their original (non-atomic, but already-working) behavior — nothing breaks either way,
   running it just closes the small collision/lost-entry window on concurrent access.
-- **23 findings remain open**, all Medium/Low severity, and every one of them either needs a real
-  design/scope decision or is genuine bigger-effort infrastructure work — the pool of clean,
-  no-decision-needed bugs is now effectively exhausted after Round 17. What's left, by area: DATA-15
-  (explicitly declined by the user), DATA-18/DATA-19/DATA-22 (pagination/validation/edge-case patterns
-  spanning many Server Actions — needs a scoping decision, not a single fix); most of the remaining
-  Part 3 UX/Accessibility findings (UX-01/03/07/08/10/11/14/18/19/21 — several need a real design
-  decision, e.g. which new colors fix the WCAG contrast failures, or are a genuinely bigger feature
-  like offline/update support for the installed PWA); the remaining Part 4 items (PERF-02/03/05,
-  OBS-01, OPS-02, TYPE-01 — infrastructure investment: query tuning, monitoring coverage, generated DB
-  types via the Supabase CLI, which needs a real Postgres connection this sandbox's egress policy
-  blocks); INT-11 (a migration-semantics ambiguity needing a product decision on what "untouched"
-  should mean going forward); GAP-02/GAP-03 (a third-party geocoding-provider policy decision, and
-  road-trip planner model disagreements deliberately left alone given how much tuning that planner
-  has already had). Any further progress on this tracker now genuinely needs the user's input on scope
-  or design, not just more code-reading time.
+- **18 findings remain open**, all Medium/Low severity, and every one of them is genuine bigger-effort
+  infrastructure/design work rather than a clean single fix — Round 18 closed the last of the
+  "narrow, well-scoped, no-product-decision-needed" findings (DATA-18/19/22, UX-01, UX-03). What's
+  left, by area: DATA-15 (explicitly declined by the user); most of the remaining Part 3 UX/
+  Accessibility findings (UX-07/08/10/11/14/18/19/21 — several need a real design decision, e.g. how
+  search state should sync with the URL, or are a genuinely bigger feature like offline/update support
+  for the installed PWA); the remaining Part 4 items (PERF-02/03/05, OBS-01, OPS-02, TYPE-01 —
+  infrastructure investment: query tuning, monitoring coverage, generated DB types via the Supabase
+  CLI, which needs a real Postgres connection this sandbox's egress policy blocks); INT-11 (a
+  migration-semantics ambiguity needing a product decision on what "untouched" should mean going
+  forward); GAP-02/GAP-03 (a third-party geocoding-provider policy decision, and road-trip planner
+  model disagreements deliberately left alone given how much tuning that planner has already had).
+  Any further progress on this tracker now genuinely needs the user's input on scope or design, not
+  just more code-reading time.
+
+**Round 18 (the last well-scoped batch — DATA-18/19/22, UX-01, UX-03 all fixed)** — Direct
+continuation of Round 17, same day: user asked for what decision each of the next 5 findings needed.
+Reported all 5 grounded in the real current code (via a research pass, since this round's scope
+turned out larger than the usual quick read); for UX-03 specifically, built a real before/after
+visual comparison (published as an artifact) of the exact button/link/text colors under discussion,
+so the user could see what the fix would actually look like before deciding. User approved all 5 for
+all of them: "if these need fixing and it won't break anything, just fix it."
+
+- **DATA-22** — the narrowest fix: `BankForm.tsx` stamped a bank's community-note "read" marker in
+  parallel with fetching the notes themselves, leaving a real (if narrow) race where a note posted by
+  someone else in that gap could get silently marked read without ever appearing in the view that
+  supposedly read it. Reordered to stamp only after the fetch resolves — narrows the window from "the
+  whole page load" down to one database round trip.
+- **DATA-19** — 2 concrete instances (`setFdicAdminRole`, `updateAccountVaultFields`) doing an
+  `.update()` with no check that a row actually matched, the same false-success shape already fixed
+  elsewhere (INT-10, DATA-07). Both now verify the affected row; `updateAccountVaultFields`'s two
+  real callers, which previously discarded its result entirely, now surface a failure instead of
+  silently doing nothing.
+- **DATA-18** — extracted the existing `fetchAllRows()` pagination helper (already used by the
+  personal export and weekly backup) into a new dependency-free `lib/pagination.ts`, and applied it
+  everywhere else that read the same potentially-1000+-row tables: 6 pages, the Settings quick-export,
+  `getAllBankComments`, and the admin dashboard's cross-user tallies (the closest-to-real risk, since
+  it's the one place summing counts across the whole family at once).
+- **UX-01** — the biggest single piece of work this session: confirmed via grep that none of the
+  app's 14 modal-shaped overlays had `role="dialog"`, a Tab focus trap, Escape-to-close, or
+  focus-return. Built one shared `lib/useFocusTrap.ts` hook (with a same-subtree guard so a modal
+  opened from inside another modal doesn't have both traps fire on one Escape/Tab press) plus a
+  `FocusTrapPanel` wrapper for panels too stateful to cleanly extract, and wired all 14 in. A few
+  needed extracting into their own component first, since a hook can't be called conditionally inside
+  a parent's `{x && (...)}` block — BankForm's "let everyone know" prompt, IdleTimeout's warning
+  dialog, AdminUsersClient's and SettingsForm's delete-confirm dialogs.
+- **UX-03** — fixed all 4 originally-audited color combos (amber-500/600, emerald-600, slate-400) plus
+  every other genuine-text instance of the same shades found while going through the codebase
+  systematically, rather than a blind global find-replace. The real risk caught along the way: two
+  components (`SideNav.tsx`, `TopNav.tsx`) render nav-link text directly on a solid dark background,
+  not white — the same slate-400 shade there is already light-on-dark and reads fine; blindly
+  darkening it (as the naive fix would have) would have made it nearly unreadable, the opposite of a
+  fix. Found by checking every solid dark-background usage in the app before running the sweep, not
+  after.
+
+No migration this round — every fix is pure application code, live on deploy.
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (84/84) all clean. UX-01 and UX-03
+are both genuinely UI-observable, so both got a live CDP pass against DEMO_MODE rather than just a
+code read. UX-01: confirmed a real dialog gets `role="dialog"`/`aria-modal="true"` and moves focus
+inside on open; confirmed Shift+Tab from the first focusable element wraps to the last (and vice
+versa); confirmed Escape closes the dialog and restores focus to the trigger (the one check that
+initially "failed" turned out to be a test-script artifact — a synthetic `.click()` without an
+explicit `.focus()` first doesn't focus an element the way a real mouse click does, so there was
+nothing meaningful to restore; re-verified by explicitly focusing the trigger first, confirming focus
+correctly lands back on it after Escape); confirmed opening a modal from inside another modal
+(editing an account from inside the bank drawer) produces exactly 2 dialogs, and Escape correctly
+closes only the inner one, leaving the outer bank drawer open — exactly the nested-trap scoping this
+round's guard was built for. UX-03 was verified by grepping for every remaining instance of the old
+shade combined with `text-white` on the same line (zero found) and confirming the two dark-background
+nav components were untouched. `DEMO_MODE` was flipped to `true` for this round's verification and
+flipped back to `false` before finishing, per the standing rule.
 
 **Round 17 (next-5 request, reaching into lower-confidence territory on purpose — UX-22/UX-12/DATA-10/
 CFG-01/UX-02 fixed, plus 3 freebie closures)** — User explicitly asked to go further than the usual

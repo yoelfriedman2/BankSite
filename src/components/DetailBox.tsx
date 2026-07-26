@@ -22,13 +22,13 @@ export function BoxHeader({
 }) {
   return (
     <div className="mb-2 flex items-center gap-2">
-      <h4 className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{title}</h4>
+      <h4 className="text-[11px] font-bold uppercase tracking-wide text-slate-600">{title}</h4>
       <span className="flex-1" />
       {onEdit && (
         <button
           type="button"
           onClick={onEdit}
-          className="flex items-center gap-1 rounded-md p-1 text-slate-400 hover:bg-amber-50 hover:text-amber-700"
+          className="flex items-center gap-1 rounded-md p-1 text-slate-600 hover:bg-amber-50 hover:text-amber-700"
         >
           {editLabel ? (
             <span className="text-xs font-semibold">{editLabel}</span>

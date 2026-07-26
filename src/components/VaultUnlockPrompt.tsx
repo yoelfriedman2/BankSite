@@ -52,7 +52,7 @@ export function VaultUnlockPrompt({ label = "Unlock to view or edit login detail
           type="button"
           onClick={handleUnlock}
           disabled={busy || !password}
-          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-60"
+          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-amber-700 px-3 py-2 text-sm font-medium text-white hover:bg-amber-800 disabled:opacity-60"
         >
           {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           Unlock

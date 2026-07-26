@@ -46,6 +46,7 @@ import {
 import { BankForm } from "@/components/BankForm";
 import { BankLogo } from "@/components/BankLogo";
 import { ImportDialog } from "@/components/ImportDialog";
+import { FocusTrapPanel } from "@/components/FocusTrapPanel";
 import { exportToExcel, exportCommentsToExcel } from "@/lib/export";
 import { setBankStatus, deleteBank, getAllBankComments, type RelatedRef } from "@/app/(app)/banks/actions";
 
@@ -652,7 +653,7 @@ export function BanksClient({
           </button>
           <button
             onClick={openAdd}
-            className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
+            className="flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
           >
             <Plus className="h-4 w-4" />
             Add bank
@@ -689,34 +690,38 @@ export function BanksClient({
 
       {mobileFiltersOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 md:hidden">
-          <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white p-4">
+          <FocusTrapPanel
+            onClose={() => setMobileFiltersOpen(false)}
+            labelledBy="banks-mobile-filters-title"
+            className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-white p-4"
+          >
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-slate-900">Filters &amp; sort</h2>
-              <button type="button" onClick={() => setMobileFiltersOpen(false)} className="p-1 text-slate-400">
+              <h2 id="banks-mobile-filters-title" className="text-base font-semibold text-slate-900">Filters &amp; sort</h2>
+              <button type="button" onClick={() => setMobileFiltersOpen(false)} className="p-1 text-slate-600">
                 <X className="h-5 w-5" />
               </button>
             </div>
             <div className="space-y-4">
               <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Status</p>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600">Status</p>
                 <div className="overflow-hidden rounded-lg border border-slate-200">
                   <StatusFilterOptions value={statusFilter} onChange={setStatusFilter} />
                 </div>
               </div>
               <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">State</p>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600">State</p>
                 <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-200">
                   <StateFilterOptions value={stateFilter} onChange={setStateFilter} states={states} />
                 </div>
               </div>
               <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">IPO status</p>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600">IPO status</p>
                 <div className="rounded-lg border border-slate-200 py-1">
                   <StageFilterOptions value={stageFilter} onChange={setStageFilter} />
                 </div>
               </div>
               <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Sort by</p>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600">Sort by</p>
                 <div className="flex gap-2">
                   <select
                     value={sort}
@@ -748,18 +753,18 @@ export function BanksClient({
             <button
               type="button"
               onClick={() => setMobileFiltersOpen(false)}
-              className="mt-5 w-full rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
+              className="mt-5 w-full rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
             >
               Show {filtered.length} {filtered.length === 1 ? "bank" : "banks"}
             </button>
-          </div>
+          </FocusTrapPanel>
         </div>
       )}
 
       {/* Mobile cards */}
       <div className="space-y-2 md:hidden">
         {filtered.length === 0 ? (
-          <p className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center text-slate-400">
+          <p className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center text-slate-600">
             No banks match your filters.
           </p>
         ) : (
@@ -802,7 +807,7 @@ export function BanksClient({
                     )}
                     <ConversionBadge stage={b.conversion_stage} />
                   </div>
-                  <div className="mt-0.5 truncate text-xs text-slate-400">
+                  <div className="mt-0.5 truncate text-xs text-slate-600">
                     {b.state ?? ""}
                     {accts.length > 0
                       ? `${b.state ? " · " : ""}${accts.length} acct${accts.length === 1 ? "" : "s"} · ${formatCurrency(total)}`
@@ -886,7 +891,7 @@ export function BanksClient({
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-4 py-12 text-center text-slate-400">
+                <td colSpan={10} className="px-4 py-12 text-center text-slate-600">
                   No banks match your filters.
                 </td>
               </tr>
@@ -978,7 +983,7 @@ export function BanksClient({
                             {accts.length}
                           </span>
                           {holders && (
-                            <span className="max-w-[10rem] truncate text-xs text-slate-400">
+                            <span className="max-w-[10rem] truncate text-xs text-slate-600">
                               {holders}
                             </span>
                           )}
@@ -993,7 +998,7 @@ export function BanksClient({
                           {formatCurrency(total)}
                           {b.target_balance != null &&
                             total < b.target_balance && (
-                              <div className="text-xs font-medium text-amber-600">
+                              <div className="text-xs font-medium text-amber-700">
                                 below target
                               </div>
                             )}
@@ -1047,7 +1052,7 @@ export function BanksClient({
         </table>
       </div>
 
-      <p className="mt-3 text-xs text-slate-400">
+      <p className="mt-3 text-xs text-slate-600">
         Showing {filtered.length} of {counts.all} banks · click a row to manage
         its accounts
       </p>

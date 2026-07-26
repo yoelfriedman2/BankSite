@@ -112,12 +112,12 @@ export function UpdatesClient({
             <History className="h-4 w-4 text-slate-400" />
             <h2 className="text-sm font-semibold text-slate-800">Activity</h2>
           </div>
-          <p className="mb-3 text-xs text-slate-400">
+          <p className="mb-3 text-xs text-slate-600">
             Changes to shared data — notes, shared bank info, can&apos;t-open broadcasts,
             and bank links. Tap one to open that bank.
           </p>
           {activity.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-400">
+            <p className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-600">
               No shared activity yet.
             </p>
           ) : (
@@ -130,7 +130,7 @@ export function UpdatesClient({
                       <span className="block break-words text-sm text-slate-700">
                         {e.summary}
                       </span>
-                      <span className="mt-0.5 block text-xs text-slate-400">
+                      <span className="mt-0.5 block text-xs text-slate-600">
                         {timeAgo(e.created_at)}
                       </span>
                     </span>
@@ -163,7 +163,7 @@ export function UpdatesClient({
             <Sparkles className="h-4 w-4 text-amber-500" />
             <h2 className="text-sm font-semibold text-slate-800">What&apos;s new</h2>
           </div>
-          <p className="mb-3 text-xs text-slate-400">
+          <p className="mb-3 text-xs text-slate-600">
             New features and improvements, most recent first.
           </p>
           <div className="space-y-4">
@@ -174,7 +174,7 @@ export function UpdatesClient({
               >
                 <div className="mb-2 flex items-center gap-2">
                   <h3 className="text-sm font-semibold text-slate-900">{entry.title}</h3>
-                  <span className="ml-auto text-xs text-slate-400">{fmtDate(entry.date)}</span>
+                  <span className="ml-auto text-xs text-slate-600">{fmtDate(entry.date)}</span>
                 </div>
                 {entry.items.length === 1 ? (
                   <p className="text-sm leading-relaxed text-slate-600">{entry.items[0]}</p>

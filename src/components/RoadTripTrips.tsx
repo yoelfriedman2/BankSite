@@ -223,7 +223,7 @@ export function RoadTripTrips({
         >
           <span className="flex items-center gap-2 text-sm font-semibold text-slate-900">
             <FolderOpen className="h-4 w-4 text-blue-500" />
-            Saved trips {trips.length > 0 && <span className="text-xs font-normal text-slate-400">({trips.length})</span>}
+            Saved trips {trips.length > 0 && <span className="text-xs font-normal text-slate-600">({trips.length})</span>}
           </span>
           {open ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
         </button>
@@ -234,7 +234,7 @@ export function RoadTripTrips({
 
             {/* Save current plan */}
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
                 {activeTripId ? "Update this trip" : "Save this trip"}
               </p>
               <div className="space-y-2">
@@ -266,7 +266,7 @@ export function RoadTripTrips({
             {/* List of trips */}
             {trips.length > 0 && (
               <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Your trips &amp; shared trips</p>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">Your trips &amp; shared trips</p>
                 <ul className="divide-y divide-slate-100 rounded-lg border border-slate-100">
                   {trips.map((t) => (
                     <li key={t.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
@@ -284,7 +284,7 @@ export function RoadTripTrips({
                             </span>
                           )}
                         </span>
-                        <span className="block text-xs text-slate-400">
+                        <span className="block text-xs text-slate-600">
                           {t.bank_certs.length} bank{t.bank_certs.length === 1 ? "" : "s"} · updated {fmtDate(t.updated_at)}
                           {!t.mine && " · shared by another user"}
                         </span>
@@ -317,7 +317,7 @@ export function RoadTripTrips({
 
             {/* Import a past Google Maps link */}
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Import a past trip</p>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">Import a past trip</p>
               <p className="mb-2 text-xs text-slate-500">
                 Paste a Google Maps directions link from a road trip you already took — this tries
                 to match each stop back to a tracked bank by location. Links with plain coordinates
@@ -348,10 +348,10 @@ export function RoadTripTrips({
                       Matched: <strong>{importResult.matchedNames.join(", ")}</strong>
                     </p>
                   ) : (
-                    <p className="text-slate-400">No stops could be matched to a tracked bank.</p>
+                    <p className="text-slate-600">No stops could be matched to a tracked bank.</p>
                   )}
                   {importResult.unmatchedCount > 0 && (
-                    <p className="mt-1 text-slate-400">{importResult.unmatchedCount} stop(s) couldn&apos;t be auto-matched.</p>
+                    <p className="mt-1 text-slate-600">{importResult.unmatchedCount} stop(s) couldn&apos;t be auto-matched.</p>
                   )}
                   {importResult.matchedIds.length > 0 && (
                     <button

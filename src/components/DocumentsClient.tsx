@@ -89,7 +89,7 @@ export function DocumentsClient({ documents }: { documents: AccountDocumentWithC
                   <FileIcon mimeType={doc.mime_type} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-slate-700">{doc.filename}</p>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-slate-600">
                       {doc.holder ? `${doc.holder} · ` : ""}
                       {formatDate(doc.uploaded_at.slice(0, 10))}
                       {doc.file_size != null && ` · ${formatBytes(doc.file_size)}`}

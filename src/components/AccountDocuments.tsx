@@ -187,7 +187,7 @@ export function AccountDocuments({ accountId }: { accountId: string }) {
         <span className="text-sm font-medium text-slate-700">Documents</span>
         <div className="flex items-center gap-1.5">
           {statusLabel && (
-            <span className="text-[11px] text-slate-400">{statusLabel}</span>
+            <span className="text-[11px] text-slate-600">{statusLabel}</span>
           )}
           <input
             ref={cameraRef}
@@ -230,7 +230,7 @@ export function AccountDocuments({ accountId }: { accountId: string }) {
       )}
 
       {docs.length === 0 && !busy && (
-        <p className="py-2 text-xs text-slate-400">
+        <p className="py-2 text-xs text-slate-600">
           No documents yet — upload a statement, photo, or scan.
         </p>
       )}
@@ -242,7 +242,7 @@ export function AccountDocuments({ accountId }: { accountId: string }) {
               <FileIcon mimeType={doc.mime_type} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-medium text-slate-700">{doc.filename}</p>
-                <p className="text-[10px] text-slate-400">
+                <p className="text-[10px] text-slate-600">
                   {formatDate(doc.uploaded_at.slice(0, 10))}
                   {doc.file_size != null && ` · ${formatBytes(doc.file_size)}`}
                 </p>

@@ -30,6 +30,7 @@ import {
 import { Logo } from "@/components/Logo";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { useChangelogUnread } from "@/components/useChangelogUnread";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 type NavLink = {
   href: string;
@@ -97,6 +98,7 @@ export function TopNav({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const drawerRef = useFocusTrap<HTMLElement>(() => setOpen(false), open);
   const groups = GROUPS.map((g) => ({
     ...g,
     links: g.links.filter((l) => !l.ownerOnly || isOwner),
@@ -150,6 +152,10 @@ export function TopNav({
 
         {/* Panel */}
         <aside
+          ref={drawerRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="mobile-nav-title"
           className={`fixed inset-y-0 left-0 z-50 flex w-72 max-w-[82%] flex-col bg-slate-900 text-slate-300 shadow-2xl transition-transform duration-200 ${
             open ? "translate-x-0" : "-translate-x-full"
           }`}
@@ -161,7 +167,7 @@ export function TopNav({
           inert={!open}
         >
           <div className="flex items-center justify-between px-5 py-5">
-            <div className="flex items-center gap-2.5">
+            <div id="mobile-nav-title" className="flex items-center gap-2.5">
               <Logo className="h-9 w-9 shadow-sm" />
               <div className="leading-tight">
                 <div className="text-sm font-semibold text-white">Bank Tracker</div>

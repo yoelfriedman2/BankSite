@@ -52,6 +52,7 @@ import {
   deleteReminder,
 } from "@/app/(app)/reminders";
 import { useUnsavedChanges, confirmDiscard } from "@/components/useUnsavedChanges";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
@@ -100,13 +101,13 @@ function BoxHeader({
 }) {
   return (
     <div className="mb-2 flex items-center gap-2">
-      <h4 className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{title}</h4>
+      <h4 className="text-[11px] font-bold uppercase tracking-wide text-slate-600">{title}</h4>
       <span className="flex-1" />
       {onEdit && (
         <button
           type="button"
           onClick={onEdit}
-          className="flex items-center gap-1 rounded-md p-1 text-slate-400 hover:bg-amber-50 hover:text-amber-700"
+          className="flex items-center gap-1 rounded-md p-1 text-slate-600 hover:bg-amber-50 hover:text-amber-700"
         >
           {editLabel ? (
             <span className="text-xs font-semibold">{editLabel}</span>
@@ -215,6 +216,8 @@ export function BankForm({
     if (confirmDiscard(dirty)) onClose();
   }
 
+  const dialogRef = useFocusTrap<HTMLFormElement>(attemptClose);
+
   // Private reminders (per-bank, never shared)
   const today = todayLocalStr();
   const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -269,8 +272,22 @@ export function BankForm({
     if (initial?.id) getReminders(initial.id).then(setReminders).catch(() => {});
     if (initial?.cert != null) {
       const cert = initial.cert;
-      getBankComments(cert).then(setComments).catch(() => {});
-      markCommentsRead(cert).catch(() => {});
+      // Stamp last_read_at only after the comments themselves have actually
+      // loaded (DATA-22) — stamping it in parallel with the fetch left a real
+      // window where a comment posted by someone else between drawer-open and
+      // the fetch resolving could get silently marked "read" without the
+      // current view ever having included it, since last_read_at could land
+      // after that comment's own timestamp purely by network-timing luck.
+      // Chaining narrows that window down to the read-marker upsert's own
+      // round trip — it can't be eliminated without a server-side "read as of
+      // the comments I actually returned" guarantee, but that's a much
+      // smaller target than racing two independent fire-and-forget requests.
+      getBankComments(cert)
+        .then((c) => {
+          setComments(c);
+          markCommentsRead(cert).catch(() => {});
+        })
+        .catch(() => {});
       getRelatedBanks(cert).then(setRelatedBanks).catch(() => {});
       getHoldingCompanyInfo(cert).then(setHoldingCompanyInfo).catch(() => {});
     }
@@ -456,18 +473,22 @@ export function BankForm({
       onMouseDown={attemptClose}
     >
       <form
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="bank-form-title"
         onSubmit={handleSubmit}
         onMouseDown={(e) => e.stopPropagation()}
         className="flex h-full w-full max-w-3xl flex-col bg-white shadow-2xl"
       >
         <header className="flex items-start justify-between gap-3 border-b border-slate-200 px-6 py-4">
           <div className="min-w-0 flex-1">
-            <h2 className="flex items-center gap-2 truncate text-lg font-semibold text-slate-900">
+            <h2 id="bank-form-title" className="flex items-center gap-2 truncate text-lg font-semibold text-slate-900">
               {initial && <BankLogo website={initial.website} size={20} />}
               <span className="truncate">{initial ? initial.name : "Add bank"}</span>
             </h2>
             {initial && (
-              <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-slate-400">
+              <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-slate-600">
                 {(initial.city || initial.state) && (
                   <span>{[initial.city, initial.state].filter(Boolean).join(", ")}</span>
                 )}
@@ -489,7 +510,7 @@ export function BankForm({
           <button
             type="button"
             onClick={attemptClose}
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            className="rounded-lg p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-600"
           >
             <X className="h-5 w-5" />
           </button>
@@ -503,7 +524,7 @@ export function BankForm({
               <div className="mb-3 flex items-center gap-2 px-0.5">
                 <Lock className="h-3.5 w-3.5 text-amber-700" />
                 <span className="text-xs font-bold uppercase tracking-wide text-amber-800">Only you</span>
-                <span className="ml-auto text-[11px] text-slate-400">private to your login</span>
+                <span className="ml-auto text-[11px] text-slate-600">private to your login</span>
               </div>
 
               {/* My status: dropdown + priority pills + target amount, one row */}
@@ -612,10 +633,10 @@ export function BankForm({
                             onChange={() => handleToggleReminder(r)}
                             className="h-4 w-4 shrink-0 rounded border-slate-300 accent-amber-600"
                           />
-                          <span className={`min-w-0 flex-1 truncate ${done ? "text-slate-400 line-through" : "text-slate-700"}`}>
+                          <span className={`min-w-0 flex-1 truncate ${done ? "text-slate-600 line-through" : "text-slate-700"}`}>
                             {r.note}
                           </span>
-                          <span className={`shrink-0 text-xs ${overdue ? "font-medium text-rose-600" : "text-slate-400"}`}>
+                          <span className={`shrink-0 text-xs ${overdue ? "font-medium text-rose-600" : "text-slate-600"}`}>
                             {formatDate(r.due_date)}
                           </span>
                           <button
@@ -632,7 +653,7 @@ export function BankForm({
                   </ul>
                 )}
                 {reminders.length === 0 && !remindersAdding && (
-                  <p className="text-xs text-slate-400">No reminders set for this bank.</p>
+                  <p className="text-xs text-slate-600">No reminders set for this bank.</p>
                 )}
                 {initial?.id && remindersAdding && (
                   <div className={reminders.length > 0 ? "mt-2" : ""}>
@@ -654,7 +675,7 @@ export function BankForm({
                         type="button"
                         onClick={handleAddReminder}
                         disabled={reminderBusy || !reminderNote.trim() || !reminderDate}
-                        className="shrink-0 rounded-lg bg-amber-500 px-3 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50"
+                        className="shrink-0 rounded-lg bg-amber-700 px-3 py-2 text-sm font-medium text-white hover:bg-amber-800 disabled:opacity-50"
                       >
                         Add
                       </button>
@@ -662,7 +683,7 @@ export function BankForm({
                     {reminderError && (
                       <p className="mt-1 text-xs text-rose-600">{reminderError}</p>
                     )}
-                    <p className="mt-1 text-[11px] text-slate-400">
+                    <p className="mt-1 text-[11px] text-slate-600">
                       We&apos;ll email you on the date. Only you can see these.
                     </p>
                   </div>
@@ -677,7 +698,7 @@ export function BankForm({
                     Save the bank first, then reopen it to add accounts.
                   </p>
                 ) : accounts.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400">
+                  <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-600">
                     No accounts yet.
                   </p>
                 ) : (
@@ -698,23 +719,23 @@ export function BankForm({
                             <div className="flex items-center gap-1.5 text-sm font-medium text-slate-800">
                               {a.holder || "—"}
                               {a.account_type && (
-                                <span className="font-normal text-slate-400">
+                                <span className="font-normal text-slate-600">
                                   · {ACCOUNT_TYPE_LABELS[a.account_type]}
                                 </span>
                               )}
                             </div>
-                            <div className="text-[11px] text-slate-400">
+                            <div className="text-[11px] text-slate-600">
                               {a.account_number ? maskAccountNumber(a.account_number) : "no account #"}
                               {a.balance != null ? ` · ${formatCurrency(a.balance)}` : ""}
                             </div>
                           </div>
                           <div className="flex shrink-0 items-center gap-0.5">
                             <button type="button" onClick={() => setAcctModal({ account: a })}
-                              className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Edit">
+                              className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-700" title="Edit">
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
                             <button type="button" onClick={() => setPrintCheck(a)}
-                              className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Print check">
+                              className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-700" title="Print check">
                               <Printer className="h-3.5 w-3.5" />
                             </button>
                             <button type="button" onClick={() => handleDuplicate(a)} disabled={busyAcctId === a.id}
@@ -749,7 +770,7 @@ export function BankForm({
               <div className="mb-3 flex items-center gap-2 px-0.5">
                 <Users className="h-3.5 w-3.5 text-emerald-700" />
                 <span className="text-xs font-bold uppercase tracking-wide text-emerald-800">Shared</span>
-                <span className="ml-auto text-[11px] text-slate-400">everyone sees &amp; edits this</span>
+                <span className="ml-auto text-[11px] text-slate-600">everyone sees &amp; edits this</span>
               </div>
 
               {/* Shared-field update notice — only shown when we have the detail
@@ -793,12 +814,12 @@ export function BankForm({
                       <div className="mt-2.5 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
                         <p className="mb-1 flex items-center justify-between text-[10px] font-medium uppercase tracking-wide text-slate-500">
                           Holding company
-                          <span className="text-[9.5px] font-normal normal-case text-slate-400">verified via Fed data</span>
+                          <span className="text-[9.5px] font-normal normal-case text-slate-600">verified via Fed data</span>
                         </p>
                         <p className="text-sm text-slate-700">
                           <span className="font-medium">{holdingCompanyInfo.name}</span>
                           {holdingCompanyInfo.assets != null && (
-                            <span className="text-slate-400">
+                            <span className="text-slate-600">
                               {" "}
                               · ${(holdingCompanyInfo.assets / 1000).toFixed(0)}M assets
                               {holdingCompanyInfo.assetsAsOf ? ` (as of ${holdingCompanyInfo.assetsAsOf})` : ""}
@@ -824,7 +845,7 @@ export function BankForm({
                     )}
                     {initial?.cert != null && relatedBanks.length > 0 && (
                       <div className="mt-2.5">
-                        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Related banks</p>
+                        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600">Related banks</p>
                         <div className="flex flex-wrap gap-1.5">
                           {relatedBanks.map((rb) => (
                             <span
@@ -838,7 +859,7 @@ export function BankForm({
                               ) : (
                                 <span className="font-medium">{rb.name}</span>
                               )}
-                              {rb.state && <span className="text-slate-400">{rb.state}</span>}
+                              {rb.state && <span className="text-slate-600">{rb.state}</span>}
                             </span>
                           ))}
                         </div>
@@ -897,7 +918,7 @@ export function BankForm({
                       <div className="mt-3">
                         <label className={labelClass}>Related banks</label>
                         {relatedBanks.length === 0 && (
-                          <p className="mb-2 text-xs text-slate-400">
+                          <p className="mb-2 text-xs text-slate-600">
                             No related banks. Banks in the same holding company appear here
                             automatically — search below to link any other bank.
                           </p>
@@ -916,7 +937,7 @@ export function BankForm({
                                 ) : (
                                   <span className="font-medium">{rb.name}</span>
                                 )}
-                                {rb.state && <span className="text-slate-400">{rb.state}</span>}
+                                {rb.state && <span className="text-slate-600">{rb.state}</span>}
                                 {rb.source === "holding_company" ? (
                                   <span className="text-[10px] italic text-slate-300" title="Same holding company">
                                     holding co.
@@ -944,7 +965,7 @@ export function BankForm({
                                 <li key={r.cert}>
                                   <button type="button" onClick={() => handleAddRelationship(r.cert)} className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-amber-50">
                                     <span className="font-medium text-slate-800">{r.name}</span>
-                                    <span className="text-xs text-slate-400">{r.state}</span>
+                                    <span className="text-xs text-slate-600">{r.state}</span>
                                   </button>
                                 </li>
                               ))}
@@ -970,12 +991,12 @@ export function BankForm({
               {/* Shared notes — right after bank facts, per feedback */}
               <Box tone="shared">
                 <div className="mb-2 flex items-center gap-2">
-                  <h4 className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
-                    Shared notes {comments.length > 0 && <span className="text-emerald-600">({comments.length})</span>}
+                  <h4 className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
+                    Shared notes {comments.length > 0 && <span className="text-emerald-700">({comments.length})</span>}
                   </h4>
                 </div>
                 {!initial?.cert ? (
-                  <p className="text-xs text-slate-400">Save the bank first to see shared notes.</p>
+                  <p className="text-xs text-slate-600">Save the bank first to see shared notes.</p>
                 ) : (
                   <>
                     {comments.length > 0 && (
@@ -985,13 +1006,13 @@ export function BankForm({
                           return (
                             <li key={c.id} className={`rounded-lg px-2.5 py-1.5 text-sm ${isUnread ? "bg-amber-50" : "bg-slate-50"}`}>
                               <div className="mb-0.5 flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                                <div className="flex items-center gap-1.5 text-[11px] text-slate-600">
                                   <span className={isUnread ? "font-semibold text-slate-800" : "font-medium text-slate-600"}>
                                     {c.author_name || "Someone"}
                                   </span>
                                   <span>{formatDate(c.created_at.slice(0, 10))}</span>
                                   {isUnread && (
-                                    <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[9.5px] font-semibold text-white">New</span>
+                                    <span className="rounded-full bg-amber-700 px-1.5 py-0.5 text-[9.5px] font-semibold text-white">New</span>
                                   )}
                                 </div>
                                 {c.author_id === currentUserId && (
@@ -1038,7 +1059,7 @@ export function BankForm({
                         type="button"
                         onClick={handlePostComment}
                         disabled={commentBusy || !commentBody.trim()}
-                        className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                        className="flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
                       >
                         {commentBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                         Post
@@ -1190,7 +1211,7 @@ export function BankForm({
                       <div>
                         <label className={labelClass} htmlFor="eligibility_date">Eligibility / record date</label>
                         <DateInput id="eligibility_date" className={inputClass} value={values.eligibility_date} onChange={(v) => set("eligibility_date", v)} />
-                        <p className="mt-1 text-xs text-slate-400">
+                        <p className="mt-1 text-xs text-slate-600">
                           Deposit date that sets your IPO subscription priority.
                         </p>
                       </div>
@@ -1228,7 +1249,7 @@ export function BankForm({
           <button
             type="submit"
             disabled={isPending}
-            className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
+            className="flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-60"
           >
             {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
             Save bank
@@ -1259,70 +1280,111 @@ export function BankForm({
       )}
 
       {cannotOpenPrompt && initial?.cert != null && (
-        <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/50 p-4"
-          onMouseDown={(e) => { e.stopPropagation(); setCannotOpenPrompt(false); }}
-        >
-          <div
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-base font-semibold text-slate-900">Let everyone know?</h3>
-            <p className="mt-1 text-sm text-slate-500">
-              You marked <span className="font-medium text-slate-700">{initial.name}</span> as
-              can&apos;t open. Choose how much to share — your optional note rides along either way.
-            </p>
-            <textarea
-              rows={3}
-              className={`${inputClass} mt-3`}
-              placeholder="Optional note for everyone (e.g. local residents only, rejected by mail)…"
-              value={shareNote}
-              onChange={(e) => setShareNote(e.target.value)}
-            />
-            <label className="mt-2 flex items-center gap-2 text-xs text-slate-500">
-              <input
-                type="checkbox"
-                checked={shareNotify}
-                onChange={(e) => setShareNotify(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 accent-amber-600"
-              />
-              Also email everyone
-            </label>
-            <div className="mt-5 flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={() => handleShareCannotOpen(true)}
-                disabled={sharing}
-                className="flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
-              >
-                {sharing && <Loader2 className="h-4 w-4 animate-spin" />}
-                Post note &amp; mark everyone can&apos;t open
-              </button>
-              <button
-                type="button"
-                onClick={() => handleShareCannotOpen(false)}
-                disabled={sharing}
-                className="flex items-center justify-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-60"
-              >
-                Post note only
-              </button>
-              <button
-                type="button"
-                onClick={() => setCannotOpenPrompt(false)}
-                disabled={sharing}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-60"
-              >
-                Keep private
-              </button>
-            </div>
-            <p className="mt-3 text-[11px] leading-snug text-slate-400">
-              &ldquo;Mark everyone&rdquo; sets this bank to can&apos;t open for all other users,
-              except anyone who already has an account open there. New users always start with it
-              set to can&apos;t open once a note exists.
-            </p>
-          </div>
-        </div>
+        <CannotOpenPromptModal
+          bankName={initial.name}
+          shareNote={shareNote}
+          setShareNote={setShareNote}
+          shareNotify={shareNotify}
+          setShareNotify={setShareNotify}
+          sharing={sharing}
+          onShare={handleShareCannotOpen}
+          onClose={() => setCannotOpenPrompt(false)}
+        />
       )}
+    </div>
+  );
+}
+
+/** Split out from BankForm so this only mounts (and traps focus) for the
+ *  dialog's actual on-screen lifetime — a hook can't be called conditionally
+ *  inside the parent's own `{cannotOpenPrompt && (...)}` block (UX-01). */
+function CannotOpenPromptModal({
+  bankName,
+  shareNote,
+  setShareNote,
+  shareNotify,
+  setShareNotify,
+  sharing,
+  onShare,
+  onClose,
+}: {
+  bankName: string;
+  shareNote: string;
+  setShareNote: (v: string) => void;
+  shareNotify: boolean;
+  setShareNotify: (v: boolean) => void;
+  sharing: boolean;
+  onShare: (notify: boolean) => void;
+  onClose: () => void;
+}) {
+  const dialogRef = useFocusTrap<HTMLDivElement>(onClose);
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/50 p-4"
+      onMouseDown={(e) => { e.stopPropagation(); onClose(); }}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cannot-open-prompt-title"
+        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <h3 id="cannot-open-prompt-title" className="text-base font-semibold text-slate-900">Let everyone know?</h3>
+        <p className="mt-1 text-sm text-slate-500">
+          You marked <span className="font-medium text-slate-700">{bankName}</span> as
+          can&apos;t open. Choose how much to share — your optional note rides along either way.
+        </p>
+        <textarea
+          rows={3}
+          className={`${inputClass} mt-3`}
+          placeholder="Optional note for everyone (e.g. local residents only, rejected by mail)…"
+          value={shareNote}
+          onChange={(e) => setShareNote(e.target.value)}
+        />
+        <label className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+          <input
+            type="checkbox"
+            checked={shareNotify}
+            onChange={(e) => setShareNotify(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 accent-amber-600"
+          />
+          Also email everyone
+        </label>
+        <div className="mt-5 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => onShare(true)}
+            disabled={sharing}
+            className="flex items-center justify-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-60"
+          >
+            {sharing && <Loader2 className="h-4 w-4 animate-spin" />}
+            Post note &amp; mark everyone can&apos;t open
+          </button>
+          <button
+            type="button"
+            onClick={() => onShare(false)}
+            disabled={sharing}
+            className="flex items-center justify-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-60"
+          >
+            Post note only
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={sharing}
+            className="rounded-lg px-4 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-60"
+          >
+            Keep private
+          </button>
+        </div>
+        <p className="mt-3 text-[11px] leading-snug text-slate-600">
+          &ldquo;Mark everyone&rdquo; sets this bank to can&apos;t open for all other users,
+          except anyone who already has an account open there. New users always start with it
+          set to can&apos;t open once a note exists.
+        </p>
+      </div>
     </div>
   );
 }

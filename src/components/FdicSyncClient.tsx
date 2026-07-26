@@ -174,7 +174,7 @@ export function FdicSyncClient({ canApply }: { canApply: boolean }) {
           type="button"
           onClick={runCheck}
           disabled={checking}
-          className="flex shrink-0 items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
+          className="flex shrink-0 items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-60"
         >
           {checking ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           {checking ? "Checking…" : report ? "Check again" : "Check against FDIC"}
@@ -186,7 +186,7 @@ export function FdicSyncClient({ canApply }: { canApply: boolean }) {
       )}
 
       {!report && !checking && (
-        <div className="rounded-2xl border border-dashed border-slate-200 px-6 py-16 text-center text-sm text-slate-400">
+        <div className="rounded-2xl border border-dashed border-slate-200 px-6 py-16 text-center text-sm text-slate-600">
           Run a check to compare your {"banks"} against the FDIC&apos;s current records.
           This can take a minute or two ({/* size hint */}~400 banks, checked one at a time).
         </div>
@@ -218,16 +218,16 @@ export function FdicSyncClient({ canApply }: { canApply: boolean }) {
                       <Link href={`/banks?cert=${r.cert}`} className="font-medium text-slate-800 hover:underline">
                         {r.name}
                       </Link>
-                      <span className="ml-2 text-xs text-slate-400">{r.state}</span>
+                      <span className="ml-2 text-xs text-slate-600">{r.state}</span>
                       {st === "done" && rowNote[key] && (
-                        <p className="text-xs text-emerald-600">{rowNote[key]}</p>
+                        <p className="text-xs text-emerald-700">{rowNote[key]}</p>
                       )}
                       {st === "error" && rowError[key] && (
                         <p className="text-xs text-rose-600">{rowError[key]}</p>
                       )}
                     </div>
                     <div className="flex shrink-0 items-center gap-3">
-                      <span className="text-xs text-slate-400">no longer insured since {r.endDate}</span>
+                      <span className="text-xs text-slate-600">no longer insured since {r.endDate}</span>
                       {st !== "done" &&
                         (canApply ? (
                           <button
@@ -299,7 +299,7 @@ export function FdicSyncClient({ canApply }: { canApply: boolean }) {
                   <li key={r.cert} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium text-slate-800">{r.name}</p>
-                      {r.current && <p className="truncate text-xs text-slate-400 line-through">{r.current}</p>}
+                      {r.current && <p className="truncate text-xs text-slate-600 line-through">{r.current}</p>}
                       <p className="truncate text-xs font-medium text-blue-600">{r.proposed}</p>
                     </div>
                     <RowActions
@@ -336,7 +336,7 @@ export function FdicSyncClient({ canApply }: { canApply: boolean }) {
                   <li key={r.cert} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium text-slate-800">{r.name}</p>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-slate-600">
                         {formatAssets(r.current)} <span className="mx-1">→</span>{" "}
                         <span className="font-medium text-emerald-700">{formatAssets(r.proposed)}</span>
                       </p>
@@ -370,7 +370,7 @@ export function FdicSyncClient({ canApply }: { canApply: boolean }) {
                   <li key={r.cert} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium text-slate-800">{r.name}</p>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-slate-600">
                         {r.currentCity ?? "—"}, {r.currentState ?? "—"}
                         <span className="mx-1">→</span>
                         <span className="font-medium text-amber-700">{r.fdicCity ?? r.currentCity ?? "—"}, {r.fdicState ?? r.currentState ?? "—"}</span>
@@ -434,13 +434,13 @@ function Section({
         {action}
       </div>
       {note && (
-        <div className="flex items-start gap-1.5 border-b border-slate-100 bg-slate-50/60 px-4 py-2 text-xs text-slate-400">
+        <div className="flex items-start gap-1.5 border-b border-slate-100 bg-slate-50/60 px-4 py-2 text-xs text-slate-600">
           <Info className="mt-0.5 h-3 w-3 shrink-0" />
           {note}
         </div>
       )}
       {count === 0 ? (
-        <p className="px-4 py-6 text-center text-sm text-slate-400">{empty}</p>
+        <p className="px-4 py-6 text-center text-sm text-slate-600">{empty}</p>
       ) : (
         children
       )}
@@ -463,7 +463,7 @@ function RowActions({
 }) {
   if (status === "done") {
     return (
-      <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-emerald-600">
+      <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-emerald-700">
         <Check className="h-3.5 w-3.5" />
         Applied
       </span>
@@ -486,7 +486,7 @@ function RowActions({
           type="button"
           onClick={onAccept}
           disabled={status === "applying"}
-          className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+          className="flex items-center gap-1 rounded-lg bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
         >
           {status === "applying" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
           Accept

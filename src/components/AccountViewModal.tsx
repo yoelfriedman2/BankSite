@@ -7,6 +7,7 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { Box, BoxHeader, Frow } from "@/components/DetailBox";
 import { getActivityLevel, daysUntil } from "@/lib/dormancy";
 import { ActivityDot } from "@/components/badges";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 /** Read-only "look but don't touch" view of an account — for family members who
  *  just want to check a balance/account number without risking an accidental
@@ -29,7 +30,8 @@ export function AccountViewModal({
   const activityLevel = getActivityLevel(account, defaultDormancyMonths);
   const cdDays = account.cd_maturity_date ? daysUntil(account.cd_maturity_date) : null;
   const cdColor =
-    cdDays == null ? "" : cdDays < 0 ? "text-slate-400" : cdDays <= 30 ? "text-rose-600" : cdDays <= 90 ? "text-amber-700" : "";
+    cdDays == null ? "" : cdDays < 0 ? "text-slate-600" : cdDays <= 30 ? "text-rose-600" : cdDays <= 90 ? "text-amber-700" : "";
+  const dialogRef = useFocusTrap<HTMLDivElement>(onClose);
   return (
     <div
       className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4"
@@ -39,12 +41,16 @@ export function AccountViewModal({
       }}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="account-view-modal-title"
         onMouseDown={(e) => e.stopPropagation()}
         className="my-8 w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
       >
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-1">
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-lg font-semibold text-slate-900">{bankName}</h2>
+            <h2 id="account-view-modal-title" className="truncate text-lg font-semibold text-slate-900">{bankName}</h2>
             <p className="mt-0.5 text-xs text-slate-500">
               {account.holder || "—"}
               {account.account_type && ` · ${ACCOUNT_TYPE_LABELS[account.account_type]}`}
@@ -53,7 +59,7 @@ export function AccountViewModal({
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-black/5 hover:text-slate-600"
+            className="shrink-0 rounded-lg p-1 text-slate-600 hover:bg-black/5 hover:text-slate-600"
           >
             <X className="h-5 w-5" />
           </button>
@@ -136,7 +142,7 @@ export function AccountViewModal({
           <button
             type="button"
             onClick={onEdit}
-            className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
+            className="flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
           >
             <Pencil className="h-4 w-4" />
             Edit

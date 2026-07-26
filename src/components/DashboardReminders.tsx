@@ -32,7 +32,7 @@ export function DashboardReminders({ reminders }: { reminders: OpenReminder[] })
           <Bell className="h-5 w-5 text-amber-600" />
           Reminders
         </h2>
-        <span className="text-sm text-slate-400">{items.length}</span>
+        <span className="text-sm text-slate-600">{items.length}</span>
       </div>
       <ul>
         {items.map((r) => {

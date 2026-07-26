@@ -29,6 +29,7 @@ import { DashboardReminders } from "@/components/DashboardReminders";
 import { getOutstandingSweeps } from "@/app/(app)/money/actions";
 import { DashboardMoneyOut } from "@/components/DashboardMoneyOut";
 import { getUpNextData } from "@/app/(app)/up-next/actions";
+import { fetchAllRows } from "@/lib/pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -87,14 +88,13 @@ export default async function DashboardPage() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) redirect("/login");
-    const { data: banksData } = await supabase
-      .from("banks")
-      .select("*")
-      .is("deleted_at", null);
-    const { data: acctData } = await supabase
-      .from("accounts")
-      .select("*")
-      .is("deleted_at", null);
+    // Paginated past PostgREST's default 1000-row cap (DATA-18).
+    const { rows: banksData } = await fetchAllRows<Bank>((from, to) =>
+      supabase.from("banks").select("*").is("deleted_at", null).range(from, to),
+    );
+    const { rows: acctData } = await fetchAllRows<Account>((from, to) =>
+      supabase.from("accounts").select("*").is("deleted_at", null).range(from, to),
+    );
     // select * so the page keeps working before migration 0025 adds the alert columns
     const { data: profile } = await supabase
       .from("profiles")
@@ -196,7 +196,7 @@ export default async function DashboardPage() {
           <h2 className="font-semibold text-slate-900">Needs attention</h2>
           <Link
             href="/accounts?attention=1"
-            className="flex items-center gap-1 text-sm font-medium text-amber-600 hover:underline"
+            className="flex items-center gap-1 text-sm font-medium text-amber-700 hover:underline"
           >
             View all
             <ArrowRight className="h-4 w-4" />
@@ -235,7 +235,7 @@ export default async function DashboardPage() {
                     <p className="truncate font-medium text-slate-900">
                       {item.bankName}
                       {item.account.holder && (
-                        <span className="font-normal text-slate-400">
+                        <span className="font-normal text-slate-600">
                           {" "}
                           · {item.account.holder}
                         </span>
@@ -269,7 +269,7 @@ export default async function DashboardPage() {
           <h2 className="font-semibold text-slate-900">Up next</h2>
           <Link
             href="/up-next"
-            className="flex items-center gap-1 text-sm font-medium text-amber-600 hover:underline"
+            className="flex items-center gap-1 text-sm font-medium text-amber-700 hover:underline"
           >
             View all
             <ArrowRight className="h-4 w-4" />

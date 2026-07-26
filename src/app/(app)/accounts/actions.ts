@@ -644,11 +644,20 @@ export async function updateAccountVaultFields(
   if (!user) return { error: "You are not signed in." };
 
   for (const u of updates) {
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from("accounts")
       .update({ username: u.username, password: u.password, access_notes: u.access_notes })
-      .eq("id", u.id);
+      .eq("id", u.id)
+      .select("id");
     if (error) return { error: friendlyDbError(error.message) };
+    // A row this account no longer matches (deleted mid-pass, or RLS silently
+    // excluding a stale/foreign id) previously looked identical to success
+    // (DATA-19) — the vault re-encrypt pass is otherwise all-or-nothing from
+    // the caller's perspective, so a silently-skipped account would leave
+    // stale plaintext or an undecryptable value behind with no indication.
+    if (!updated || updated.length === 0) {
+      return { error: "Couldn't update one of the accounts — it may have been deleted. Try again." };
+    }
   }
 
   revalidate();

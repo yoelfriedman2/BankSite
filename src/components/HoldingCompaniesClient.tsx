@@ -92,7 +92,7 @@ function FileUploadStep({
 
   return (
     <div>
-      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-600">{stepLabel}</p>
+      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-700">{stepLabel}</p>
       <h2 className="mb-3 text-lg font-semibold text-slate-900">{title}</h2>
       <ol className="mb-4 list-decimal space-y-1.5 pl-5 text-sm text-slate-600">
         {instructions.map((line, i) => (
@@ -132,7 +132,7 @@ function FileUploadStep({
         <span className="text-sm font-medium text-slate-600">
           {busy ? "Reading file…" : "Drop the downloaded file here, or click to choose it"}
         </span>
-        <span className="text-xs text-slate-400">Accepts the .zip as downloaded, or an unzipped .csv</span>
+        <span className="text-xs text-slate-600">Accepts the .zip as downloaded, or an unzipped .csv</span>
         <input
           type="file"
           accept=".zip,.csv,.txt"
@@ -479,7 +479,7 @@ export function HoldingCompaniesClient({
           <button
             type="button"
             onClick={enterWizard}
-            className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600"
+            className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-medium text-white hover:bg-amber-800"
           >
             <RefreshCw className="h-4 w-4" />
             Run sync
@@ -487,7 +487,7 @@ export function HoldingCompaniesClient({
         </div>
 
         {overviewLoading && (
-          <div className="flex items-center gap-2 text-sm text-slate-400">
+          <div className="flex items-center gap-2 text-sm text-slate-600">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading…
           </div>
         )}
@@ -514,13 +514,13 @@ export function HoldingCompaniesClient({
             </div>
 
             {filteredOverview && filteredOverview.length === 0 && (
-              <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-400">
+              <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-600">
                 No holding companies or banks match &quot;{browseQuery}&quot;.
               </p>
             )}
 
             {filteredOverview && filteredOverview.length > 0 && (
-              <div className="mb-2 flex items-center gap-4 px-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <div className="mb-2 flex items-center gap-4 px-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
                 <span>Sort by</span>
                 {(["name", "assets"] as const).map((key) => {
                   const active = browseSortKey === key;
@@ -556,11 +556,11 @@ export function HoldingCompaniesClient({
                   <span className="font-medium text-slate-800">{hc.name}</span>
                   <span className="text-sm text-slate-500">
                     {formatAssets(hc.assets)}
-                    <span className="text-slate-400"> total assets</span>
-                    {hc.assetsAsOf ? <span className="text-slate-400"> · as of {hc.assetsAsOf}</span> : ""}
+                    <span className="text-slate-600"> total assets</span>
+                    {hc.assetsAsOf ? <span className="text-slate-600"> · as of {hc.assetsAsOf}</span> : ""}
                   </span>
                 </div>
-                <p className="mt-2 text-xs uppercase tracking-wide text-slate-400">
+                <p className="mt-2 text-xs uppercase tracking-wide text-slate-600">
                   {hc.banks.length} {hc.banks.length === 1 ? "bank" : "banks"}
                 </p>
                 <div className="mt-1 flex flex-wrap gap-1.5">
@@ -633,7 +633,7 @@ export function HoldingCompaniesClient({
               type="button"
               onClick={start}
               disabled={loadingCrosswalk}
-              className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-medium text-white hover:bg-amber-800 disabled:opacity-60"
             >
               {loadingCrosswalk ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
               Get started
@@ -736,7 +736,7 @@ export function HoldingCompaniesClient({
                   ] as const
                 ).map(([label, det]) => (
                   <div key={label}>
-                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600">{label}</p>
                     {det ? (
                       <ul className="space-y-0.5 text-xs text-slate-600">
                         {Object.entries(det).map(([field, col]) => (
@@ -746,7 +746,7 @@ export function HoldingCompaniesClient({
                         ))}
                       </ul>
                     ) : (
-                      <p className="text-xs text-slate-400">Not uploaded this run.</p>
+                      <p className="text-xs text-slate-600">Not uploaded this run.</p>
                     )}
                   </div>
                 ))}
@@ -779,7 +779,7 @@ export function HoldingCompaniesClient({
                         Assets updated
                       </span>
                     )}
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-slate-600">
                       {formatAssets(g.assets)} {g.assetsAsOf ? `as of ${g.assetsAsOf}` : ""}
                     </span>
                   </div>
@@ -836,7 +836,7 @@ export function HoldingCompaniesClient({
                 type="button"
                 onClick={apply}
                 disabled={applying || (selected.size === 0 && selectedUnlinks.size === 0)}
-                className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-medium text-white hover:bg-amber-800 disabled:opacity-60"
               >
                 {applying && <Loader2 className="h-4 w-4 animate-spin" />}
                 Apply {selected.size + selectedUnlinks.size}{" "}
@@ -875,7 +875,7 @@ export function HoldingCompaniesClient({
             <button
               type="button"
               onClick={backToBrowse}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
             >
               See holding companies <ArrowRight className="h-4 w-4" />
             </button>
@@ -890,7 +890,7 @@ export function HoldingCompaniesClient({
       )}
 
       {step !== "intro" && step !== "done" && step !== "review" && (
-        <div className="mt-6 flex items-center gap-1.5 text-xs text-slate-400">
+        <div className="mt-6 flex items-center gap-1.5 text-xs text-slate-600">
           <AlertTriangle className="h-3.5 w-3.5" />
           Nothing is saved until you review and apply on the last screen.
         </div>

@@ -12,6 +12,7 @@ import {
 import { DateInput } from "@/components/DateInput";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { todayLocalStr } from "@/lib/date";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 import {
   createSweepBatch,
   returnSweep,
@@ -92,7 +93,7 @@ export function MoneyClient({
         <h2 className="text-sm font-semibold text-slate-700">Currently moved out</h2>
         <button
           onClick={() => setNewOpen(true)}
-          className="flex items-center gap-2 rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-600"
+          className="flex items-center gap-2 rounded-lg bg-amber-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-800"
         >
           <Plus className="h-4 w-4" />
           New money move
@@ -103,7 +104,7 @@ export function MoneyClient({
         <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center">
           <ArrowDownToLine className="mx-auto mb-3 h-7 w-7 text-slate-300" />
           <p className="font-medium text-slate-700">Nothing moved out right now</p>
-          <p className="mt-1 text-sm text-slate-400">
+          <p className="mt-1 text-sm text-slate-600">
             When you pull money from accounts to fund an IPO, record it here so you remember to put it back.
           </p>
         </div>
@@ -137,7 +138,7 @@ export function MoneyClient({
                         <div className="truncate text-sm text-slate-800">
                           {s.holder ? `${s.holder} · ` : ""}{s.bankName}
                         </div>
-                        <div className="text-xs text-slate-400">
+                        <div className="text-xs text-slate-600">
                           Moved {formatDate(s.movedOutAt)}
                           {s.leftBehind != null ? ` · left ${formatCurrency(s.leftBehind)}` : ""}
                         </div>
@@ -210,6 +211,7 @@ function NewMoveModal({
 
   const selected = Object.entries(amounts).filter(([, v]) => Number(v) > 0);
   const total = selected.reduce((s, [, v]) => s + Number(v), 0);
+  const dialogRef = useFocusTrap<HTMLDivElement>(onClose);
 
   function handleSubmit() {
     setError(null);
@@ -234,12 +236,16 @@ function NewMoveModal({
       onMouseDown={onClose}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="new-move-modal-title"
         className="my-8 w-full max-w-xl rounded-2xl bg-white shadow-2xl"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-          <h2 className="text-lg font-semibold text-slate-900">New money move</h2>
-          <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+          <h2 id="new-move-modal-title" className="text-lg font-semibold text-slate-900">New money move</h2>
+          <button onClick={onClose} className="rounded-lg p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-600">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -261,7 +267,7 @@ function NewMoveModal({
                   <option key={r} value={r} />
                 ))}
               </datalist>
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="mt-1 text-xs text-slate-600">
                 Entered once — it covers every account you add below.
               </p>
             </div>
@@ -280,7 +286,7 @@ function NewMoveModal({
             />
             <div className="max-h-72 overflow-y-auto rounded-lg border border-slate-200">
               {filtered.length === 0 ? (
-                <p className="px-3 py-6 text-center text-sm text-slate-400">No accounts match.</p>
+                <p className="px-3 py-6 text-center text-sm text-slate-600">No accounts match.</p>
               ) : (
                 filtered.map((a) => {
                   const amt = amounts[a.accountId] ?? "";
@@ -296,7 +302,7 @@ function NewMoveModal({
                         <div className="truncate text-sm text-slate-800">
                           {a.holder ? `${a.holder} · ` : ""}{a.bankName}
                         </div>
-                        <div className="text-xs text-slate-400">
+                        <div className="text-xs text-slate-600">
                           Balance {formatCurrency(a.balance)}
                           {after != null ? ` → ${formatCurrency(after)} after` : ""}
                         </div>
@@ -338,7 +344,7 @@ function NewMoveModal({
             <button
               onClick={handleSubmit}
               disabled={isPending || selected.length === 0 || !reason.trim()}
-              className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+              className="flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
             >
               {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               Move money

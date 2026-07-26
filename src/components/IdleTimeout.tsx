@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 // Sign the user out after this much inactivity, to protect data on a shared or
 // unattended device. This is a client-side convenience only, not a real
@@ -158,21 +159,44 @@ export function IdleTimeout({ enabled }: { enabled: boolean }) {
 
   if (secondsLeft == null) return null;
 
+  return <IdleWarningDialog secondsLeft={secondsLeft} onStaySignedIn={() => staySignedInRef.current()} />;
+}
+
+/** Split out from IdleTimeout so this only mounts (and traps focus) for the
+ *  dialog's actual on-screen lifetime — IdleTimeout itself stays mounted for
+ *  the whole app session, which a focus trap can't key off directly (UX-01).
+ *  No Escape-to-close: there's no dismiss action distinct from "Stay signed
+ *  in" (which resets the activity clock) — closing without that would leave
+ *  someone thinking they're safe from the timeout when they're not. */
+function IdleWarningDialog({
+  secondsLeft,
+  onStaySignedIn,
+}: {
+  secondsLeft: number;
+  onStaySignedIn: () => void;
+}) {
+  const dialogRef = useFocusTrap<HTMLDivElement>();
   const minutes = Math.floor(secondsLeft / 60);
   const seconds = secondsLeft % 60;
   const display = minutes > 0 ? `${minutes}:${String(seconds).padStart(2, "0")}` : `${seconds}s`;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">
-        <p className="text-base font-semibold text-slate-900">You'll be signed out soon</p>
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="idle-warning-title"
+        className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl"
+      >
+        <p id="idle-warning-title" className="text-base font-semibold text-slate-900">You'll be signed out soon</p>
         <p className="mt-1.5 text-sm text-slate-500">
           No activity for a while — you'll be signed out in <span className="font-semibold tabular-nums text-slate-700">{display}</span> to protect your data.
         </p>
         <button
           type="button"
-          onClick={() => staySignedInRef.current()}
-          className="mt-4 w-full rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
+          onClick={onStaySignedIn}
+          className="mt-4 w-full rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
         >
           Stay signed in
         </button>

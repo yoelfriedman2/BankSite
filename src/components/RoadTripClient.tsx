@@ -49,7 +49,7 @@ import { NearbyBanksFinder } from "@/components/NearbyBanksFinder";
 
 const RoadTripMap = dynamic(() => import("@/components/RoadTripMap").then((m) => m.RoadTripMap), {
   ssr: false,
-  loading: () => <div className="flex h-full items-center justify-center text-sm text-slate-400">Loading map…</div>,
+  loading: () => <div className="flex h-full items-center justify-center text-sm text-slate-600">Loading map…</div>,
 });
 
 function parseTime(hhmm: string): number {
@@ -488,7 +488,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
           distances below are built from. Re-run occasionally to pick up new/closed branches.
         </p>
         {branchMessage && (
-          <p className={`mt-1 text-xs ${branchStatus === "error" ? "text-rose-600" : "text-emerald-600"}`}>
+          <p className={`mt-1 text-xs ${branchStatus === "error" ? "text-rose-600" : "text-emerald-700"}`}>
             {branchMessage}
           </p>
         )}
@@ -546,7 +546,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
           onSelectCoords={(p) => setHomeDraft({ address: p.display, lat: p.lat, lng: p.lng })}
           placeholder="Type your home address and pick a suggestion…"
         />
-        <p className="mt-1.5 flex items-start gap-1.5 text-xs text-slate-400">
+        <p className="mt-1.5 flex items-start gap-1.5 text-xs text-slate-600">
           <Home className="mt-0.5 h-3 w-3 shrink-0" />
           {homePoint
             ? "The bank you start at will use whichever of its locations is closest to here."
@@ -590,7 +590,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
           </div>
         )}
         {mustVisitBanks.length > 0 && (
-          <p className="mb-3 text-xs text-slate-400">
+          <p className="mb-3 text-xs text-slate-600">
             <Star className="mr-1 inline h-3 w-3 text-amber-400" fill="currentColor" /> marks where the day starts.
           </p>
         )}
@@ -607,7 +607,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                 >
                   <span className="min-w-0 truncate">
                     <span className={checked ? "font-medium text-blue-700" : "text-slate-700"}>{b.name}</span>
-                    <span className="ml-2 text-xs text-slate-400">
+                    <span className="ml-2 text-xs text-slate-600">
                       {b.city ? `${b.city}, ` : ""}
                       {b.state} · {STATUS_LABELS[b.status]}
                     </span>
@@ -617,12 +617,12 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
               </li>
             );
           })}
-          {filteredPickerBanks.length === 0 && <li className="px-3 py-6 text-center text-sm text-slate-400">No matches.</li>}
+          {filteredPickerBanks.length === 0 && <li className="px-3 py-6 text-center text-sm text-slate-600">No matches.</li>}
         </ul>
       </Card>
 
       {!anchor ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 px-6 py-10 text-center text-sm text-slate-400">
+        <div className="rounded-2xl border border-dashed border-slate-200 px-6 py-10 text-center text-sm text-slate-600">
           Pick at least one must-visit bank above to plan the day.
         </div>
       ) : (
@@ -667,7 +667,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                 />
               </Field>
             </div>
-            <p className="mt-1.5 flex items-start gap-1.5 text-xs text-slate-400">
+            <p className="mt-1.5 flex items-start gap-1.5 text-xs text-slate-600">
               <Info className="mt-0.5 h-3 w-3 shrink-0" />
               Detour radius: how far out of your way you&apos;re willing to drive to pick up an extra
               bank. Only affects the &quot;Add more banks nearby&quot; suggestions below — you can
@@ -690,7 +690,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                     I leave home then
                   </EndModeButton>
                 </div>
-                <p className="mt-1.5 text-xs text-slate-400">
+                <p className="mt-1.5 text-xs text-slate-600">
                   {startMode === "arrive"
                     ? "You leave home early enough to be at the first bank at your start time."
                     : "You pull out of your driveway at your start time; the first bank is however long the drive takes after that."}
@@ -715,7 +715,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                 </EndModeButton>
               </div>
               {endMode === "home" && !homePoint && (
-                <p className="mt-1.5 text-xs text-amber-600">Add a home address above to end back there.</p>
+                <p className="mt-1.5 text-xs text-amber-700">Add a home address above to end back there.</p>
               )}
               {endMode === "custom" && (
                 <div className="mt-2">
@@ -726,7 +726,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                     placeholder="Where the trip ends (e.g. a hotel)…"
                   />
                   {!draftPoint(endDraft) && (
-                    <p className="mt-1 text-xs text-slate-400">Pick a suggestion to set the end location.</p>
+                    <p className="mt-1 text-xs text-slate-600">Pick a suggestion to set the end location.</p>
                   )}
                 </div>
               )}
@@ -759,7 +759,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                       >
                         <span className="min-w-0 truncate">
                           <span className="font-medium text-slate-700">{bank.name}</span>
-                          <span className="ml-2 text-xs text-slate-400">
+                          <span className="ml-2 text-xs text-slate-600">
                             {bank.city}, {bank.state}
                           </span>
                         </span>
@@ -768,7 +768,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                     </li>
                   ))}
                   {addSearchResults.length === 0 && (
-                    <li className="px-3 py-4 text-center text-sm text-slate-400">No matches.</li>
+                    <li className="px-3 py-4 text-center text-sm text-slate-600">No matches.</li>
                   )}
                 </ul>
               )}
@@ -820,8 +820,8 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                       }`}
                     >
                       <span className="min-w-0 truncate">
-                        <span className={overBudget ? "text-slate-400" : "font-medium text-slate-700"}>{bank.name}</span>
-                        <span className="ml-2 text-xs text-slate-400">
+                        <span className={overBudget ? "text-slate-600" : "font-medium text-slate-700"}>{bank.name}</span>
+                        <span className="ml-2 text-xs text-slate-600">
                           {bank.city}, {bank.state}
                         </span>
                         <span className={`ml-2 text-xs font-medium ${overBudget ? "text-rose-500" : "text-slate-500"}`}>
@@ -844,7 +844,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                   );
                 })}
                 {rankedCandidates.length === 0 && extraIds.length === 0 && (
-                  <li className="px-3 py-10 text-center text-sm text-slate-400">
+                  <li className="px-3 py-10 text-center text-sm text-slate-600">
                     No other tracked banks within {radiusMiles} miles.
                   </li>
                 )}
@@ -875,7 +875,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                 return (
                 <div key={day.dayIndex}>
                   {itinerary.days.length > 1 && (
-                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Day {dayIdx + 1}</h3>
+                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">Day {dayIdx + 1}</h3>
                   )}
                   {dayIdx === 0 && homePoint && morningDrive != null && (
                     <p className="mb-2 flex items-center gap-1.5 text-xs text-slate-500">
@@ -907,12 +907,12 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-baseline gap-x-2">
                                 <span className="font-medium text-slate-900">{stop.name}</span>
-                                <span className="text-xs text-slate-400">
+                                <span className="text-xs text-slate-600">
                                   arrive {s.arrive} · leave {s.depart}
                                   {s.driveMinutesFromPrev > 0 && ` · ${s.driveMinutesFromPrev}min drive`}
                                 </span>
                               </div>
-                              <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-slate-400">
+                              <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-slate-600">
                                 {stop.branch.address && (
                                   <span className="flex items-center gap-1">
                                     <MapPin className="h-3 w-3" />
@@ -961,9 +961,9 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                                         >
                                           <span className="min-w-0 truncate">
                                             {br.address}
-                                            {br.mainOffice && <span className="ml-1.5 text-slate-400">(main office)</span>}
+                                            {br.mainOffice && <span className="ml-1.5 text-slate-600">(main office)</span>}
                                           </span>
-                                          <span className="shrink-0 text-slate-400">
+                                          <span className="shrink-0 text-slate-600">
                                             {dist.toFixed(1)}mi from {homePoint ? "home" : "start"}
                                           </span>
                                         </button>
@@ -983,7 +983,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                     group.links.length > 0 ? (
                       <div key={group.label} className="mt-2 flex flex-wrap items-center gap-2">
                         {dayGroups.length > 1 && (
-                          <span className="text-xs font-medium text-slate-400">{group.label}:</span>
+                          <span className="text-xs font-medium text-slate-600">{group.label}:</span>
                         )}
                         {group.links.map((link, i) => (
                           <a
@@ -1034,7 +1034,7 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                         placeholder="Hotel or address for this night (optional)…"
                       />
                       {nightPoint(dayIdx) && lastStopObj && (
-                        <p className="mt-1 text-xs text-slate-400">
+                        <p className="mt-1 text-xs text-slate-600">
                           About {fmtDuration(estimateDriveMinutes(lastStopObj, nightPoint(dayIdx)!))} drive from the last stop.
                         </p>
                       )}

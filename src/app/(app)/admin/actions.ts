@@ -14,6 +14,7 @@ import {
   type BackupFile,
 } from "@/lib/backup";
 import { friendlyDbError } from "@/lib/friendlyError";
+import { fetchAllRows } from "@/lib/pagination";
 
 /** Returns the current user only if they are the configured owner (ADMIN_EMAIL). */
 async function requireOwner(): Promise<User | null> {
@@ -72,44 +73,64 @@ export async function listUsersWithStats(): Promise<{
   // fields — if that column isn't there yet, this page still shows names/stats
   // correctly (everyone just shows as not-FDIC-admin) instead of the whole
   // Promise.all failing on one unknown column.
-  const [{ data: profiles }, { data: accts }, { data: docs }, { data: notes }, { data: banks }, fdicAdminRes, accessRes] =
-    await Promise.all([
-      admin.from("profiles").select("id, display_name"),
-      admin.from("accounts").select("user_id").is("deleted_at", null),
-      admin.from("account_documents").select("user_id"),
-      admin.from("bank_comments").select("author_id"),
-      admin
-        .from("banks")
-        .select("user_id, status")
-        .is("deleted_at", null)
-        .neq("status", "untracked"),
-      admin.from("profiles").select("id, is_fdic_admin"),
-      // Queried separately (like is_fdic_admin) so that if migration 0036 hasn't
-      // been run yet, its missing columns can't blank out the whole user list —
-      // everyone just shows as approved with no "last seen" until it's applied.
-      admin.from("profiles").select("id, access_status, access_requested_at, last_seen_at"),
-    ]);
+  //
+  // Every one of these sums a table across EVERY user, not just one (DATA-18)
+  // — the closest-to-real risk of the 1000-row PostgREST cap in this app,
+  // since it's the one place that adds row counts across the whole family
+  // instead of one person's own data. Paginated past it the same way the
+  // personal export/weekly backup already are (DATA-06/REL-03).
+  const [profiles, accts, docs, notes, banks, fdicAdminRes, accessRes] = await Promise.all([
+    fetchAllRows<{ id: string; display_name: string | null }>((from, to) =>
+      admin.from("profiles").select("id, display_name").range(from, to),
+    ),
+    fetchAllRows<{ user_id: string }>((from, to) =>
+      admin.from("accounts").select("user_id").is("deleted_at", null).range(from, to),
+    ),
+    fetchAllRows<{ user_id: string }>((from, to) =>
+      admin.from("account_documents").select("user_id").range(from, to),
+    ),
+    fetchAllRows<{ author_id: string }>((from, to) =>
+      admin.from("bank_comments").select("author_id").range(from, to),
+    ),
+    fetchAllRows<{ user_id: string; status: string }>((from, to) =>
+      admin.from("banks").select("user_id, status").is("deleted_at", null).neq("status", "untracked").range(from, to),
+    ),
+    fetchAllRows<{ id: string; is_fdic_admin: boolean | null }>((from, to) =>
+      admin.from("profiles").select("id, is_fdic_admin").range(from, to),
+    ),
+    // Queried separately (like is_fdic_admin) so that if migration 0036 hasn't
+    // been run yet, its missing columns can't blank out the whole user list —
+    // everyone just shows as approved with no "last seen" until it's applied.
+    fetchAllRows<{
+      id: string;
+      access_status: AccessStatus | null;
+      access_requested_at: string | null;
+      last_seen_at: string | null;
+    }>((from, to) =>
+      admin.from("profiles").select("id, access_status, access_requested_at, last_seen_at").range(from, to),
+    ),
+  ]);
 
   const nameById = new Map(
-    (profiles ?? []).map((p) => [p.id as string, (p.display_name as string | null) ?? null]),
+    profiles.rows.map((p) => [p.id, p.display_name ?? null]),
   );
   const fdicAdminById = new Map(
-    (fdicAdminRes.data ?? []).map((p) => [p.id as string, !!p.is_fdic_admin]),
+    fdicAdminRes.rows.map((p) => [p.id, !!p.is_fdic_admin]),
   );
   const accessById = new Map(
-    (accessRes.data ?? []).map((p) => [
-      p.id as string,
+    accessRes.rows.map((p) => [
+      p.id,
       {
-        status: ((p.access_status as AccessStatus | null) ?? "approved") as AccessStatus,
-        requestedAt: (p.access_requested_at as string | null) ?? null,
-        lastSeen: (p.last_seen_at as string | null) ?? null,
+        status: (p.access_status ?? "approved") as AccessStatus,
+        requestedAt: p.access_requested_at,
+        lastSeen: p.last_seen_at,
       },
     ]),
   );
-  const acctMap = tally(accts, "user_id");
-  const docMap = tally(docs, "user_id");
-  const noteMap = tally(notes, "author_id");
-  const bankMap = tally(banks, "user_id");
+  const acctMap = tally(accts.rows, "user_id");
+  const docMap = tally(docs.rows, "user_id");
+  const noteMap = tally(notes.rows, "author_id");
+  const bankMap = tally(banks.rows, "user_id");
 
   const users: AdminUser[] = authUsers
     .map((u) => {
@@ -208,15 +229,19 @@ export async function setFdicAdminRole(
   if (!owner) return { error: "Not authorized." };
 
   const admin = createAdminClient();
-  const { error } = await admin
+  const { data: updated, error } = await admin
     .from("profiles")
     .update({ is_fdic_admin: value })
-    .eq("id", userId);
+    .eq("id", userId)
+    .select("id");
   if (error) {
     if (/is_fdic_admin|column/.test(error.message)) {
       return { error: "One-time setup needed: run migration 0026 in the Supabase SQL editor, then try again." };
     }
     return { error: friendlyDbError(error.message) };
+  }
+  if (!updated || updated.length === 0) {
+    return { error: "No matching user profile found." };
   }
   return {};
 }

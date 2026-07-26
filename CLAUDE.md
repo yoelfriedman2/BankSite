@@ -174,6 +174,126 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-24 (external audit — round 18: the last well-scoped batch — DATA-18/19/22, UX-01, UX-03
+all fixed)** — Direct continuation of round 17, same day: user asked what decision each of the next
+5 findings needed. Reported all 5 back grounded in the real current code (a genuine research pass
+this time — the pool of quick, obvious ones is exhausted, so grounding took more digging), and for
+UX-03 specifically, built and published a real before/after visual comparison (an Artifact) of the
+exact button/link/text colors under discussion so the color-scheme decision wasn't abstract — the
+user could see what the fix would actually look like on screen before committing to it. User
+approved all 5: "if these need fixing and it won't break anything, just fix it."
+
+- **DATA-22** — `BankForm.tsx`'s drawer-open effect stamped a bank's community-note "last read"
+  marker in parallel with fetching the notes themselves (`getBankComments(cert).then(setComments)`
+  and `markCommentsRead(cert)` both fired at once, neither awaiting the other). A note posted by
+  someone else in the narrow gap between the read-marker landing on the server and the notes fetch
+  actually resolving could get silently marked "read" without ever appearing in the view that
+  supposedly read it — a real, if narrow, race. Reordered so `markCommentsRead()` only fires after
+  `getBankComments()` resolves and its result is applied — narrows the exposure from "however long
+  the whole page's concurrent fetches take" down to the read-marker's own single database round
+  trip. Can't be fully eliminated without a server-side "mark read as of the comments I actually
+  returned" guarantee, which would need real API redesign — this closes the realistic case.
+- **DATA-19** — 2 concrete gaps (every other case this finding originally described — onboarding/
+  access-status updates, the FDIC-closed-bank count check, permanent delete — was already fixed in
+  earlier rounds via INT-10/DATA-07/DATA-21): `setFdicAdminRole` (admin/actions.ts, grants/revokes
+  the FDIC-sync role) and `updateAccountVaultFields` (accounts/actions.ts, the bulk re-encrypt/
+  decrypt write when toggling vault encryption) both did a plain `.update()` with no `.select()`
+  check that a row actually matched — the same false-success shape already fixed elsewhere in this
+  project. Both now check the affected row and return an error otherwise, mirroring
+  `setAccessStatus`'s already-established pattern exactly. `updateAccountVaultFields`'s two real
+  callers in `VaultEncryptionCard.tsx` (`reencryptAll`/`decryptAll`) were previously discarding its
+  return value entirely (`await updateAccountVaultFields(updates);` with nothing captured) — now
+  both throw on a real error, caught by their existing try/catch (or, for the "Encrypt any
+  unprotected logins" button, which had no try/catch at all before this, a newly added one) instead
+  of silently no-oping on a failure with zero indication to the user.
+- **DATA-18** — the two already-fixed cases (personal export/DATA-06, weekly backup/REL-03) proved
+  the pattern was already right; it just hadn't been applied to the pages/actions that read the same
+  tables every day. Extracted the shared `fetchAllRows()` helper out of `lib/backup.ts` (which pulls
+  in `xlsx`/JSZip at module scope — fine for a route handler, unnecessary baggage for a server
+  component or action that just needs to paginate a query) into a new, dependency-free
+  `src/lib/pagination.ts`; `lib/backup.ts` now imports and re-exports it so the one existing external
+  consumer (`api/export/full/route.ts`) needed no changes. Applied to: the Banks and Accounts pages'
+  own primary `banks`/`accounts` reads, the dashboard, Calendar, Fees & interest, and Print Checks
+  pages, Settings' "export before delete" quick-export, `getAllBankComments` (every community note
+  across every user, the table in this app most likely to actually cross 1000 rows over time), and —
+  the closest-to-real risk found, since it's the one place that sums counts across the *whole family*
+  at once instead of one user's own data — the admin Users page's cross-user tallies (`profiles`/
+  `accounts`/`account_documents`/`bank_comments`/`banks`). Banks/user is seeded at ~426 today,
+  comfortably under the 1000-row cap but without a lot of margin as data grows — this is prevention,
+  not a fix for an already-reproduced truncation.
+- **UX-01 — the largest single piece of work this round.** Grepped every modal/drawer-shaped overlay
+  in the app (`fixed inset-0` backdrop pattern) and confirmed via direct reading that all 14 had
+  *zero* of: `role="dialog"`, `aria-modal`, a Tab focus trap, Escape-to-close, or focus-return on
+  close. Built one shared `src/lib/useFocusTrap.ts` hook — moves focus into the dialog's subtree on
+  activation, traps Tab at its boundaries (wrapping first↔last), restores focus to whatever triggered
+  it on deactivation, and closes on Escape if an `onClose` is given. A real bug caught before it
+  shipped: with two nested modals open at once (e.g. editing an account from inside the bank drawer),
+  *both* traps' `document`-level keydown listeners fire on a single Escape/Tab press, since neither
+  is scoped to a specific element that would stop the other from also seeing it — unguarded, one
+  Escape press would close the inner *and* outer dialog together. Fixed by having the handler check
+  `ref.current.contains(document.activeElement)` first, so only the trap whose subtree currently
+  holds real focus responds. A second design fork: some overlays (TopNav's mobile drawer) stay
+  permanently mounted and toggle via CSS/`inert` rather than being conditionally rendered by their
+  parent — the hook's default "activate for this component's whole mounted lifetime" assumption
+  doesn't fit, so it gained an optional `active` boolean (default `true`, so every other call site's
+  signature is unchanged) that the effect re-runs on when it flips. New `src/components/
+  FocusTrapPanel.tsx` — a thin wrapper around the hook — covers panels with too much pre-existing
+  local state to cleanly pull into their own component (the Banks/Accounts pages' mobile filter
+  sheets). A few dialogs *did* need extracting into their own component first, since a hook can't be
+  called conditionally inside a parent's own `{x && (...)}` JSX block: BankForm's "let everyone know"
+  cannot-open-share prompt, IdleTimeout's warning dialog (IdleTimeout itself stays mounted for the
+  whole app session — deliberately **no** Escape-to-close on this one, since there's no dismiss
+  action distinct from "Stay signed in," which actually resets the activity clock; closing without
+  that would leave someone thinking they're safe from the timeout when they're not), AdminUsersClient's
+  and SettingsForm's delete-confirm dialogs. All 14 covered: AccountModal, AccountViewModal,
+  BankForm's main drawer + its share-prompt, CheckPrintModal, ImportDialog, IdleTimeout's warning,
+  AdminBackupsPanel's restore dialog, AdminUsersClient's delete-user dialog, SettingsForm's
+  delete-account dialog, MoneyClient's new-move modal, the Banks/Accounts mobile filter sheets, and
+  TopNav's mobile nav drawer.
+- **UX-03** — fixed all 4 originally-audited color combos (`bg-amber-500`/`text-amber-600` primary
+  buttons and links at 2.15:1/3.19:1 → `amber-700` at 5.02:1; `bg-emerald-600` secondary buttons and
+  the success-toast background at 3.77:1 → `emerald-700` at 5.48:1; `text-slate-400` muted text at
+  2.56:1 → `slate-600` at 7.58:1), plus every other genuine-readable-text instance of the same shades
+  found while going through the codebase systematically (e.g. `text-emerald-600` "Saved"/"Applied"
+  confirmation text, which shares the exact same failing ratio as the audited `bg-emerald-600` case
+  but wasn't one of the 4 originally cited). Given real scale — 265 raw `text-slate-400` occurrences
+  alone, far more than the illustrative "some timestamps" example the user was shown before
+  approving — went through classification carefully rather than a blind global find-replace:
+  built an automated pass with dry-run review first, excluding icon-only/decorative uses (a darker
+  icon isn't wrong, just unnecessary — the lighter shade already met WCAG's looser 3:1 non-text
+  threshold) and disabled-control states (WCAG explicitly exempts these from any contrast
+  requirement, and a disabled control is *supposed* to look washed out — darkening it would undercut
+  that visual signal). **The one genuine correctness risk found, not just an unnecessary-change
+  risk**: `SideNav.tsx` and `TopNav.tsx`'s nav links render `text-slate-400` directly on a solid dark
+  `bg-slate-900` sidebar/drawer, not white — that's light-gray-on-dark, an already-good contrast
+  ratio completely different from the audited white-background case. The naive blanket fix would
+  have darkened it toward black-on-black, the opposite of an accessibility improvement. Caught by
+  grepping for every solid (non-transparent) dark background in the app *before* running the sweep,
+  confirming these two files were the only genuine dark-panel case (everywhere else `bg-slate-900`/
+  `800` turned out to be a semi-transparent modal backdrop, or — WelcomeForm.tsx — a page-level
+  backdrop behind a nested white card) and excluding them by file.
+
+No migration this round — every fix is pure application code, live on deploy.
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (84/84) all clean. UX-01 and UX-03
+are both genuinely UI-observable (unlike DATA-18/19/22, which are server-side/data-integrity logic
+with no new UI surface — verified by reading each diff against the original code), so both got a
+live CDP pass against a real DEMO_MODE dev server. UX-01: confirmed a real dialog gets `role=
+"dialog"`/`aria-modal="true"` and moves focus inside automatically on open; confirmed Shift+Tab from
+the first focusable element wraps to the last; confirmed Escape closes the dialog. The one check
+that initially read as a failure — "focus returns to the trigger after Escape" — turned out to be a
+test-script artifact, not a real bug: a synthetic `.click()` via CDP doesn't focus an element the way
+a real mouse click does, so there was nothing meaningful for the hook to restore focus *to*. Re-ran
+with the trigger explicitly focused first and confirmed focus correctly lands back on it after
+Escape, matching the real-world case. Also confirmed the nested-trap fix directly: opening a modal
+from inside another modal (editing an account from inside the bank drawer) produces exactly 2
+`role="dialog"` elements, and pressing Escape once closes only the inner one — the outer bank drawer
+stays open — exactly the scoping this round's guard exists for. UX-03 was verified by grepping for
+any remaining instance of each old shade combined with `text-white` on the same line (zero found)
+and confirming the two dark-background nav files were left completely untouched. `DEMO_MODE` was
+flipped to `true` for this round's verification and flipped back to `false` before finishing, per
+the standing rule.
+
 **2026-07-24 (external audit — round 17: reaching into lower-confidence territory on purpose —
 UX-22, UX-12, DATA-10, CFG-01, UX-02 fixed, plus 3 freebie closures)** — Direct continuation of
 round 16, same day: user explicitly asked to go further than the usual "biggest wins" framing —

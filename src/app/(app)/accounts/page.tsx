@@ -9,6 +9,7 @@ import {
   getDemoProfile,
   getKnownHolders,
 } from "@/lib/demo";
+import { fetchAllRows } from "@/lib/pagination";
 import type { Account } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -42,15 +43,18 @@ export default async function AccountsPage({
     } = await supabase.auth.getUser();
     if (!user) redirect("/login");
 
-    const { data: banksData } = await supabase
-      .from("banks")
-      .select("id, name, state, cert")
-      .is("deleted_at", null);
-    const { data: acctData } = await supabase
-      .from("accounts")
-      .select("*")
-      .is("deleted_at", null)
-      .order("created_at", { ascending: true });
+    // Paginated past PostgREST's default 1000-row cap (DATA-18).
+    const { rows: banksData } = await fetchAllRows<BankRef>((from, to) =>
+      supabase.from("banks").select("id, name, state, cert").is("deleted_at", null).range(from, to),
+    );
+    const { rows: acctData } = await fetchAllRows<Account>((from, to) =>
+      supabase
+        .from("accounts")
+        .select("*")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: true })
+        .range(from, to),
+    );
     // select * so the page keeps working before migration 0025 adds the alert columns
     const { data: profile } = await supabase
       .from("profiles")
