@@ -4,6 +4,14 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 
 ## One-time setup pending
 
+- **Run migration `0045_search_and_rls_indexes.sql`** — adds the `pg_trgm` extension and GIN trigram
+  indexes on `banks.name`/`city` and `accounts.holder`/`account_number` (columns searched via
+  leading-wildcard `.ilike`, which a plain btree index can't speed up at all), plus plain btree
+  indexes on `account_documents.user_id`/`account_id` (previously had zero indexes despite being
+  RLS-filtered and looked up directly on every real read path). Closes PERF-05. Purely additive and
+  safe to run any time — an index never changes query results, only how fast Postgres can find them —
+  so nothing breaks either way; running it just speeds up search and document reads as data grows.
+
 - **Run migration `0044_check_number_and_activity_log_atomicity.sql`** — adds
   `claim_check_number` (DATA-14) and `append_activity_log` (DATA-20) Postgres functions. Fixes two
   read-then-write races: two near-simultaneous check prints could silently store the same check

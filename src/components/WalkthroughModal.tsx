@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 const BASE = "bt_tour_v2";
 
@@ -122,6 +123,21 @@ export function WalkthroughModal({
       return;
     }
 
+    // The candidate can be genuinely rendered (nonzero width/height, the check
+    // above) but still scrolled out of the visible viewport — e.g. a nav item
+    // below the fold in a long sidebar, or off-screen on a narrow layout.
+    // Bring it into view first so the tooltip/ring point at something the
+    // user can actually see instead of computing a position off-screen.
+    const pre = el.getBoundingClientRect();
+    const offscreen =
+      pre.bottom < 0 ||
+      pre.top > window.innerHeight ||
+      pre.right < 0 ||
+      pre.left > window.innerWidth;
+    if (offscreen) {
+      el.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+
     const r = el.getBoundingClientRect();
     setRingRect({ top: r.top, left: r.left, width: r.width, height: r.height });
 
@@ -154,6 +170,14 @@ export function WalkthroughModal({
     setShow(false);
   }
 
+  // `show` is the "active" signal, not the default (whole-lifetime) one — this
+  // component's parent always renders it unconditionally, and `show` is
+  // WalkthroughModal's OWN internal visibility state (returns null while
+  // false), so the trap must re-run specifically when `show` flips, not just
+  // once on this component's very first render (when `show` still starts
+  // false and the ref is still null).
+  const dialogRef = useFocusTrap<HTMLDivElement>(dismiss, show);
+
   if (!show) return null;
 
   const cur = STEPS[step];
@@ -162,6 +186,11 @@ export function WalkthroughModal({
 
   const card = (
     <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="walkthrough-title"
+      aria-describedby="walkthrough-desc"
       style={{
         width: 276,
         background: "#0a111f",
@@ -212,6 +241,7 @@ export function WalkthroughModal({
         </div>
 
         <div
+          id="walkthrough-title"
           style={{
             fontSize: 14,
             fontWeight: 700,
@@ -223,6 +253,7 @@ export function WalkthroughModal({
           {cur.title}
         </div>
         <div
+          id="walkthrough-desc"
           style={{
             fontSize: 12.5,
             color: "rgba(148,163,184,0.88)",

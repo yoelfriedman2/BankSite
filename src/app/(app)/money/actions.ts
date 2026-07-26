@@ -244,13 +244,19 @@ export async function returnSweep(sweepId: string): Promise<{ error?: string }> 
   return {};
 }
 
-/** Return several swept amounts at once (used by "Return all" on a reason). */
+/** Return several swept amounts at once (used by "Return all" on a reason).
+ *  Each id is independent (its own row-locked transaction, no shared state
+ *  between them — see returnSweep/migration 0034), so these run concurrently
+ *  instead of one at a time (PERF-03) — the previous serial loop also bailed
+ *  entirely on the first failure, silently leaving every later id untried. */
 export async function returnSweepBatch(ids: string[]): Promise<{ error?: string }> {
-  for (const id of ids) {
-    const res = await returnSweep(id);
-    if (res.error) return res;
-  }
-  return {};
+  const results = await Promise.all(ids.map((id) => returnSweep(id)));
+  const failed = results.filter((r) => r.error);
+  if (failed.length === 0) return {};
+  if (failed.length === results.length) return { error: failed[0].error };
+  return {
+    error: `${results.length - failed.length} of ${results.length} were marked returned; ${failed.length} failed: ${failed[0].error}`,
+  };
 }
 
 export type BalancePoint = {

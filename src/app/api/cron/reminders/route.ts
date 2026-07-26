@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   sendActivityReminderEmail,
@@ -9,6 +10,18 @@ import {
 import { buildBackupZip, saveBackupToStorage } from "@/lib/backup";
 import { isMonthlyFeeDue } from "@/lib/monthlyFee";
 import { isInterestAccrualDue, monthlyInterestAmount } from "@/lib/interestAccrual";
+
+// This route runs unattended (no signed-in user, no toast to show) — a
+// swallowed failure here previously only ever reached this app's own request
+// logs, which nobody is actively watching (OBS-01). Same console.error text
+// as before, plus a Sentry report so a real failure is actually visible.
+function logCronError(message: string, err?: unknown) {
+  console.error(`[cron/reminders] ${message}`, err);
+  Sentry.captureMessage(`[cron/reminders] ${message}`, {
+    level: "error",
+    extra: err != null ? { detail: err instanceof Error ? err.message : String(err) } : undefined,
+  });
+}
 
 // This route does several sequential jobs (reminders, monthly fee/interest
 // accrual, and — once a week — the full-database backup), each involving
@@ -112,7 +125,7 @@ export async function GET(req: NextRequest) {
       // already logged once above) — doesn't silently suppress the reminder
       // for 30 days with nothing ever having been delivered.
       if (sendErr) {
-        console.error(`[cron/reminders] activity email to ${email} failed:`, sendErr);
+        logCronError(`activity email to ${email} failed:`, sendErr);
         continue;
       }
       if (skipped) continue;
@@ -124,7 +137,7 @@ export async function GET(req: NextRequest) {
       }
       sent++;
     } catch (err) {
-      console.error(`[cron/reminders] unexpected error processing activity reminders for profile ${profile.id}:`, err);
+      logCronError(`unexpected error processing activity reminders for profile ${profile.id}:`, err);
     }
   }
 
@@ -185,7 +198,7 @@ export async function GET(req: NextRequest) {
           remindersEmailed += g.items.length;
         }
       } catch (err) {
-        console.error(`[cron/reminders] unexpected error processing due reminders for user ${uid}:`, err);
+        logCronError(`unexpected error processing due reminders for user ${uid}:`, err);
       }
     }
   }
@@ -204,7 +217,7 @@ export async function GET(req: NextRequest) {
     .not("monthly_fee_day", "is", null);
 
   if (feeErr) {
-    console.error("[cron/reminders] monthly fee query failed (migration 0029 not run yet?):", feeErr.message);
+    logCronError("monthly fee query failed (migration 0029 not run yet?):", feeErr.message);
   } else {
     const todayStr = today.toISOString().slice(0, 10);
     // Each account is processed independently — an unexpected failure on one
@@ -278,7 +291,7 @@ export async function GET(req: NextRequest) {
             reason: "monthly fee",
           });
           if (historyErr) {
-            console.error(`[cron/reminders] monthly-fee history insert failed for account ${a.id}:`, historyErr.message);
+            logCronError(`monthly-fee history insert failed for account ${a.id}:`, historyErr.message);
           }
           feesCharged++;
           continue;
@@ -294,7 +307,7 @@ export async function GET(req: NextRequest) {
           .update({ balance: newBalance, monthly_fee_last_charged_on: todayStr })
           .eq("id", a.id);
         if (updateErr) {
-          console.error(`[cron/reminders] monthly fee charge failed for account ${a.id}:`, updateErr.message);
+          logCronError(`monthly fee charge failed for account ${a.id}:`, updateErr.message);
           continue;
         }
         const { error: historyErr2 } = await admin.from("account_balance_history").insert({
@@ -306,11 +319,11 @@ export async function GET(req: NextRequest) {
           reason: "monthly fee",
         });
         if (historyErr2) {
-          console.error(`[cron/reminders] monthly-fee history insert failed for account ${a.id}:`, historyErr2.message);
+          logCronError(`monthly-fee history insert failed for account ${a.id}:`, historyErr2.message);
         }
         feesCharged++;
       } catch (err) {
-        console.error(`[cron/reminders] unexpected error charging monthly fee for account ${a.id}:`, err);
+        logCronError(`unexpected error charging monthly fee for account ${a.id}:`, err);
       }
     }
   }
@@ -328,7 +341,7 @@ export async function GET(req: NextRequest) {
     .not("interest_rate", "is", null);
 
   if (interestErr) {
-    console.error("[cron/reminders] interest accrual query failed (migration 0038 not run yet?):", interestErr.message);
+    logCronError("interest accrual query failed (migration 0038 not run yet?):", interestErr.message);
   } else {
     const todayStr = today.toISOString().slice(0, 10);
     // Each account is processed independently, same reasoning as the monthly
@@ -395,7 +408,7 @@ export async function GET(req: NextRequest) {
             reason: "interest credited",
           });
           if (historyErr) {
-            console.error(`[cron/reminders] interest history insert failed for account ${a.id}:`, historyErr.message);
+            logCronError(`interest history insert failed for account ${a.id}:`, historyErr.message);
           }
           interestCredited++;
           continue;
@@ -411,7 +424,7 @@ export async function GET(req: NextRequest) {
           .update({ balance: newBalance, interest_last_accrued_on: todayStr })
           .eq("id", a.id);
         if (updateErr) {
-          console.error(`[cron/reminders] interest credit failed for account ${a.id}:`, updateErr.message);
+          logCronError(`interest credit failed for account ${a.id}:`, updateErr.message);
           continue;
         }
         const { error: historyErr2 } = await admin.from("account_balance_history").insert({
@@ -423,11 +436,11 @@ export async function GET(req: NextRequest) {
           reason: "interest credited",
         });
         if (historyErr2) {
-          console.error(`[cron/reminders] interest history insert failed for account ${a.id}:`, historyErr2.message);
+          logCronError(`interest history insert failed for account ${a.id}:`, historyErr2.message);
         }
         interestCredited++;
       } catch (err) {
-        console.error(`[cron/reminders] unexpected error crediting interest for account ${a.id}:`, err);
+        logCronError(`unexpected error crediting interest for account ${a.id}:`, err);
       }
     }
   }
@@ -446,17 +459,17 @@ export async function GET(req: NextRequest) {
       const { zip, tableCounts, warnings } = await buildBackupZip();
       const stored = await saveBackupToStorage(zip);
       backup = stored.error ? `storage failed: ${stored.error}` : `stored ${stored.path}`;
-      if (stored.error) console.error("[cron/reminders] backup storage failed:", stored.error);
+      if (stored.error) logCronError("backup storage failed:", stored.error);
 
       const monthlyEmail = today.getDate() <= 7 || forceBackup;
       if (monthlyEmail) {
         const { error } = await sendBackupEmail(tableCounts, warnings);
         backup += error ? `; email failed: ${error}` : "; emailed";
-        if (error) console.error("[cron/reminders] backup email failed:", error);
+        if (error) logCronError("backup email failed:", error);
       }
     } catch (err) {
       backup = `failed: ${String(err)}`;
-      console.error("[cron/reminders] backup failed:", err);
+      logCronError("backup failed:", err);
     }
   }
 

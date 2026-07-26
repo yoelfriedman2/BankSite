@@ -1,18 +1,51 @@
 // One-time import: parse 2023 Excel → update Supabase banks + post community notes
-// Usage: node scripts/import-2023-notes.mjs [--apply]
+// Usage: EXCEL_PATH=/path/to/2023.xlsx node scripts/import-2023-notes.mjs [--apply]
 //   --apply  actually write to DB (default is dry-run)
+// Reads NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY from .env.local if
+// not already set in the environment — same variable names the app itself uses.
 
 import XLSX from 'xlsx';
 import * as fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 
 // The ESM build of SheetJS doesn't bundle fs — readFile fails with
 // "Cannot access file" unless we hand it the fs module explicitly.
 XLSX.set_fs(fs);
 
-const EXCEL_PATH = process.env.EXCEL_PATH ?? 'C:/Users/ben/Downloads/1738216686522_1730408939842_2023.xlsx';
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://zcgfvggxijzoavxfbluj.supabase.co';
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY; // set in env — never hardcode
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+function loadEnv() {
+  const env = {};
+  try {
+    for (const line of fs.readFileSync(join(root, '.env.local'), 'utf8').split(/\r?\n/)) {
+      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+      if (m) env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+    }
+  } catch {}
+  return env;
+}
+const env = loadEnv();
+
+const EXCEL_PATH = process.env.EXCEL_PATH;
+if (!EXCEL_PATH) {
+  console.error(
+    'Missing EXCEL_PATH.\n' +
+      'Set it to the full path of the source spreadsheet, e.g.:\n' +
+      '  EXCEL_PATH=/path/to/2023.xlsx node scripts/import-2023-notes.mjs',
+  );
+  process.exit(1);
+}
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? env.NEXT_PUBLIC_SUPABASE_URL;
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? env.SUPABASE_SERVICE_ROLE_KEY;
+if (!SUPABASE_URL || !SERVICE_KEY) {
+  console.error(
+    'Missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY.\n' +
+      'Set both in .env.local (same variables the app itself uses) or in the environment.',
+  );
+  process.exit(1);
+}
 const DRY_RUN = !process.argv.includes('--apply');
 
 const db = createClient(SUPABASE_URL, SERVICE_KEY, {

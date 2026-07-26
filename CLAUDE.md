@@ -174,6 +174,76 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-26 (external audit — round 20: 5 easiest of the remaining 13 findings — OPS-02, UX-18,
+PERF-03, PERF-05, OBS-01 all fixed)** — User asked how many findings were left (13), then asked for
+the 5 easiest to fix. Opened the actual code for each candidate before ranking rather than trusting
+the tracker's one-line descriptions — surfaced real specifics (PERF-02's "over-fetch" turned out to
+be 32 `select("*")` call sites across the app, not a clean fix; PERF-03 bundles a genuinely-easy half
+with a half needing a new RPC). Reported the ranked 5 with what was actually found. User said "yes."
+
+- **OPS-02** — `scripts/gen-seed.mjs` and `scripts/import-2023-notes.mjs` hardcoded a real path from
+  someone else's machine (`C:/Users/ben/Downloads/...`); the latter also fell back to a hardcoded
+  real production Supabase URL and read a service-role key under a name
+  (`SUPABASE_SERVICE_KEY`) that doesn't match this project's actual `.env.local` convention
+  (`SUPABASE_SERVICE_ROLE_KEY`). Both scripts now require the relevant values explicitly (env or
+  `.env.local`, matching `plaid-coverage.mjs`'s already-established pattern) and exit with a clear
+  error if missing.
+- **UX-18** — `WalkthroughModal.tsx` had zero ARIA dialog semantics. Wired in the existing
+  `useFocusTrap` hook from round 18's UX-01 work — and caught a real bug doing it: the hook's default
+  `active=true` assumes a *parent* conditionally mounts the component, but `WalkthroughModal` stays
+  mounted itself and toggles its own internal `show` state, so the trap's one-time effect fired on the
+  very first render (while `show` was still false and the ref still null) and never moved focus or
+  armed Escape/Tab-trap correctly. Fixed by passing `show` itself as the hook's `active` parameter.
+  Also fixed the "offscreen element" half of the finding: a genuinely-rendered nav item scrolled out
+  of the visible viewport now gets `scrollIntoView({ block: "nearest" })` before the tooltip/ring
+  position is computed, instead of silently pointing at something off-screen.
+- **PERF-03 (batch-return half only)** — `returnSweepBatch` (`money/actions.ts`) awaited each
+  independent `returnSweep(id)` one at a time and bailed on the first failure, leaving every later id
+  untried. Parallelized via `Promise.all` (same safe pattern as PERF-01 — Supabase resolves
+  `{data, error}` rather than throwing) with an honest partial-success count on failure, matching the
+  same-file precedent `createSweepBatch` already established. The other half (`getBalanceAsOf`
+  scanning full balance history client-side) needs a new Postgres `DISTINCT ON` RPC to fix properly —
+  left open, a bigger change than this round's other fixes.
+- **PERF-05** — new migration **0045_search_and_rls_indexes.sql** adds the `pg_trgm` extension and
+  GIN trigram indexes on `banks.name`/`city` and `accounts.holder`/`account_number` (the columns
+  searched via leading-wildcard `.ilike`, which a plain btree index can't accelerate at all), plus
+  plain btree indexes on `account_documents.user_id`/`account_id` (a table with zero indexes at all
+  despite being both RLS-filtered and looked up directly on every real read path). Reasoned from the
+  actual query code, not a profiled query plan — this sandbox has no live Postgres connection to run
+  EXPLAIN against. **Needs the migration run — see TODO.md.**
+- **OBS-01** — Sentry was already fully wired (client/server/edge configs, `instrumentation.ts`
+  capturing thrown errors) but every server action's established `try/catch` → friendly `{ error }`
+  pattern (used everywhere in this app so a user gets a toast instead of a crash screen) deliberately
+  swallows the real error before it ever throws — meaning it never reached Sentry either. Fixed at the
+  single highest-leverage choke point instead of touching every catch block: `friendlyDbError()`
+  (`lib/friendlyError.ts`), the one shared helper 15+ action files already route their raw DB-error
+  message through, now reports to Sentry on its recognized-pattern branches only (unique/FK/not-null/
+  check-constraint violations, invalid syntax, network/timeout — each unambiguously a real system
+  error, never something the app's own validation text would coincidentally match); the unrecognized
+  fallback stays unreported on purpose, to avoid trading one blind spot for a noisy one.
+  RLS/permission-denied reports at `"warning"` not `"error"`, since a fail-closed RLS check (SEC-03)
+  denying a pending/denied user is sometimes correct behavior. Separately, the daily cron route's 16
+  `console.error` sites (fully unattended — no user, no toast, only a log nobody watches) now also
+  report via a new local `logCronError()` helper. **A real implementation bug caught before shipping**:
+  the bulk `sed` replacement across all 16 cron call sites also rewrote the new helper's own internal
+  `console.error` call into a self-recursive call — caught by reading the generated diff line by line
+  rather than trusting the automated replacement, fixed before it ever ran.
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (84/84) all clean. UX-18 is the one
+genuinely UI-observable fix this round, so it got a live CDP pass against a real DEMO_MODE dev server —
+temporarily relaxed the walkthrough's `isDemo` gate to make it reachable in DEMO_MODE (reverted
+immediately after, confirmed via diff). First pass caught the real `active`-parameter bug described
+above (focus never moved in, Escape did nothing); after the fix: dialog renders with `role="dialog"`/
+`aria-modal="true"`, focus moves to the Skip-tour button automatically on open, Shift+Tab from the
+first element stays trapped inside the dialog, Escape dismisses it and the dismissal persists across a
+reload, no mobile overflow (375px). One test-script-only false failure along the way — a synthetic CDP
+`.click()` doesn't move real focus the way a genuine click does, the same limitation this project's
+UX-01 verification already documented — diagnosed and worked around by testing Escape from the
+already-confirmed auto-focused state instead of after a scripted button click. The other four fixes
+are server-side/script/migration changes with no new UI surface — verified by reading each diff
+against the original code. `DEMO_MODE` was flipped to `true` for this round's verification and
+flipped back to `false` before finishing, per the standing rule.
+
 **2026-07-26 (external audit — round 19: UX-07/08/10/14 fixed in full, UX-11 partially fixed,
 touch-target sizing explicitly declined)** — Direct continuation of round 18: user asked for the
 next 5. Reported UX-07, UX-08, UX-10, UX-11, UX-14 (skipping DATA-15, already declined earlier). For

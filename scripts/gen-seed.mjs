@@ -1,7 +1,24 @@
+// One-time generator: parse the "2023.xlsx" Master List → src/lib/banks-seed.ts
+// Usage: EXCEL_PATH=/path/to/2023.xlsx node scripts/gen-seed.mjs
+
 import { readFileSync, writeFileSync } from "fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import * as XLSX from "xlsx";
 
-const buf = readFileSync("C:/Users/ben/Downloads/2023.xlsx");
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+const EXCEL_PATH = process.env.EXCEL_PATH;
+if (!EXCEL_PATH) {
+  console.error(
+    "Missing EXCEL_PATH.\n" +
+      "Set it to the full path of the source spreadsheet, e.g.:\n" +
+      "  EXCEL_PATH=/path/to/2023.xlsx node scripts/gen-seed.mjs",
+  );
+  process.exit(1);
+}
+
+const buf = readFileSync(EXCEL_PATH);
 const wb = XLSX.read(buf, { type: "buffer" });
 const ws = wb.Sheets["Master List"];
 const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
@@ -52,8 +69,9 @@ ${lines.join("\n")}
 ];
 `;
 
-writeFileSync("src/lib/banks-seed.ts", out, "utf8");
-console.log(`Wrote src/lib/banks-seed.ts with ${banks.length} banks.`);
+const outPath = join(root, "src/lib/banks-seed.ts");
+writeFileSync(outPath, out, "utf8");
+console.log(`Wrote ${outPath} with ${banks.length} banks.`);
 // quick stats
 const byState = {};
 for (const b of banks) byState[b.state ?? "?"] = (byState[b.state ?? "?"] || 0) + 1;

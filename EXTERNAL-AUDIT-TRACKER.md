@@ -76,7 +76,7 @@ decision or bigger effort before it can be safely fixed
 - [x] UX-15 — Document viewer can fail silently / get popup-blocked — fixed: both `AccountDocuments.tsx` and `DocumentsClient.tsx`'s "View" buttons called `window.open(url, ...)` and ignored the return value — the exact same bug shape as UX-06 (just fixed the round before this one). If the browser blocks the popup, the click now sets the component's existing inline error state (reused, not a new pattern) to a clear message instead of doing nothing.
 - [x] UX-16 — UTC/local-date mixing (confirmed via exact reproduction) — fixed at every client-side "today" default: new shared `lib/date.ts#todayLocalStr()` (local Y/M/D getters, not `toISOString()`, which is always UTC and can be a full day off near midnight) now used in AccountModal, BankForm, DashboardReminders, and MoneyClient. `balances/page.tsx`'s server-guessed "today" is corrected client-side on mount if the browser's real local date differs. Server-side "today" values (cron timestamps, backup/export filenames) intentionally left as UTC — a scheduled job has no single user timezone to reference.
 - [x] UX-17 — Website links inconsistent, scheme-less values break — fixed: grepped every spot rendering a bank's `website` field as a link. Only `BankForm.tsx` guarded against a scheme-less value (`www.examplebank.com`, plausible from the FDIC API or manual entry) — `AddressChangeClient.tsx`, `NearbyBanksFinder.tsx`, `RoadTripClient.tsx`, and `UpNextClient.tsx` all used the raw value directly as `href`, resolving as a broken relative link instead of navigating out. New shared `withScheme()` helper (`lib/format.ts`) applied consistently across all 5 spots, replacing `BankForm.tsx`'s own inline version too so there's one canonical implementation.
-- [ ] UX-18 — Onboarding walkthrough inaccessible, can target offscreen element
+- [x] UX-18 — Onboarding walkthrough inaccessible, can target offscreen element — fixed: `WalkthroughModal.tsx` had zero ARIA dialog semantics (no `role="dialog"`, no `aria-modal`, no focus trap, no Escape-to-close), reusing the existing `useFocusTrap` hook from UX-01 rather than building a new mechanism. A real bug surfaced by the fix itself: the hook's default `active=true` (meant for components a *parent* conditionally mounts) doesn't fit this component, which stays mounted the whole time and toggles its own internal `show` state — passing the default meant the trap's one-time effect ran on this component's very first render, while `show` was still `false` and the ref was still `null`, so focus never actually moved into the dialog and the Escape/Tab-trap guard (which checks `ref.current.contains(document.activeElement)`) never matched. Fixed by passing `show` itself as the `active` parameter, so the trap correctly re-activates each time the tour opens. For "can target offscreen element": `reposition()` already skipped a zero-size candidate (a hidden mobile-vs-desktop duplicate), but a genuinely-rendered nav item scrolled out of the visible viewport (a long sidebar, a narrow layout) was never accounted for — the tooltip/pulsing-ring would silently compute a position pointing at something the user couldn't see. Now checks whether the found element is actually within the viewport and calls `scrollIntoView({ block: "nearest" })` first if not.
 - [ ] UX-19 — Calendar/map lack non-visual equivalents
 - [x] UX-20 — Idle logout has no warning/countdown — fixed: `IdleTimeout.tsx` silently redirected to `/login` the instant the 8-hour idle window expired, with zero notice — anything mid-edit was just gone. Now shows a countdown modal ("Stay signed in") for the last 60 seconds before it happens; the shared cross-tab activity clock (localStorage) is unchanged, and any real activity (or an explicit "Stay signed in" click) cancels the warning and resets the clock. Two real bugs caught and fixed via testing before shipping: (1) an initial version had the "Stay signed in" button clear only React state, leaving the 1s warning interval still running in the background — it would immediately recompute a full 8-hour "remaining" value and pop the modal back up with a nonsense countdown; fixed by routing the button through the exact same internal stop-warning path the effect itself uses. (2) The same interval didn't handle activity resuming in a *different* tab (the shared clock updates, but there's no local event to catch it) — a stale tick would display a huge leftover countdown instead of dismissing; fixed by having every tick re-check whether it's still actually within the warning window. A third, pre-existing (not introduced by this round) gap was also found via the same testing: `logout()`'s `fetch("/auth/signout", ...)` had no timeout at all — a hung request would block the redirect indefinitely, undermining the very promise the new countdown makes. Added a 5-second `AbortController` bound.
 - [ ] UX-21 — Installed PWA has no offline/update experience
@@ -91,14 +91,14 @@ decision or bigger effort before it can be safely fixed
 - [x] CFG-01 — Env contract incomplete/unvalidated (docs partially fixed) — fixed the remaining validation half: new `instrumentation.ts#checkRequiredEnvVars()` runs once at server startup (Node runtime only) and logs a clear, loud `console.error` listing any of the 5 required env vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_EMAIL`, `CRON_SECRET`) that are missing, instead of failing silently deep inside whatever code path first touches the missing value (e.g. an unset `CRON_SECRET` previously just made the cron routes 401 forever with nothing pointing at why). Deliberately warns rather than throws/crashes — several of these already have documented graceful-degradation behavior when unset, and taking the whole server down here would be a worse failure mode than what already exists. Verified live: temporarily blanked `CRON_SECRET` in `.env.local`, restarted the dev server, confirmed the exact expected warning appeared in the log, restored the original value.
 - [x] PERF-01 — Repeated auth/profile work, serialized queries — fixed the concrete instance: `(app)/layout.tsx` (which wraps every single page) ran 3 separate `profiles` queries (display name/onboarded, access status/last seen, vault config) as 3 sequential `await`s. They're deliberately separate queries on purpose (a missing migration on one field can't break the others) — that design is unchanged — but running them one at a time was pure wasted latency, since none of the three depends on another's result. Now runs all 3 concurrently via `Promise.all` (a Supabase query resolves `{data, error}` rather than rejecting on failure, so this is safe and preserves the exact same independent-degradation behavior and redirect precedence). Same safe concurrency pattern already used for the weekly backup's table dumps (REL-03).
 - [ ] PERF-02 — Pages over-fetch complete datasets
-- [ ] PERF-03 — Balance-as-of and batch-return scale poorly
+- [x] PERF-03 — Balance-as-of and batch-return scale poorly — fixed the batch-return half only (the other half, `getBalanceAsOf` scanning full account-balance-history client-side to find each account's latest applicable row, would need a new Postgres `DISTINCT ON` RPC to fix properly — left open, a bigger change than this round's other fixes). `returnSweepBatch` (`money/actions.ts`) awaited each `returnSweep(id)` one at a time in a loop, and bailed entirely on the first failure — silently leaving every later id in the batch untried. Each id is fully independent (its own row-locked transaction, no shared state between them — see migration 0034), so this is the same safe pattern already used for PERF-01 (Supabase resolves `{data, error}` rather than throwing): now runs concurrently via `Promise.all`, and reports an honest partial-success count (matching the same "honest partial success" precedent `createSweepBatch` in the same file already established) instead of stopping other items from ever being attempted.
 - [x] PERF-04 — Holding-companies route ships parsers eagerly (bundle outlier) — fixed, with a clearly measured before/after: `HoldingCompaniesClient.tsx` statically imported the NIC file parsers (`lib/nicParse.ts`, which pulls in JSZip + the full `xlsx`/SheetJS library) at module scope, so every visitor to `/holding-companies` paid for that weight even if they only browsed the existing list and never opened the sync wizard's file upload. Confirmed via the build output: this page was **178 kB / 370 kB First Load JS**, roughly double every other page in the app (`/banks`, the next biggest, is 14.7 kB / 226 kB total). Switched to `await import("@/lib/nicParse")` inside the 3 handlers that actually parse an uploaded file, mirroring the pdfjs/pdf-lib dynamic-import pattern already used in `AccountDocuments.tsx`. Result: **8.66 kB / 194 kB** — in line with every other page. Verified live that the sync wizard (including the DATA-09 stale-link review step) still works correctly end-to-end after the refactor.
 - [x] REL-03 — Backups built as single unbounded in-memory artifact — mitigated, not a full architectural rewrite (a real streaming/temp-file rebuild was judged too large a risk to a feature this project treats as its disaster-recovery safety net, for a family app currently in the low thousands of total rows). `buildBackupZip()`'s 15+ table dumps now run concurrently via `Promise.all` instead of one at a time, meaningfully cutting the function's real wall-clock time as tables grow. Added `export const maxDuration = 60` to `api/cron/reminders/route.ts` (the Hobby-plan max) so the weekly backup — which rides this same route — can't be silently killed by the platform's much shorter default timeout partway through. The genuine "in-memory, no hard bound" architecture is unchanged; this closes the nearest-term, cheapest-to-fix failure mode (a slow/timed-out run) without touching the backup's actual correctness.
 - [x] REL-04 — External API calls lack timeout/retry/backoff policy — partially fixed (the timeout half): new shared `lib/fetchWithTimeout.ts` (the same AbortController pattern already used for bank-website verification, now extracted and reused) applied to the 2 FDIC BankFind calls that previously had no bound at all (`fetchFdic`, `fetchFdicLocations`) plus the holding-company RSSD lookup. Retry/backoff and client-side (Nominatim autocomplete) cancellation are unaddressed.
-- [ ] OBS-01 — Monitoring captures only a subset of real failures
-- [ ] OPS-02 — Maintenance scripts have hard-coded paths, weak safety
+- [x] OBS-01 — Monitoring captures only a subset of real failures — fixed the specific, real gap: Sentry was already fully wired (client/server/edge configs, `instrumentation.ts` capturing thrown errors) but every server action that deliberately catches a raw DB/network error and returns a friendly `{ error }` string — the established pattern throughout this whole app, used so a user gets a nice toast instead of a generic crash screen — never reported anything to Sentry, since nothing was ever thrown. Real production failures were only ever visible if a user happened to report them. Fixed at the single highest-leverage choke point rather than touching every catch block individually: `friendlyDbError()` (`lib/friendlyError.ts`) is the one shared helper 15+ server-action files already route their raw DB-error message through, so a Sentry report was added to exactly its recognized-pattern branches (unique/FK/not-null/check-constraint violations, invalid syntax, network/timeout — each unambiguously a real system-level error, never something the app's own hand-written validation text would coincidentally match) — the unrecognized fallback case (more likely to be legitimate app-authored text) is deliberately left unreported, to avoid trading one blind spot for a noisy one. RLS/permission-denied is reported at `"warning"` rather than `"error"`, since a fail-closed RLS check (SEC-03) denying a pending/denied user is sometimes correct behavior, not a bug. Separately, the daily cron route (`api/cron/reminders/route.ts`) — which runs fully unattended, no signed-in user, no toast possible — had 16 `console.error` call sites whose only audience was request logs nobody actively watches; a new local `logCronError()` helper (console.error, unchanged, plus a Sentry report) replaces all 16 call sites.
+- [x] OPS-02 — Maintenance scripts have hard-coded paths, weak safety — fixed: `scripts/gen-seed.mjs` hardcoded `readFileSync("C:/Users/ben/Downloads/2023.xlsx")` (someone else's machine's absolute path) and `scripts/import-2023-notes.mjs` fell back to the same hardcoded path if `EXCEL_PATH` wasn't set — both now require `EXCEL_PATH` explicitly, exiting with a clear, actionable error if it's missing (matching the existing pattern `scripts/plaid-coverage.mjs` already used for its own required env vars). Also found and fixed a related, real "weak safety" gap in the same file: `import-2023-notes.mjs` fell back to a hardcoded real production Supabase project URL if `NEXT_PUBLIC_SUPABASE_URL` wasn't set, and separately read a service-role key from `SUPABASE_SERVICE_KEY` — a name that doesn't match this project's actual `.env.local` convention (`SUPABASE_SERVICE_ROLE_KEY`), meaning it silently required a separately hand-exported env var nowhere else in the project uses. Now reads both from `.env.local` (same variable names the app itself uses, via the same small `loadEnv()` helper `plaid-coverage.mjs` already has its own copy of) or the environment, and exits with a clear error if either is missing — removing the silent-fallback-to-a-real-production-project risk entirely rather than just moving where the hardcoded value lives.
 - [ ] TYPE-01 — No generated DB types / schema-contract check
-- [ ] PERF-05 — No indexes/query-plan tuning for search & RLS
+- [x] PERF-05 — No indexes/query-plan tuning for search & RLS — fixed via migration **0045_search_and_rls_indexes.sql**. Grounded in the actual query code, not a profiled query plan (this sandbox has no live Postgres connection to run EXPLAIN against — see TODO.md). Two concrete gaps: (1) search (`GlobalSearch`'s bank/account search, and the bank-relationship search in `banks/actions.ts`) uses leading-wildcard `.ilike("name", "%term%")`, which a plain btree index can't accelerate at all — added the `pg_trgm` extension (standard, available on Supabase) and GIN trigram indexes on `banks.name`/`city` and `accounts.holder`/`account_number`, the columns actually searched this way. (2) `account_documents` (migration 0014) had zero indexes at all — every RLS check on it evaluates `auth.uid() = user_id` per row with nothing to narrow it, and both real read paths (`getAccountDocuments`/`getAllMyDocuments`) filter by `account_id`/`user_id` directly — added plain btree indexes on both, matching every other per-user table in this project, which already has this and was just missed here. Purely additive (new indexes only, changes no query results) — see TODO.md for the migration.
 
 ## Part 5 — Integration / Edge Cases (12)
 
@@ -142,13 +142,13 @@ decision or bigger effort before it can be safely fixed
 
 | Status | Count |
 |---|---:|
-| Fixed (code-complete) | 79 |
+| Fixed (code-complete) | 84 |
 | Already fixed by an earlier (pre-audit) round, or closed as not applicable | 8 |
 | Open, needs a decision before fixing | 0 |
-| Still open | 13 |
+| Still open | 8 |
 
-*(This table now reflects the live count as of Round 19 — see "What's still pending" below for what the
-remaining 13 open findings actually are; every finding that still needed a decision from the user has
+*(This table now reflects the live count as of Round 20 — see "What's still pending" below for what the
+remaining 8 open findings actually are; every finding that still needed a decision from the user has
 one now, one way or another.)*
 
 **Round 1 (security, Part 1)**: SEC-01, SEC-07, SEC-08, SEC-12, SEC-14, SEC-18, SEC-21 (7 IDs — SEC-14
@@ -358,20 +358,92 @@ this round's verification — flipped back to `false` before finishing, per the 
   `claim_check_number`/`append_activity_log`. Until it's run, both DATA-14 and DATA-20 automatically
   fall back to their original (non-atomic, but already-working) behavior — nothing breaks either way,
   running it just closes the small collision/lost-entry window on concurrent access.
-- **13 findings remain open**, all Medium/Low severity. Round 19 closed every remaining Part 3 UX/
-  Accessibility finding that didn't need a product decision (UX-07/08/10/11/14 — UX-11's
-  touch-target half excepted, see above) plus UX-11's icon-name half. What's left, by area: DATA-15
-  and UX-11's touch-target half (both explicitly declined by the user, see above); UX-18/19/21
-  (onboarding-walkthrough accessibility, non-visual equivalents for the calendar/map, and
-  offline/update support for the installed PWA — each a genuinely bigger feature, not a clean single
-  fix); the remaining Part 4 items (PERF-02/03/05, OBS-01, OPS-02, TYPE-01 — infrastructure
-  investment: query tuning, monitoring coverage, generated DB types via the Supabase CLI, which needs
-  a real Postgres connection this sandbox's egress policy blocks); INT-11 (a migration-semantics
-  ambiguity needing a product decision on what "untouched" should mean going forward); GAP-02/GAP-03
-  (a third-party geocoding-provider policy decision, and road-trip planner model disagreements
-  deliberately left alone given how much tuning that planner has already had). Any further progress
-  on this tracker now genuinely needs the user's input on scope or design, not just more code-reading
-  time.
+- **Migration 0045_search_and_rls_indexes.sql needs to be run** — adds the `pg_trgm` extension and
+  trigram/btree indexes closing PERF-05. Purely additive and safe to run any time — an index never
+  changes query results, only how fast Postgres can find them, so nothing degrades if it hasn't run
+  yet; it just means search and `account_documents` reads stay unindexed until it does.
+- **8 findings remain open**, all Medium/Low severity. Round 20 picked the 5 easiest of the remaining
+  13 (grounded in the real code, not just the one-line description, before starting) and fixed all 5:
+  OPS-02, UX-18, PERF-03 (the batch-return half), PERF-05, OBS-01. What's left, by area: DATA-15 and
+  UX-11's touch-target half (both explicitly declined by the user, see above); UX-19/21 (non-visual
+  equivalents for the calendar/map, and offline/update support for the installed PWA — each a
+  genuinely bigger feature, not a clean single fix); PERF-02 (pages over-fetch complete datasets —
+  investigated and deliberately not attempted this round: 32 `select("*")` call sites across the app,
+  trimming them all to explicit column lists would be a large, invasive sweep with real regression
+  risk, not a clean single fix like this round's other items) and TYPE-01 (generated DB types via the
+  Supabase CLI, which needs a real Postgres connection this sandbox's egress policy blocks); INT-11 (a
+  migration-semantics ambiguity needing a product decision on what "untouched" should mean going
+  forward); GAP-02/GAP-03 (a third-party geocoding-provider policy decision, and road-trip planner
+  model disagreements deliberately left alone given how much tuning that planner has already had). The
+  remaining 8 are now genuinely either explicitly-declined-by-the-user, blocked on this sandbox's own
+  network policy, or real bigger-scope work — not more "read the code, find the clean fix" territory.
+
+**Round 20 (5 easiest of the remaining 13 — OPS-02, UX-18, PERF-03, PERF-05, OBS-01 all fixed)** —
+User asked how many findings were left (13), then asked for the 5 easiest to fix. Rather than re-using
+the one-line tracker descriptions, opened the actual code for each candidate before ranking — this
+surfaced real specifics the one-liners didn't capture (e.g. PERF-02's "over-fetch" turned out to be 32
+`select("*")` call sites, not a clean fix; PERF-03 turned out to bundle a truly easy half — a serial
+loop — with a half that genuinely needs a new RPC). Reported the ranked 5 with what was actually found
+in each. User said "yes" to fixing all 5.
+
+- **OPS-02** — `scripts/gen-seed.mjs` and `scripts/import-2023-notes.mjs` hardcoded a real path from
+  someone else's machine (`C:/Users/ben/Downloads/...`); the latter also fell back to a hardcoded real
+  production Supabase URL and read a service-role key under a name (`SUPABASE_SERVICE_KEY`) that
+  doesn't match this project's actual `.env.local` convention (`SUPABASE_SERVICE_ROLE_KEY`). Both
+  scripts now require the relevant values explicitly (env or `.env.local`, matching
+  `plaid-coverage.mjs`'s already-established pattern) and exit with a clear error if missing, instead
+  of silently falling back to someone else's file path or a real production project.
+- **UX-18** — `WalkthroughModal.tsx` had zero ARIA dialog semantics. Wired in the existing
+  `useFocusTrap` hook from UX-01 — and caught a real bug doing it: the hook's default `active=true`
+  assumes a *parent* conditionally mounts the component, but `WalkthroughModal` stays mounted itself
+  and toggles its own internal `show` state, so the trap's one-time effect fired on the very first
+  render (while `show` was still false and the ref still null) and never moved focus or armed
+  Escape/Tab-trap correctly. Fixed by passing `show` itself as the hook's `active` parameter. Also
+  fixed the "offscreen element" half: a genuinely-rendered nav item scrolled out of the visible
+  viewport now gets `scrollIntoView({ block: "nearest" })` before the tooltip/ring position is
+  computed, instead of silently pointing at something off-screen.
+- **PERF-03 (batch-return half)** — `returnSweepBatch` awaited each independent `returnSweep(id)` one
+  at a time and bailed on the first failure, leaving every later id untried. Parallelized via
+  `Promise.all` (same safe pattern as PERF-01) with an honest partial-success count on failure,
+  matching the same-file precedent `createSweepBatch` already established. The other half of this
+  finding (`getBalanceAsOf` scanning full history client-side) needs a new Postgres RPC to fix
+  properly — left open.
+- **PERF-05** — migration 0045 adds `pg_trgm` + GIN trigram indexes on `banks.name`/`city` and
+  `accounts.holder`/`account_number` (the columns searched via leading-wildcard `.ilike`, which a
+  plain btree index can't accelerate at all) and plain btree indexes on `account_documents.user_id`/
+  `account_id` (a table with zero indexes at all despite being both RLS-filtered and looked up
+  directly on every real read path). Reasoned from the actual query code, not a profiled query plan —
+  this sandbox has no live Postgres connection to run EXPLAIN against.
+- **OBS-01** — Sentry was already fully wired but never saw any of the errors every server action's
+  established `try/catch` → friendly `{ error }` pattern deliberately swallows before they'd ever
+  throw. Fixed at the single highest-leverage choke point: `friendlyDbError()`, which 15+ action files
+  already route their raw DB-error message through, now reports to Sentry on its recognized-pattern
+  branches only (unambiguously real system errors, never something the app's own validation text
+  would coincidentally match) — the unrecognized fallback stays unreported, to avoid trading one blind
+  spot for a noisy one. Separately, the unattended daily cron route's 16 `console.error` sites (no
+  user, no toast, only a log nobody watches) now also report via a new local `logCronError()` helper.
+
+Migration **0045_search_and_rls_indexes.sql** needs to be run for PERF-05 — see TODO.md. Every other
+fix this round is pure application code, live on deploy.
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (84/84) all clean. UX-18 is the one
+genuinely UI-observable fix this round, so it got a live CDP pass against a real DEMO_MODE dev server —
+temporarily relaxed the walkthrough's `isDemo` gate to make it reachable in DEMO_MODE for testing
+(reverted immediately after, confirmed via diff). First pass caught the real `active` parameter bug
+described above (focus never moved in, Escape did nothing) — after the fix, confirmed: the dialog
+renders with `role="dialog"`/`aria-modal="true"`, focus moves to the Skip-tour button automatically on
+open, Shift+Tab from the first element stays trapped inside the dialog, Escape dismisses it and the
+dismissal persists across a reload, and no mobile overflow (375px). One test-script-only false failure
+along the way (a synthetic CDP `.click()` doesn't move real focus the way a genuine click does — the
+same limitation this project's UX-01 verification already documented) was diagnosed and worked around
+by testing Escape from the already-confirmed auto-focused state rather than after a scripted button
+click. The other four fixes are server-side/script/migration changes with no new UI surface — verified
+by reading each diff against the original code and, for the one genuine implementation bug caught this
+round (OBS-01's cron helper: a `sed`-based bulk replacement across all 16 call sites accidentally
+rewrote the new `logCronError` helper's own internal `console.error` call into a self-recursive call),
+by directly re-reading the generated diff line by line before treating the fix as done, not just
+trusting the automated replacement. `DEMO_MODE` was flipped to `true` for this round's verification and flipped back to
+`false` before finishing, per the standing rule.
 
 **Round 19 (UX-07, UX-08, UX-10, UX-14 fixed in full; UX-11 partially fixed, touch-target sizing
 explicitly declined)** — Direct continuation of Round 18, same day: user asked for the next 5.
