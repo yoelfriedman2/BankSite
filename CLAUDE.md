@@ -174,6 +174,65 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-28 (external audit — round 21: the last batch — UX-19/UX-21/PERF-02/INT-11/GAP-02 reviewed
+and declined, GAP-03 fixed — 99 of 100 findings now closed)** — Direct continuation of round 20, later
+session: user asked how many findings were left, then to go through the rest. Presented each of the 8
+remaining items grounded in the real code/tradeoffs rather than the tracker's one-line description —
+GAP-02 (only ever a user-initiated type-ahead request to Nominatim, never a bulk job, so no real policy
+gap), UX-19/UX-21 (non-visual calendar/map equivalents, and offline/update support for the installed
+PWA — each a real, bigger feature with no bounded fix), and INT-11 (the migration incident that
+silently re-enabled someone's notifications already happened and can't be undone — the only remaining
+question is a forward-looking "touched" marker for next time). User accepted GAP-02 as-is and declined
+UX-19/UX-21/INT-11 outright.
+
+For PERF-02 (pages fetching full rows instead of just the displayed columns), the user pushed back —
+"is it really gonna make it better? it seems fine to me now" — so before answering, actually opened
+`banks/page.tsx`/`accounts/page.tsx` and `BankForm.tsx`/`AccountModal.tsx` rather than repeating the
+one-line "32 `select(\"*\")` call sites" framing from round 20. Found the real reason a trim isn't
+clean specifically on those two pages: the fetched list rows are handed straight into the edit drawer
+(`BankForm`'s `initial={editingBank}`) with no second fetch on open, so narrowing the list query's
+columns would silently blank out drawer fields the moment it's opened — a real architecture change
+(fetch-on-open) would be needed, not a column-list edit, for a performance difference the user can't
+actually feel at this app's real scale (a handful of family users, a few hundred bank rows each).
+Reported that plainly; user agreed to skip it.
+
+The user delegated the last call on GAP-03 (road-trip planner's candidate list, day-budget bar, and
+map disagreeing with each other) — "if it needs fixing then fix it." Read `RoadTripClient.tsx`/
+`roadtrip.ts` to confirm the claim was real: candidate ranking estimated added cost via
+`cheapestInsertion` against a *flat, single continuous route*, while the actual day-budget bar and
+itinerary come from `buildMultiDayItinerary`, which resets the drive clock at every day boundary. A
+standalone repro confirmed these two models can genuinely disagree on a multi-day trip — a stop that
+flatly looked like "+8 min" actually forced the trip from 1 day to 2, with the flat estimate giving no
+hint of that. Fixed with a shared `estimateAddedCost()` in `RoadTripClient.tsx`: inserts the candidate
+at its cheapest position (kept `cheapestInsertion` for choosing *where* — that part was never wrong),
+then re-runs the same `buildMultiDayItinerary()` the budget bar already trusts and diffs the real
+drive-time/day-count against the current trip. Both candidate lists ("Add more banks nearby" and the
+search-to-add list) now use it, and since the map's tooltip reads off the same ranked list, all three
+legs of "candidate/budget/map disagree" are now fed by one consistent number. Deliberately did **not**
+re-run the joint branch optimizer (`chooseBranchesForRoute`) per candidate — same reasoning prior
+rounds already used to leave this planner's harder pieces alone: real cost/regression risk on
+something that's been through 4+ rounds of careful tuning. Confirmed live this leaves a small
+(few-minute) residual gap between a candidate's shown estimate and the real total once actually added,
+traced to the branch optimizer re-picking locations for the whole set once the candidate joins it — a
+separate, smaller effect the *old* flat model had identically, not something this fix introduced.
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (84/84) all clean. GAP-03 is the one
+genuinely UI-observable fix this round (the "+N min" numbers and red/not-red styling shown to the
+user), so it got a live CDP pass against a real DEMO_MODE dev server: added 3 geographically distant
+must-visit banks to force a real multi-day split, confirmed the itinerary panel correctly flagged
+"this plan needs 2 days, but you set 1" while the budget bar showed the 1-day-configured total, read
+the top-ranked candidate's shown estimate, clicked "Add," and confirmed the budget bar's real
+before/after change matched the shown estimate to within the known, pre-existing branch-reselection
+margin described above — zero console errors (one pre-existing, unrelated hydration-mismatch warning
+from `AddressAutocomplete`'s id generation, not touched by this change), no mobile overflow (375px).
+`DEMO_MODE` was flipped to `true` for this round's verification and flipped back to `false` before
+finishing, per the standing rule; the standalone repro script and headless Chromium process were both
+cleaned up afterward. No changelog/Guide entry — bug fix to existing behavior, not a new user-visible
+feature, per the standing features-only policy. **`EXTERNAL-AUDIT-TRACKER.md` updated: 99 of 100
+findings are now closed** (also corrected DATA-15's checkbox, which was already decided/declined back
+in round 13 but never flipped to `[x]`) — **TYPE-01 (generated DB types) is the only one left**,
+blocked on this sandbox having no real Postgres connection, not on any decision.
+
 **2026-07-26 (external audit — round 20: 5 easiest of the remaining 13 findings — OPS-02, UX-18,
 PERF-03, PERF-05, OBS-01 all fixed)** — User asked how many findings were left (13), then asked for
 the 5 easiest to fix. Opened the actual code for each candidate before ranking rather than trusting

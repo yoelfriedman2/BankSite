@@ -306,6 +306,32 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
   const remainingMinutes = budgetMinutes - usedMinutes;
   const daysNeeded = itinerary?.days.length ?? 0;
 
+  /** Honest added-cost for inserting `stop` into the route: builds the real
+   *  multi-day itinerary with it included and diffs the drive total against
+   *  the current one, instead of a flat single-route insertion estimate that
+   *  ignores day-boundary resets. A flat estimate can be wrong once a trip
+   *  spans more than one day — a stop that happens to land right at a day
+   *  boundary can be nearly free (the next day just starts from there), or a
+   *  stop that looks cheap can actually force an extra day — and disagree
+   *  with the day-budget bar below, which was always built from the real
+   *  multi-day itinerary. This keeps both numbers, and the map's tooltip
+   *  (which reads straight off this), consistent with each other.
+   */
+  function estimateAddedCost(stop: Stop): { addedMinutes: number; totalCost: number } {
+    const { insertAt } = cheapestInsertion(anchor!, routeAfterAnchor, stop);
+    const withStop = [...routeAfterAnchor.slice(0, insertAt), stop, ...routeAfterAnchor.slice(insertAt)];
+    const projected = buildMultiDayItinerary(
+      anchor!,
+      [anchor!, ...withStop],
+      startMinutes,
+      endMinutes,
+      minutesPerStop,
+      leadMinutesForDay,
+    );
+    const addedMinutes = projected.totalDriveMinutes - (itinerary?.totalDriveMinutes ?? 0);
+    return { addedMinutes, totalCost: addedMinutes + minutesPerStop };
+  }
+
   const selectedIds = new Set([...mustVisitIds, ...extraIds]);
   const candidatePool = useMemo(() => {
     if (!anchor) return [];
@@ -318,13 +344,12 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
     return candidatePool
       .map((b) => {
         const stop = resolveStop(b);
-        const { addedMinutes } = cheapestInsertion(anchor, routeAfterAnchor, stop);
-        const totalCost = addedMinutes + minutesPerStop;
+        const { addedMinutes, totalCost } = estimateAddedCost(stop);
         return { bank: b, addedMinutes, totalCost, projectedRemaining: remainingMinutes - totalCost };
       })
       .sort((a, b) => a.totalCost - b.totalCost);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [anchor, candidatePool, routeAfterAnchor, minutesPerStop, remainingMinutes]);
+  }, [anchor, candidatePool, routeAfterAnchor, minutesPerStop, remainingMinutes, itinerary?.totalDriveMinutes, startMinutes, endMinutes]);
 
   // Google Maps links per day. Day 1 gets two — one starting from home, one
   // starting at the first bank — per the user's request. Later days start from
@@ -420,13 +445,13 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
       .filter((b) => !selectedIds.has(b.id) && `${b.name} ${b.city ?? ""} ${b.state ?? ""}`.toLowerCase().includes(q))
       .map((b) => {
         const stop = resolveStop(b);
-        const { addedMinutes } = cheapestInsertion(anchor, routeAfterAnchor, stop);
-        return { bank: b, addedMinutes, totalCost: addedMinutes + minutesPerStop };
+        const { addedMinutes, totalCost } = estimateAddedCost(stop);
+        return { bank: b, addedMinutes, totalCost };
       })
       .sort((a, b) => a.totalCost - b.totalCost)
       .slice(0, 20);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addQuery, data.banks, anchor, routeAfterAnchor, minutesPerStop, autoBranchByBank]);
+  }, [addQuery, data.banks, anchor, routeAfterAnchor, minutesPerStop, autoBranchByBank, itinerary?.totalDriveMinutes, startMinutes, endMinutes]);
 
   function applyPlan(plan: RoadTripPlan, tripId: string, title: string) {
     setMustVisitIds(plan.mustVisitIds.filter((id) => banksById.has(id)));
