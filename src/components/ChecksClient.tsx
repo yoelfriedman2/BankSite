@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Printer, AlertCircle, BookOpen, Trash2 } from "lucide-react";
 import { CheckPrintModal } from "@/components/CheckPrintModal";
 import { ACCOUNT_TYPE_LABELS } from "@/lib/types";
@@ -12,6 +12,7 @@ import {
 } from "@/app/(app)/checks/actions";
 import type { Account, Bank } from "@/lib/types";
 import { useToast } from "@/components/Toast";
+import { SearchInput } from "@/components/SearchInput";
 
 export type AccountWithBank = Account & { bank: Bank };
 
@@ -25,6 +26,7 @@ export function ChecksClient({
   const toast = useToast();
   const [selected, setSelected] = useState<AccountWithBank | null>(null);
   const [log, setLog] = useState(history);
+  const [query, setQuery] = useState("");
 
   // Group by bank name
   const byBank = new Map<string, AccountWithBank[]>();
@@ -34,7 +36,24 @@ export function ChecksClient({
     byBank.get(key)!.push(a);
   }
 
-  const groups = [...byBank.entries()].sort(([a], [b]) => a.localeCompare(b));
+  const allGroups = [...byBank.entries()].sort(([a], [b]) => a.localeCompare(b));
+
+  // Filters by bank name or account holder — with 426+ banks possible per
+  // user, finding the one you want to print a check for by scrolling isn't
+  // realistic once you're tracking more than a handful.
+  const groups = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return allGroups;
+    return allGroups
+      .map(([bankName, accts]): [string, AccountWithBank[]] => [
+        bankName,
+        bankName.toLowerCase().includes(q)
+          ? accts
+          : accts.filter((a) => a.holder?.toLowerCase().includes(q)),
+      ])
+      .filter(([, accts]) => accts.length > 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allGroups, query]);
 
   function handleRecorded(check: PrintedCheck) {
     if (!selected) return;
@@ -73,7 +92,18 @@ export function ChecksClient({
         </div>
       ) : (
         <div className="space-y-6">
-          {groups.map(([bankName, accts]) => (
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Search banks or holders…"
+            wrapperClassName="max-w-md"
+          />
+          {groups.length === 0 ? (
+            <p className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-600">
+              No banks or holders match &quot;{query}&quot;.
+            </p>
+          ) : (
+            groups.map(([bankName, accts]) => (
             <div key={bankName}>
               <h2 className="mb-2 text-sm font-semibold text-slate-500">{bankName}</h2>
               <ul className="space-y-2">
@@ -123,7 +153,8 @@ export function ChecksClient({
                 })}
               </ul>
             </div>
-          ))}
+            ))
+          )}
         </div>
       )}
 

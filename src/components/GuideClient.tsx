@@ -228,6 +228,7 @@ const TOPICS: Topic[] = [
       "Every check you print is logged",
     ],
     tips: [
+      "Search by bank name or account holder to jump straight to the account you want, instead of scrolling the full list.",
       "The check number is remembered per account and bumps to the next number after each print.",
       "Your stock type (blank vs pre-printed) and alignment are saved on your device for next time.",
       "The check log — number, payee, amount, date — shows on this page and inside the print window. Remove a check from the log if it was voided or never cashed.",

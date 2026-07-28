@@ -21,6 +21,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-07-28",
+    title: "Search on Print Checks",
+    items: [
+      "The Print Checks page now has a search box, so you can jump straight to the bank or account holder you want instead of scrolling the full list.",
+    ],
+  },
+  {
     date: "2026-07-23",
     title: "Optional encryption for saved bank logins",
     items: [

@@ -174,6 +174,23 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-28 (Print Checks page gained a search box)** — Direct follow-up request: the Print Checks
+page (`ChecksClient.tsx`) listed every account grouped by bank with no way to narrow it down, unlike
+Banks/Accounts/Balances/etc., which all already got the shared `<SearchInput>` component in the prior
+round. Added the same component here: filters by bank name (matches the whole group) or account
+holder (matches just that holder's row within a group), with a "No banks or holders match" empty state
+distinct from the pre-existing "No accounts yet" state. Genuinely new capability (this page had no
+search at all before), so — unlike the prior round's app-wide clear-button rollout, which was pure
+UX polish to already-existing search boxes — this one got a changelog entry and a Guide tip under
+Print Checks.
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (86/86) all clean. Live DEMO_MODE
+pass via the same hand-rolled CDP driver (`scratchpad/cdp.mjs`): confirmed searching a real bank name
+narrows the group list correctly, searching a holder name works too, the clear (X) button appears and
+correctly restores the full list, a nonsense query shows the "no matches" message rather than an empty
+blank page, no 375px mobile overflow, and zero console errors. `DEMO_MODE` was flipped to `true`
+(temporary `.env.local`) for this pass and removed entirely before finishing, per the standing rule.
+
 **2026-07-26 (4 user-reported bugs: search deep-linking, dormancy defaulting to "no type = CD",
 balance history hidden until edit, and a shared search-clear affordance)** — User reported four
 issues from live use, all fixed together:
