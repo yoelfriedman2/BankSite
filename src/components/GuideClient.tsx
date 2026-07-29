@@ -76,6 +76,7 @@ const TOPICS: Topic[] = [
       "Bulk-import from a spreadsheet",
     ],
     tips: [
+      "Clicking a bank opens a quick read-only view first. Click Edit (or the pencil icon on the row) to make changes.",
       "Bank info — how to open, conversion stage, contact, website — is shared with everyone. Your status, notes, priority, and target balance stay private to you.",
       "When you edit shared info, everyone sees exactly what you changed.",
       "Add a brand-new bank and it's added to everyone's list automatically.",
