@@ -174,6 +174,42 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-28 (correction: reverted the Banks-page view-first change; the actual request was about
+accounts inside a bank's drawer)** — The prior entry in this file ("Banks page: click-through opens a
+read-only view first") misread the user's report. Re-reading their follow-up: they liked the Banks
+LIST page exactly as it was (row click → straight into the edit drawer) and never asked for that to
+change — the actual complaint was narrower: *inside* an open bank's drawer, the "My accounts" list
+had only a pencil/edit icon per account, no way to glance at one read-only first, unlike the standalone
+Accounts page (row click → `AccountViewModal` → Edit).
+
+- **Reverted in full** via `git revert` (clean, byte-identical to the pre-change commit — confirmed
+  with `git diff` against it showing nothing): deleted `BankViewModal.tsx`, restored `BanksClient.tsx`'s
+  row clicks/pencils/deep-links to go straight to the edit drawer as before, and undid the changelog/
+  Guide/CLAUDE.md additions that went with it. Nothing about this file's *own* prior entry documents a
+  real feature anymore — treat that entry as superseded by this one.
+- **The real fix, in `BankForm.tsx` only**: each row in the "My accounts" box is now itself clickable
+  (`role="button"`, keyboard-accessible) and opens the existing `AccountViewModal` read-only, exactly
+  the same component the standalone Accounts page already uses — no new component needed. Its own
+  "Edit" button opens the existing `AccountModal` edit form (closing the view first). The row's action
+  icons (pencil/print/duplicate/delete) got `stopPropagation()` so they still work exactly as before —
+  the pencil specifically still jumps straight to edit, bypassing the view, matching the same shortcut
+  pattern the Accounts page itself established. "Add account" is unchanged (opens the edit form
+  directly — nothing to view for an account that doesn't exist yet).
+- **Also per explicit request this round**: stopped pushing straight to `main` after finishing. From
+  now on, ship to the feature branch and let the user review/confirm before a fast-forward to `main` —
+  this round's diff is deliberately small and self-contained (one file) to make that review easy.
+
+**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (86/86) all clean. `git diff` against
+the pre-BankView-modal commit confirmed the revert half is exact. The new in-drawer account view was
+verified live against a real DEMO_MODE dev server (`scratchpad/cdp.mjs`): opened "Kennebunk Savings
+Bank" (a seeded demo bank with a real account under it) — confirmed the bank drawer itself still opens
+directly to Edit (old behavior intact), confirmed clicking that account's row inside the drawer opens
+the read-only view (zero `<input>/<select>/<textarea>` in it) rather than the edit form, confirmed its
+Edit button opens the real account-edit form for that same account, and confirmed the row's pencil icon
+still skips straight to edit. No 375px mobile overflow with the bank drawer and account view stacked.
+Zero console errors throughout. `DEMO_MODE` was flipped to `true` (temporary `.env.local`) for this pass
+and removed before finishing, per the standing rule.
+
 **2026-07-28 (Print Checks page gained a search box)** — Direct follow-up request: the Print Checks
 page (`ChecksClient.tsx`) listed every account grouped by bank with no way to narrow it down, unlike
 Banks/Accounts/Balances/etc., which all already got the shared `<SearchInput>` component in the prior
