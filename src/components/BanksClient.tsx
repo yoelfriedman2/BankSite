@@ -15,7 +15,6 @@ import {
   ListPlus,
   Filter as FilterIcon,
   SlidersHorizontal,
-  Pencil,
   X,
 } from "lucide-react";
 import {
@@ -44,7 +43,6 @@ import {
   StatusBadge,
 } from "@/components/badges";
 import { BankForm } from "@/components/BankForm";
-import { BankViewModal, type RelatedViewRef } from "@/components/BankViewModal";
 import { BankLogo } from "@/components/BankLogo";
 import { ImportDialog } from "@/components/ImportDialog";
 import { FocusTrapPanel } from "@/components/FocusTrapPanel";
@@ -414,7 +412,6 @@ export function BanksClient({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editingBankId, setEditingBankId] = useState<string | null>(null);
-  const [viewingBankId, setViewingBankId] = useState<string | null>(null);
   const [statusPendingId, setStatusPendingId] = useState<string | null>(null);
   const [deletePendingId, setDeletePendingId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -567,22 +564,6 @@ export function BanksClient({
     : null;
   const editingAccounts = editingBankId ? accountsByBank[editingBankId] ?? [] : [];
 
-  const viewingBank = viewingBankId
-    ? banks.find((b) => b.id === viewingBankId) ?? null
-    : null;
-  const viewingAccounts = viewingBankId ? accountsByBank[viewingBankId] ?? [] : [];
-  const viewingRelated: RelatedViewRef[] =
-    viewingBank?.cert != null
-      ? (relatedByCert[viewingBank.cert] ?? []).map((r) => ({
-          cert: r.cert,
-          name: r.name,
-          clickable: bankByCert.has(r.cert),
-        }))
-      : [];
-
-  /** Opens the bank editor drawer directly — used by the pencil/edit icon,
-   *  "Add bank", and the View modal's own "Edit" button. Clicking the row
-   *  itself goes to the read-only view instead (see viewBank below). */
   function openBank(b: Bank) {
     setEditingBankId(b.id);
     setDrawerOpen(true);
@@ -591,25 +572,11 @@ export function BanksClient({
     }
   }
 
-  /** Opens the read-only view modal — this is what clicking a bank's row/card
-   *  does now, mirroring the Accounts page (row click -> view, pencil -> edit). */
-  function viewBank(b: Bank) {
-    setViewingBankId(b.id);
-    if (b.cert != null) {
-      setLocalReadCerts((prev) => new Set([...prev, b.cert!]));
-    }
-  }
-
-  function editFromView() {
-    if (viewingBank) openBank(viewingBank);
-    setViewingBankId(null);
-  }
-
   // Deep link: /banks?cert=<n> (e.g. from the Activity log) opens that bank.
   useEffect(() => {
     if (initialOpenCert == null) return;
     const target = bankByCert.get(initialOpenCert);
-    if (target) viewBank(target);
+    if (target) openBank(target);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialOpenCert]);
 
@@ -620,13 +587,13 @@ export function BanksClient({
   useEffect(() => {
     if (!initialOpenId) return;
     const target = banks.find((b) => b.id === initialOpenId);
-    if (target) viewBank(target);
+    if (target) openBank(target);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialOpenId]);
 
   /** Always-visible, clickable related-bank chips for a row. Styled distinctly
    *  from the gray holding-company line (link icon + indigo pills). Clicking a
-   *  chip opens that bank's view instead of the row's own. */
+   *  chip opens that bank's drawer instead of the row's own. */
   function RelatedChips({ cert }: { cert: number | null }) {
     const refs = cert != null ? relatedByCert[cert] : undefined;
     if (!refs || refs.length === 0) return null;
@@ -643,7 +610,7 @@ export function BanksClient({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  viewBank(target);
+                  openBank(target);
                 }}
                 className="font-medium text-indigo-700 hover:underline"
               >
@@ -857,11 +824,11 @@ export function BanksClient({
                 key={b.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => viewBank(b)}
+                onClick={() => openBank(b)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    viewBank(b);
+                    openBank(b);
                   }
                 }}
                 className="flex w-full cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
@@ -896,21 +863,7 @@ export function BanksClient({
                   <RelatedChips cert={b.cert} />
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
-                  <div className="flex items-center gap-1">
-                    <StatusBadge status={b.status} />
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openBank(b);
-                      }}
-                      className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                      title="Edit"
-                      aria-label={`Edit ${b.name}`}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+                  <StatusBadge status={b.status} />
                   {b.status === "untracked" && (
                     <button
                       type="button"
@@ -1000,17 +953,17 @@ export function BanksClient({
                 return (
                   <tr
                     key={b.id}
-                    onClick={() => viewBank(b)}
+                    onClick={() => openBank(b)}
                     onKeyDown={(e) => {
                       // Space wasn't handled here, only on the mobile card
                       // version of this same row (UX-02) — added to match.
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        viewBank(b);
+                        openBank(b);
                       }
                     }}
                     tabIndex={0}
-                    aria-label={`View ${b.name}`}
+                    aria-label={`Manage ${b.name}`}
                     className="cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400"
                   >
                     <td className="px-3 py-3">
@@ -1112,14 +1065,6 @@ export function BanksClient({
                     </td>
                     <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => openBank(b)}
-                          className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                          title="Edit"
-                          aria-label={`Edit ${b.name}`}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
                         {b.status === "untracked" && (
                           <button
                             onClick={() => handleStatusChange(b, "want_to_open")}
@@ -1155,24 +1100,9 @@ export function BanksClient({
       </div>
 
       <p className="mt-3 text-xs text-slate-600">
-        Showing {filtered.length} of {counts.all} banks · click a row to view
-        it, or the pencil to edit
+        Showing {filtered.length} of {counts.all} banks · click a row to manage
+        its accounts
       </p>
-
-      {viewingBank && (
-        <BankViewModal
-          bank={viewingBank}
-          accounts={viewingAccounts}
-          relatedBanks={viewingRelated}
-          defaultDormancyMonths={defaultDormancyMonths}
-          onClose={() => setViewingBankId(null)}
-          onEdit={editFromView}
-          onOpenRelated={(cert) => {
-            const target = bankByCert.get(cert);
-            if (target) viewBank(target);
-          }}
-        />
-      )}
 
       {drawerOpen && (
         <BankForm

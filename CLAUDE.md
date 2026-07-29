@@ -174,47 +174,6 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
-**2026-07-28 (Banks page: click-through now opens a read-only view first, matching Accounts)** — User
-report: clicking a bank on `/banks` always jumped straight into the full editable `BankForm` drawer —
-"there is only, like, an edit button" — unlike Accounts, where a row click opens a read-only
-`AccountViewModal` first and Edit is a separate, deliberate step. Built the same shape for banks:
-
-- **New `src/components/BankViewModal.tsx`** — a compact read-only popup (not the full-width drawer),
-  modeled directly on `AccountViewModal.tsx`'s role: My status (priority, target balance), My accounts
-  (holder/type/balance/activity dot, read-only), My notes (if any), Bank facts, How to open,
-  Conversion/IPO (only shown once the bank actually has a stage), and related-bank chips — with a
-  single "Edit" button at the bottom. Deliberately lighter than the full `BankForm` drawer: skips the
-  verified-holding-company lookup, the live community-notes thread, and reminders, since those each
-  need their own async fetch that only `BankForm` currently does — all three stay one click away via
-  Edit rather than duplicating that fetching logic in a second component. Related banks don't need a
-  new fetch either — `relatedByCert` is already fetched at the page level and passed down, so the view
-  reuses it directly, resolving each chip through the same `bankByCert` map `BanksClient` already builds.
-  Uses its own small local `Box`/`BoxHeader`/`Frow` (same pattern `BankForm.tsx` itself already uses
-  rather than the shared `DetailBox.tsx` — kept local on purpose, matching that existing precedent, so
-  this change doesn't touch `BankForm.tsx` at all) with the same amber("you")/emerald("shared") tone
-  split the full drawer already established.
-- **`BanksClient.tsx`**: row click (desktop table row, mobile card, and the related-bank chips) now
-  opens the view instead of the edit drawer — `viewBank()`, a sibling to the existing `openBank()`
-  (kept unchanged, still used by "Add bank," the view's own "Edit" button, and a new pencil icon added
-  to both the desktop row's action column and the mobile card). Both existing deep-link mechanisms
-  (`?cert=`, `?openId=` — the ones the global search and Activity log use) now also resolve through
-  `viewBank()`, not `openBank()`, so "take me to this exact bank" consistently means "show me its
-  view," matching how `?openId=` already worked for accounts. `BankForm`'s own in-drawer
-  "jump to a related/sibling bank" links (`onOpenBank`, used only once you're already editing) were
-  deliberately left going straight to edit — that's a different context from the list-page click this
-  report was about, and changing it isn't what was asked. Footer hint text updated ("click a row to
-  view it, or the pencil to edit") to match.
-
-**Verification**: `tsc --noEmit`, `npm run build`, and `npm test` (86/86) all clean. Fully
-UI-observable, so it got a live CDP pass against a real DEMO_MODE dev server (`scratchpad/cdp.mjs`):
-confirmed a row click opens the view (not the edit drawer) with the correct bank's name and zero
-`<input>/<select>/<textarea>` elements anywhere in it; confirmed the view's Edit button opens the real
-drawer for that same bank; confirmed the row's pencil icon and the mobile card's pencil icon both skip
-the view and go straight to edit; confirmed the global-search deep link (`?openId=`) now opens the view,
-not the edit drawer, matching the accounts precedent; no 375px mobile overflow on the list, the view, or
-the edit drawer; zero console errors throughout. `DEMO_MODE` was flipped to `true` (temporary
-`.env.local`) for this pass and removed entirely before finishing, per the standing rule.
-
 **2026-07-28 (Print Checks page gained a search box)** — Direct follow-up request: the Print Checks
 page (`ChecksClient.tsx`) listed every account grouped by bank with no way to narrow it down, unlike
 Banks/Accounts/Balances/etc., which all already got the shared `<SearchInput>` component in the prior
