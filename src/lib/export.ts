@@ -25,6 +25,7 @@ export function buildExportRows(banks: Bank[], accounts: Account[]) {
     "Eligibility date": b.eligibility_date ?? "",
     "Branch location": b.branch_location ?? "",
     "Preferred contact": b.phone ?? "",
+    "Routing #": b.routing_number ?? "",
     Notes: b.notes ?? "",
   }));
 
@@ -37,7 +38,9 @@ export function buildExportRows(banks: Bank[], accounts: Account[]) {
       Holder: a.holder ?? "",
       Type: a.account_type ? ACCOUNT_TYPE_LABELS[a.account_type] : "",
       "Account #": a.account_number ?? "",
-      "Routing #": a.routing_number ?? "",
+      // Falls back to the bank's shared number so an exported row carries the
+      // number that would actually print, not a blank.
+      "Routing #": a.routing_number ?? bk?.routing_number ?? "",
       Balance: a.balance ?? "",
       "Last activity": a.last_activity_date ?? "",
       "CD maturity": a.cd_maturity_date ?? "",

@@ -21,6 +21,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-07-30",
+    title: "Routing numbers are saved on the bank, once",
+    items: [
+      "A bank now has its own routing number, shared with everyone — enter it once and every account at that bank picks it up automatically, so nobody has to look it up or retype it again.",
+      "New accounts arrive ready to print a check instead of showing \"Missing details\" until someone fills the number in.",
+      "If one of your accounts uses a different number (some banks really do have several — one for wires, one for direct deposit), just type it on that account and it wins.",
+      "Routing numbers are now checked as you type, so a mistyped digit gets caught before it lands on a printed check.",
+    ],
+  },
+  {
     date: "2026-07-28",
     title: "Banks open to a quick view first",
     items: [

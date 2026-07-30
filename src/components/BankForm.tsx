@@ -24,6 +24,8 @@ import { getActivityLevel, type ActivityLevel } from "@/lib/dormancy";
 import { formatCurrency, formatDate, maskAccountNumber, withScheme } from "@/lib/format";
 import { ActivityDot, STATUS_SELECT_STYLES } from "@/components/badges";
 import { BankLogo } from "@/components/BankLogo";
+import { RoutingInfoTip } from "@/components/RoutingInfoTip";
+import { routingNumberError } from "@/lib/routingNumber";
 import { AccountModal } from "@/components/AccountModal";
 import { CheckPrintModal } from "@/components/CheckPrintModal";
 import { DateInput } from "@/components/DateInput";
@@ -139,6 +141,7 @@ function toFormValues(b: Bank | null): BankFormValues {
     branch_location: b?.branch_location ?? "",
     phone: b?.phone ?? "",
     website: b?.website ?? "",
+    routing_number: b?.routing_number ?? "",
     notes: b?.notes ?? "",
     conversion_stage: b?.conversion_stage ?? "none",
     min_to_open: b?.min_to_open != null ? String(b.min_to_open) : "",
@@ -203,6 +206,9 @@ export function BankForm({
   const [infoExpanded, setInfoExpanded] = useState(initial === null);
   const [openInfoExpanded, setOpenInfoExpanded] = useState(initial === null);
   const [ipoExpanded, setIpoExpanded] = useState(false);
+
+  // Live ABA check-digit validation — null while the field is empty or valid.
+  const routingError = routingNumberError(values.routing_number);
   const [notesExpanded, setNotesExpanded] = useState(false);
   const [remindersAdding, setRemindersAdding] = useState(false);
 
@@ -426,6 +432,13 @@ export function BankForm({
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    // Block the save rather than letting a bad routing number propagate to
+    // every other user's copy of this bank (and onto printed checks).
+    if (routingError) {
+      setError(routingError);
+      setInfoExpanded(true);
+      return;
+    }
     startTransition(async () => {
       const result = await upsertBank(values);
       if (result.error) {
@@ -823,6 +836,17 @@ export function BankForm({
                       />
                       <Frow label="FDIC cert #" value={values.cert || null} />
                       <Frow
+                        label="Routing number"
+                        value={
+                          values.routing_number ? (
+                            <span className="inline-flex items-center">
+                              {values.routing_number}
+                              <RoutingInfoTip />
+                            </span>
+                          ) : null
+                        }
+                      />
+                      <Frow
                         label="Total assets"
                         value={values.assets ? `$${(Number(values.assets) / 1000).toFixed(0)}M` : null}
                       />
@@ -928,6 +952,26 @@ export function BankForm({
                         <div className="col-span-2">
                           <label className={labelClass} htmlFor="holding_company">Holding company</label>
                           <input id="holding_company" className={inputClass} value={values.holding_company} onChange={(e) => set("holding_company", e.target.value)} />
+                        </div>
+                        <div className="col-span-2">
+                          <label className={labelClass} htmlFor="routing_number">Routing number</label>
+                          <input
+                            id="routing_number"
+                            inputMode="numeric"
+                            placeholder="9 digits"
+                            className={routingError ? `${inputClass} border-rose-400 focus:border-rose-500 focus:ring-rose-100` : inputClass}
+                            value={values.routing_number}
+                            onChange={(e) => set("routing_number", e.target.value)}
+                            aria-invalid={!!routingError}
+                            aria-describedby={routingError ? "routing_number_error" : "routing_number_help"}
+                          />
+                          {routingError ? (
+                            <p id="routing_number_error" className="mt-1 text-xs text-rose-600">{routingError}</p>
+                          ) : (
+                            <p id="routing_number_help" className="mt-1 text-xs text-slate-600">
+                              Shared with everyone. Copy it from a real check or the bank&apos;s website.
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1279,6 +1323,9 @@ export function BankForm({
         <AccountModal
           bankId={initial.id}
           bankName={initial.name}
+          // Live form value first, so a routing number typed in this same
+          // drawer is already available to a nested account editor.
+          bankRoutingNumber={values.routing_number || initial.routing_number}
           initial={acctModal.account}
           knownHolders={knownHolders}
           defaultHolder={defaultHolder}
@@ -1293,6 +1340,7 @@ export function BankForm({
           account={printCheck}
           bankName={initial.name}
           bankCity={[initial.city, initial.state].filter(Boolean).join(", ")}
+          bankRoutingNumber={values.routing_number || initial.routing_number}
           onClose={() => setPrintCheck(null)}
         />
       )}

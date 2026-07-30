@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Pencil, X, ArrowUpRight } from "lucide-react";
 import { ACCOUNT_TYPE_LABELS, type Account } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { effectiveRoutingNumber } from "@/lib/routingNumber";
 import { Box, BoxHeader, Frow } from "@/components/DetailBox";
 import { getActivityLevel, daysUntil } from "@/lib/dormancy";
 import { ActivityDot } from "@/components/badges";
@@ -18,6 +19,7 @@ export function AccountViewModal({
   account,
   bankName,
   bankCert,
+  bankRoutingNumber,
   defaultDormancyMonths,
   onClose,
   onEdit,
@@ -25,6 +27,9 @@ export function AccountViewModal({
   account: Account;
   bankName: string;
   bankCert: number | null;
+  /** The bank's shared routing number, shown when this account has none of its
+   *  own. Undefined until migration 0046 is run. */
+  bankRoutingNumber?: string | null;
   defaultDormancyMonths: number;
   onClose: () => void;
   onEdit: () => void;
@@ -82,7 +87,19 @@ export function AccountViewModal({
               value={account.account_type ? ACCOUNT_TYPE_LABELS[account.account_type] : null}
             />
             <Frow label="Account number" value={account.account_number} />
-            <Frow label="Routing number" value={account.routing_number} />
+            <Frow
+              label="Routing number"
+              value={
+                effectiveRoutingNumber(account.routing_number, bankRoutingNumber) && (
+                  <>
+                    {effectiveRoutingNumber(account.routing_number, bankRoutingNumber)}
+                    {!account.routing_number && (
+                      <span className="ml-1.5 text-xs font-normal text-emerald-700">from bank</span>
+                    )}
+                  </>
+                )
+              }
+            />
           </Box>
 
           <Box>

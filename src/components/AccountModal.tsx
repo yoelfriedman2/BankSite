@@ -16,6 +16,7 @@ import { Box, BoxHeader } from "@/components/DetailBox";
 import { getActivityLevel, daysUntil } from "@/lib/dormancy";
 import { ActivityDot } from "@/components/badges";
 import { todayLocalStr } from "@/lib/date";
+import { routingNumberError } from "@/lib/routingNumber";
 import { useVault } from "@/components/VaultKeyProvider";
 import { VaultUnlockPrompt } from "@/components/VaultUnlockPrompt";
 import { isEncryptedVaultValue, decryptVaultField, encryptVaultField } from "@/lib/vaultCrypto";
@@ -65,6 +66,7 @@ function toValues(
 export function AccountModal({
   bankId,
   bankName,
+  bankRoutingNumber,
   initial,
   knownHolders,
   defaultHolder,
@@ -74,6 +76,9 @@ export function AccountModal({
 }: {
   bankId: string;
   bankName: string;
+  /** The bank's shared routing number, used to pre-fill this account's field
+   *  when it has none of its own. Undefined until migration 0046 is run. */
+  bankRoutingNumber?: string | null;
   initial: Account | null;
   knownHolders: string[];
   defaultHolder: string;
@@ -98,6 +103,16 @@ export function AccountModal({
   const [activityAdding, setActivityAdding] = useState(false);
   const [balanceHistory, setBalanceHistory] = useState<BalancePoint[]>([]);
   const [dirty, setDirty] = useState(false);
+
+  // Routing number: the account's own value always wins; the bank's shared one
+  // only fills the gap. An empty field therefore means "inherit", which is why
+  // clearing the input is the same gesture as "reset". Both hints only appear
+  // when the bank actually has a number to fall back to — with no bank value
+  // this is just the plain field it has always been.
+  const hasBankRouting = !!(bankRoutingNumber ?? "").trim();
+  const inheritingRouting = hasBankRouting && values.routing_number.trim() === "";
+  const overridingRouting = hasBankRouting && values.routing_number.trim() !== "";
+  const routingError = routingNumberError(values.routing_number);
 
   const vault = useVault();
   const vaultActive = vault.enabled;
@@ -199,6 +214,10 @@ export function AccountModal({
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    if (routingError) {
+      setError(routingError);
+      return;
+    }
     startTransition(async () => {
       const toSave = await maybeEncryptForSave(values);
       const result = await upsertAccount(toSave);
@@ -312,13 +331,44 @@ export function AccountModal({
                   />
                 </div>
                 <div>
-                  <label className={labelClass} htmlFor="routing_number">Routing number</label>
+                  {/* The hint rides in the empty space on the label line, and the
+                      input keeps its normal height — so this field stays exactly
+                      the same size as "Account number" beside it whether the
+                      number is inherited, overridden, or absent. */}
+                  <div className="mb-1 flex items-baseline gap-2">
+                    <label className={`${labelClass} mb-0`} htmlFor="routing_number">Routing number</label>
+                    <span className="flex-1" />
+                    {inheritingRouting && (
+                      <span className="whitespace-nowrap text-[10.5px] font-medium text-emerald-700">from bank</span>
+                    )}
+                    {overridingRouting && (
+                      <button
+                        type="button"
+                        onClick={() => set("routing_number", "")}
+                        className="whitespace-nowrap text-[10.5px] font-medium text-amber-700 underline underline-offset-2 hover:text-amber-800"
+                      >
+                        reset
+                      </button>
+                    )}
+                  </div>
                   <input
                     id="routing_number"
-                    className={inputClass}
-                    value={values.routing_number}
+                    inputMode="numeric"
+                    className={
+                      routingError
+                        ? `${inputClass} border-rose-400 focus:border-rose-500 focus:ring-rose-100`
+                        : inheritingRouting
+                          ? `${inputClass} border-emerald-200 bg-emerald-50/30`
+                          : inputClass
+                    }
+                    value={values.routing_number || (bankRoutingNumber ?? "")}
                     onChange={(e) => set("routing_number", e.target.value)}
+                    aria-invalid={!!routingError}
+                    aria-describedby={routingError ? "acct_routing_error" : undefined}
                   />
+                  {routingError && (
+                    <p id="acct_routing_error" className="mt-1 text-xs text-rose-600">{routingError}</p>
+                  )}
                 </div>
               </div>
             </div>

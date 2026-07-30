@@ -12,6 +12,7 @@ import { formatCurrency, formatDate, withScheme } from "@/lib/format";
 import { getActivityLevel } from "@/lib/dormancy";
 import { StatusBadge, PriorityBadge, ConversionBadge, ActivityDot } from "@/components/badges";
 import { BankLogo } from "@/components/BankLogo";
+import { RoutingInfoTip } from "@/components/RoutingInfoTip";
 import { useFocusTrap } from "@/lib/useFocusTrap";
 
 /** A compact read-only label/value row — same shape as DetailBox's Frow, kept
@@ -186,6 +187,17 @@ export function BankViewModal({
             <BoxHeader title="Bank facts" />
             <Frow label="Location" value={[bank.city, bank.state].filter(Boolean).join(", ") || null} />
             <Frow label="FDIC cert #" value={bank.cert ?? null} />
+            <Frow
+              label="Routing number"
+              value={
+                bank.routing_number ? (
+                  <span className="inline-flex items-center">
+                    {bank.routing_number}
+                    <RoutingInfoTip />
+                  </span>
+                ) : null
+              }
+            />
             <Frow label="Total assets" value={bank.assets ? `$${(bank.assets / 1000).toFixed(0)}M` : null} />
             <Frow label="Holding company" value={bank.holding_company || null} />
           </Box>

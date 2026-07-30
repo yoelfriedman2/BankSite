@@ -12,6 +12,7 @@ import {
   type PrintedCheck,
 } from "@/app/(app)/checks/actions";
 import { formatCurrency } from "@/lib/format";
+import { effectiveRoutingNumber } from "@/lib/routingNumber";
 import { useToast } from "@/components/Toast";
 
 // ── number → words ────────────────────────────────────────────────────────────
@@ -246,6 +247,7 @@ export function CheckPrintModal({
   account,
   bankName,
   bankCity,
+  bankRoutingNumber,
   onClose,
   onRecorded,
   onDeleted,
@@ -253,6 +255,9 @@ export function CheckPrintModal({
   account: Account;
   bankName: string;
   bankCity: string;
+  /** The bank's shared routing number — used when the account has none of its
+   *  own. Undefined until migration 0046 is run. */
+  bankRoutingNumber?: string | null;
   onClose: () => void;
   /** Called when a printed check is added to the log (lets the page's log update live). */
   onRecorded?: (check: PrintedCheck) => void;
@@ -321,7 +326,7 @@ export function CheckPrintModal({
 
   const words = amountWords(amount);
   const holder = account.holder ?? "";
-  const routing = account.routing_number ?? "";
+  const routing = effectiveRoutingNumber(account.routing_number, bankRoutingNumber) ?? "";
   const accountNum = account.account_number ?? "";
 
   function handlePrint() {

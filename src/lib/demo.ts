@@ -163,6 +163,7 @@ function seedToBankFields(s: (typeof BANKS_SEED)[number]): BankFields {
     branch_location: null,
     phone: null,
     website: null,
+    routing_number: null,
     notes: null,
     conversion_stage: "none",
     min_to_open: null,
@@ -185,6 +186,10 @@ const BANK_OVERRIDES: Record<number, Partial<BankFields>> = {
     conversion_stage: "subscription",
     min_to_open: 50,
     target_balance: 1000,
+    // A real, checksum-valid routing number so the shared-field flow (inherit,
+    // override, reset) is click-testable in DEMO_MODE. Bank 1 deliberately has
+    // none, so the "no bank number yet" plain-field path is covered too.
+    routing_number: "211170282",
   },
   1: {
     status: "open",
@@ -290,7 +295,9 @@ function createInitialStore(): DemoStore {
       holder: "Jane",
       account_type: "savings",
       account_number: "100067890",
-      routing_number: "021000021",
+      // Left empty on purpose: inherits bank 0's shared routing number, which
+      // is the normal case this feature exists for.
+      routing_number: null,
       balance: 500,
       last_activity_date: monthsAgo(10), // orange
     }),

@@ -4,6 +4,23 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 
 ## One-time setup pending
 
+- **Run migration `0046_bank_routing_number.sql`** — adds `banks.routing_number` (shared, nullable).
+  Lets a routing number be stored once per bank and inherited by every account there, instead of
+  being retyped per account. **Degrades gracefully until run**: reads use `select("*")`, and
+  `upsertBank` probes for the column once and strips the field from its write payloads if it's
+  missing — so bank saves keep working normally on an un-migrated database, the routing row just
+  doesn't appear. Nothing already stored on an account is read, rewritten, or cleared.
+
+  Two follow-ups deliberately left for separate passes, both discussed and agreed:
+  1. **Backfill** — for each cert where every account's routing number agrees, copy that value up to
+     the bank (cross-user, so one person's entry serves the family), then clear the now-redundant
+     per-account copies so an account-level value genuinely means "this one is different." The
+     clearing step is the only part that writes to existing account rows, so it wants its own review
+     before running. Certs where accounts disagree should be listed, not auto-resolved — a
+     disagreement is either a real wire-vs-ACH split or somebody's typo.
+  2. **Scrape the number off the bank's website** — a per-bank "look up" button, not a bulk job. The
+     extractor logic is already written and tested (see notes below); what's unknown is the hit rate.
+
 - ~~Run migration `0045_search_and_rls_indexes.sql`~~ — confirmed run. Closes PERF-05: adds the
   `pg_trgm` extension and GIN trigram indexes on `banks.name`/`city` and `accounts.holder`/
   `account_number` (columns searched via leading-wildcard `.ilike`), plus plain btree indexes on

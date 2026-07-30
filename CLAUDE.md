@@ -174,6 +174,89 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-30 (routing numbers moved to the bank as a shared field)** — A family member asked why the
+routing number isn't shared, since it's the same for everyone. It was stored only on `accounts`, so
+each person retyped the same nine digits per account, and a new account always showed "Missing
+details" on Print Checks until someone looked it up again.
+
+**Two research findings that shaped the design, both worth not re-deriving:**
+
+1. **A routing number is bank-level, but "one per bank" is false for this app's population.** Pulled
+   the Federal Reserve's FedACH participant directory (18,198 records, official fixed-width format,
+   all checksum-valid) and matched it against `banks-seed.ts`. Of the 264 seed banks matchable on
+   exact name+city, **40 (15%) have more than one routing number** — characteristically a legacy
+   thrift-range `2xx` number alongside a Fed-range `0xx` one. Liberty Bank of Middletown CT has five.
+   So the per-account override is a **real case, not an edge case**, and the design keeps it
+   first-class rather than migrating the column away.
+2. **It cannot be synced.** FDIC BankFind has no routing-number field at all — routing numbers are
+   the Fed's and ABA's domain. The Fed's directory has been FedLine-gated since Dec 2018; the public
+   GitHub mirrors are frozen at exactly that date (zero records changed after 2018), which shows up
+   concretely as post-2018 renames failing to match (Partners Bank of New England ← Sanford
+   Institution for Savings, OneLocal Bank ← Norwood Co-operative, etc.). And even with perfect data
+   the directory **cannot say which number is the customer-facing one** — Liberty publishes exactly
+   one of its five (211170282) on its website. So the file is only useful as a *confirmer*, never a
+   source. Manual entry stays the input, same as the NIC files.
+
+**What shipped** (migration **0046_bank_routing_number.sql** — *pending, see TODO.md*):
+
+- **`banks.routing_number`, joined to `SHARED_FIELDS`** (`banks/actions.ts`), so it propagates to
+  every user's copy of a cert exactly like `city`/`website`. Privacy reasoning, since it's a fair
+  question: a routing number **alone** is public — it's printed on every check. The sensitive thing
+  is routing + account number together, and account numbers stay private under RLS. Sharing only the
+  routing half gives away nothing.
+- **Resolution rule, in one shared helper** — `effectiveRoutingNumber()` in the new
+  **`src/lib/routingNumber.ts`**: `account.routing_number ?? bank.routing_number`. The account value
+  **always wins**; the bank value only ever fills a gap, so enabling this can never change a number
+  someone already entered. Applied in `CheckPrintModal`, `ChecksClient` (including its
+  "Missing details" test), `AccountViewModal`, and the export.
+- **ABA check-digit validation** (same module, weights 3-7-1-3-7-1-3-7-1). Previously
+  `routing_number` went through `text()` with zero checking. Now validated live in both editors and
+  **re-checked server-side** in `upsertBank`/`upsertAccount` — a server action is directly callable,
+  and this value both propagates to everyone and ends up on a physical check. Verified the algorithm
+  against all 18,198 real directory entries. Known limit, documented in a test rather than papered
+  over: `000000000` passes the arithmetic.
+- **`RoutingInfoTip.tsx`** — the ⓘ beside the shared number ("Not verified · entered by hand and
+  shared with everyone. Check it against a real check before printing."). Chosen over an inline
+  suffix or a footnote because those grow the row; this doesn't. **Deliberately a click-toggled
+  button, not a `title` tooltip** — a hover tooltip shows nothing on a phone. Hit area is padding
+  plus matching negative margin, so it's finger-sized without changing row height.
+- **Account editor field rebuilt to not change size.** First attempt put the inherited value in its
+  own bordered box with a link under it, which ran ~40px taller than "Account number" beside it and
+  looked lopsided (user caught this on the mockup). Now it's a plain input that arrives pre-filled,
+  with the "from bank" hint riding in the empty space on the *existing* label line — zero added
+  height. Typing an override swaps that hint to a "reset" button, still zero added height. Clearing
+  the field is the same gesture as reset, since empty means inherit.
+
+**A real bug caught by the browser pass, not by review**: `RoutingInfoTip` lives inside a dialog
+whose `useFocusTrap` also closes on Escape from a document-level listener, so one Escape dismissed
+the tip **and** closed the whole bank modal. Both listeners are on `document`, so `stopPropagation`
+from a bubble-phase listener can't help and ordering depends on mount order. Fixed by registering
+the tip's handler in the **capture phase** (`addEventListener(..., true)`), which always runs before
+any bubble-phase listener regardless of mount order, and stopping the event there. Regression test
+added.
+
+**A second real gap the pass caught**: the routing row was added to `BankForm`'s Bank facts but not
+to **`BankViewModal`** — which, since the 2026-07-28 change, is what a row click actually opens. It
+would have been invisible in the primary path. Both now have it.
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (**100 passed**, +14 new in
+`routingNumber.test.ts` covering real directory numbers, single-digit typos, transpositions, and
+every branch of the precedence rule including the pre-migration `undefined` case). Live DEMO_MODE
+CDP pass, **34/34**: the ⓘ opening/closing and not eating the modal's Escape, checksum rejection in
+both editors, inherit → override → reset, Print Checks flipping from "Missing details" to printable,
+no 375px overflow anywhere, the popover staying inside a 375px viewport, zero console errors. The
+size complaint that drove the redesign is asserted numerically, not eyeballed — both fields measure
+62px tall with bottoms at the same pixel, in both the inherited and overridden states. Demo seed
+gives bank 0 a real routing number and leaves bank 1 without one, so both paths stay click-testable.
+
+**Three CDP-harness traps hit and fixed** (all cost real time; `scratchpad/cdp.mjs` now handles each):
+a fixed debug port silently re-attaches to a **stale Chromium** from a previous run; a shared default
+profile dir **deadlocks startup** and presents as `launch()` simply never returning; and navigating
+away from a dirty form triggers this app's `beforeunload` guard, which **blocks forever in headless
+Chrome** — the driver now auto-accepts JS dialogs. Also: piping a long run to `tail` swallows all
+output when the harness kills it, so a hang looks like silence — run it in the background and read
+the output file instead.
+
 **2026-07-28 (Banks page: click-through now opens a read-only view first, matching Accounts)** — User
 report: clicking a bank on `/banks` always jumped straight into the full editable `BankForm` drawer —
 "there is only, like, an edit button" — unlike Accounts, where a row click opens a read-only

@@ -18,6 +18,7 @@ import { AUTO_OPEN_FROM_STATUSES, type Account, type ActivityType } from "@/lib/
 import { skipCurrentMonthIfPast } from "@/lib/monthlyFee";
 import { stampOnRateChange } from "@/lib/interestAccrual";
 import { friendlyDbError } from "@/lib/friendlyError";
+import { normalizeRoutingNumber, routingNumberError } from "@/lib/routingNumber";
 
 export type AccountFormValues = {
   id?: string;
@@ -96,7 +97,7 @@ function buildPatch(
     holder: text(values.holder),
     account_type: text(values.account_type) as AccountFields["account_type"],
     account_number: text(values.account_number),
-    routing_number: text(values.routing_number),
+    routing_number: text(normalizeRoutingNumber(values.routing_number)),
     balance: decimal(values.balance),
     last_activity_date: lastActivity,
     dormancy_months_override: integer(values.dormancy_months_override),
@@ -156,6 +157,10 @@ export async function upsertAccount(
   values: AccountFormValues,
 ): Promise<{ error?: string }> {
   if (!values.bank_id) return { error: "Missing bank." };
+  // Same reasoning as upsertBank's check — a server action is directly
+  // callable, and this number can end up printed on a real check.
+  const rtnErr = routingNumberError(values.routing_number);
+  if (rtnErr) return { error: rtnErr };
   const patch = buildPatch(values);
 
   if (DEMO_MODE) {

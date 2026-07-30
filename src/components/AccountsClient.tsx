@@ -376,6 +376,9 @@ export type AccountRow = Account & {
   bankName: string;
   bankState: string | null;
   bankCert: number | null;
+  /** The bank's shared routing number, used when this account has none of its
+   *  own. Undefined until migration 0046 is run. */
+  bankRoutingNumber?: string | null;
 };
 
 export function AccountsClient({
@@ -929,6 +932,7 @@ export function AccountsClient({
           account={viewing}
           bankName={viewing.bankName}
           bankCert={viewing.bankCert}
+          bankRoutingNumber={viewing.bankRoutingNumber}
           defaultDormancyMonths={defaultDormancyMonths}
           onClose={() => setViewing(null)}
           onEdit={() => {
@@ -941,6 +945,7 @@ export function AccountsClient({
         <AccountModal
           bankId={editing.bank_id}
           bankName={editing.bankName}
+          bankRoutingNumber={editing.bankRoutingNumber}
           initial={editing}
           knownHolders={knownHolders}
           defaultHolder={editing.holder ?? ""}

@@ -65,6 +65,10 @@ export interface Bank {
   phone: string | null; // preferred contact name and/or phone number
   website: string | null; // bank website (seeded from FDIC filings, verified to load)
   min_to_open: number | null;
+  // Bank-level ABA routing number (migration 0046). Accounts fall back to this
+  // when they have none of their own — see effectiveRoutingNumber() in
+  // lib/routingNumber.ts. Optional: undefined until that migration is run.
+  routing_number?: string | null;
 
   // Conversion pipeline (shared)
   conversion_stage: ConversionStage;

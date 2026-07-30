@@ -69,7 +69,7 @@ const TOPICS: Topic[] = [
       "The shared master list of mutual banks. Everyone sees the same banks; what you do with each is your own.",
     points: [
       "Set your status on each bank",
-      "FDIC info, website, and how-to-open details",
+      "FDIC info, website, routing number, and how-to-open details",
       "Community notes from the team",
       "Add the accounts you hold there",
       "See related / linked banks",
@@ -77,7 +77,8 @@ const TOPICS: Topic[] = [
     ],
     tips: [
       "Clicking a bank opens a quick read-only view first. Click Edit (or the pencil icon on the row) to make changes.",
-      "Bank info — how to open, conversion stage, contact, website — is shared with everyone. Your status, notes, priority, and target balance stay private to you.",
+      "Bank info — how to open, conversion stage, contact, website, routing number — is shared with everyone. Your status, notes, priority, and target balance stay private to you.",
+      "A bank's routing number is entered once and shared, so every account there picks it up automatically. Tap the ⓘ beside it for a reminder that it's typed by hand — worth checking against a real check before you print. If one of your accounts needs a different number, type it on that account and it takes precedence.",
       "When you edit shared info, everyone sees exactly what you changed.",
       "Add a brand-new bank and it's added to everyone's list automatically.",
       "Import works the same from Banks or Accounts — a spreadsheet row can carry bank info, account info, or both.",
@@ -230,6 +231,7 @@ const TOPICS: Topic[] = [
     ],
     tips: [
       "Search by bank name or account holder to jump straight to the account you want, instead of scrolling the full list.",
+      "The routing number comes from the bank unless that account has its own, so an account is usually ready to print without you filling anything in. \"Missing details\" means the bank still needs a routing number, or the account needs an account number.",
       "The check number is remembered per account and bumps to the next number after each print.",
       "Your stock type (blank vs pre-printed) and alignment are saved on your device for next time.",
       "The check log — number, payee, amount, date — shows on this page and inside the print window. Remove a check from the log if it was voided or never cashed.",

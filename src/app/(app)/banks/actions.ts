@@ -9,6 +9,7 @@ import { sendCommunityNoteEmail } from "@/lib/email";
 import { logAudit, type AuditEntry } from "@/lib/audit";
 import { friendlyDbError } from "@/lib/friendlyError";
 import { fetchAllRows } from "@/lib/pagination";
+import { normalizeRoutingNumber, routingNumberError } from "@/lib/routingNumber";
 import type { User } from "@supabase/supabase-js";
 import {
   DEMO_MODE,
@@ -63,6 +64,7 @@ const SHARED_FIELDS: {
   { key: "branch_location", label: "Branch / address", fmt: (v) => (v as string) || "—" },
   { key: "phone", label: "Contact", fmt: (v) => (v as string) || "—" },
   { key: "website", label: "Website", fmt: (v) => (v as string) || "—" },
+  { key: "routing_number", label: "Routing number", fmt: (v) => (v as string) || "—" },
   { key: "min_to_open", label: "Minimum to open", fmt: (v) => v != null ? `$${v}` : "—" },
   { key: "conversion_stage", label: "Conversion stage", fmt: (v) => CONVERSION_STAGE_LABELS[(v as ConversionStage) ?? "none"] },
 ];
@@ -99,6 +101,7 @@ export type BankFormValues = {
   branch_location: string;
   phone: string;
   website: string;
+  routing_number: string;
   notes: string;
   conversion_stage: ConversionStage;
   min_to_open: string;
@@ -122,6 +125,34 @@ function integer(v: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Whether migration 0046 has been run (i.e. banks.routing_number exists).
+ *
+ *  Writing a key that has no column makes PostgREST reject the entire
+ *  statement, so a bank save would fail outright on an un-migrated database —
+ *  exactly the "a family member using the app between ship and migration sees
+ *  it work as before" case the project's migration convention exists for.
+ *  Probed once and cached: a column only ever gets added, never removed, so a
+ *  `true` can never go stale, and a `false` is re-probed on the next attempt. */
+let routingColumnExists: boolean | null = null;
+async function hasRoutingColumn(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<boolean> {
+  if (routingColumnExists) return true;
+  const { error } = await supabase.from("banks").select("routing_number").limit(1);
+  routingColumnExists = !error;
+  return routingColumnExists;
+}
+
+/** Drop routing_number from a write payload when the column isn't there yet. */
+function withoutRoutingIfMissing<T extends Record<string, unknown>>(
+  payload: T,
+  columnExists: boolean,
+): T {
+  if (columnExists) return payload;
+  const { routing_number: _omitted, ...rest } = payload;
+  return rest as unknown as T;
+}
+
 function buildPatch(values: BankFormValues): Partial<BankFields> {
   const state = text(values.state);
   return {
@@ -139,6 +170,7 @@ function buildPatch(values: BankFormValues): Partial<BankFields> {
     branch_location: text(values.branch_location),
     phone: text(values.phone),
     website: text(values.website),
+    routing_number: text(normalizeRoutingNumber(values.routing_number)),
     notes: text(values.notes),
     conversion_stage: values.conversion_stage,
     min_to_open: decimal(values.min_to_open),
@@ -233,12 +265,24 @@ export async function upsertBank(
   const user = await getApprovedUser();
   if (!user) return { error: "Not authorized." };
 
+  // Re-check the routing number server-side. The form validates too, but a
+  // server action is a directly-callable endpoint (the SEC-01/INT-01 lesson) —
+  // and this value propagates to every other user's copy and ends up printed
+  // on real checks, so a bad one must never get that far.
+  const rtnErr = routingNumberError(values.routing_number);
+  if (rtnErr) return { error: rtnErr };
+
+  const routingOk = await hasRoutingColumn(supabase);
+
   // Capture the OLD shared values before updating, so we can report what changed.
   let oldShared: Record<string, unknown> | null = null;
   if (values.id) {
     const { data: prev } = await supabase
       .from("banks")
-      .select("city, state, assets, holding_company, open_methods, eligibility, eligibility_date, branch_location, phone, website, min_to_open, conversion_stage")
+      // select("*") rather than an explicit column list: routing_number
+      // (migration 0046) doesn't exist yet on an un-migrated database, and
+      // naming a missing column makes PostgREST reject the whole query.
+      .select("*")
       .eq("id", values.id)
       .maybeSingle();
     oldShared = prev ?? null;
@@ -254,13 +298,16 @@ export async function upsertBank(
     // read-only for the same reason; this is the server-side enforcement,
     // since Server Actions are directly callable regardless of UI state.
     const { cert: _cert, ...editablePatch } = patch;
-    const { error } = await supabase.from("banks").update(editablePatch).eq("id", values.id);
+    const { error } = await supabase
+      .from("banks")
+      .update(withoutRoutingIfMissing(editablePatch, routingOk))
+      .eq("id", values.id);
     if (error) return { error: friendlyDbError(error.message) };
     await autoQueueIfWantToOpen(values.id, patch.status!);
   } else {
     const { data: inserted, error } = await supabase
       .from("banks")
-      .insert({ regulator: null, ...patch, user_id: user.id })
+      .insert(withoutRoutingIfMissing({ regulator: null, ...patch, user_id: user.id }, routingOk))
       .select("id")
       .single();
     if (error) return { error: friendlyDbError(error.message) };
@@ -299,18 +346,24 @@ export async function upsertBank(
         branch_location: patch.branch_location,
         phone: patch.phone,
         website: patch.website,
+        routing_number: patch.routing_number,
         min_to_open: patch.min_to_open,
         conversion_stage: patch.conversion_stage,
       };
       const toInsert = (otherProfiles ?? [])
         .filter((p) => !activeIds.has(p.id as string) && !trashedIds.has(p.id as string))
-        .map((p) => ({
-          user_id: p.id,
-          cert: patch.cert,
-          ...sharedFieldsForCert,
-          regulator: null,
-          status: "untracked",
-        }));
+        .map((p) =>
+          withoutRoutingIfMissing(
+            {
+              user_id: p.id,
+              cert: patch.cert,
+              ...sharedFieldsForCert,
+              regulator: null,
+              status: "untracked",
+            },
+            routingOk,
+          ),
+        );
       if (toInsert.length > 0) {
         const { error: insertErr } = await admin.from("banks").insert(toInsert);
         if (insertErr) {
@@ -324,7 +377,7 @@ export async function upsertBank(
       if (trashedIds.size > 0) {
         const { error: trashedErr } = await admin
           .from("banks")
-          .update(sharedFieldsForCert)
+          .update(withoutRoutingIfMissing(sharedFieldsForCert, routingOk))
           .eq("cert", patch.cert)
           .in("user_id", Array.from(trashedIds));
         if (trashedErr) {
@@ -374,6 +427,7 @@ export async function upsertBank(
       branch_location: patch.branch_location,
       phone: patch.phone,
       website: patch.website,
+      routing_number: patch.routing_number,
       min_to_open: patch.min_to_open,
       conversion_stage: patch.conversion_stage,
       shared_fields_updated_at: new Date().toISOString(),
@@ -390,7 +444,7 @@ export async function upsertBank(
     // so it stays exactly as trashed as they left it.
     const { error: propagateErr } = await admin
       .from("banks")
-      .update(sharedPatch)
+      .update(withoutRoutingIfMissing(sharedPatch, routingOk))
       .eq("cert", patch.cert)
       .neq("user_id", user.id);
     if (propagateErr) {

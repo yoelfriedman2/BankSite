@@ -5,6 +5,7 @@ import { Printer, AlertCircle, BookOpen, Trash2 } from "lucide-react";
 import { CheckPrintModal } from "@/components/CheckPrintModal";
 import { ACCOUNT_TYPE_LABELS } from "@/lib/types";
 import { maskAccountNumber, formatCurrency } from "@/lib/format";
+import { effectiveRoutingNumber } from "@/lib/routingNumber";
 import {
   deletePrintedCheck,
   type PrintedCheck,
@@ -108,7 +109,8 @@ export function ChecksClient({
               <h2 className="mb-2 text-sm font-semibold text-slate-500">{bankName}</h2>
               <ul className="space-y-2">
                 {accts.map((a) => {
-                  const missingFields = !a.routing_number || !a.account_number;
+                  const routing = effectiveRoutingNumber(a.routing_number, a.bank.routing_number);
+                  const missingFields = !routing || !a.account_number;
                   return (
                     <li
                       key={a.id}
@@ -127,9 +129,16 @@ export function ChecksClient({
                           {a.account_number
                             ? <span>Acct: {maskAccountNumber(a.account_number)}</span>
                             : <span className="text-rose-400">No account #</span>}
-                          {a.routing_number
-                            ? <span>Routing: {a.routing_number}</span>
-                            : <span className="text-rose-400">No routing #</span>}
+                          {routing ? (
+                            <span>
+                              Routing: {routing}
+                              {!a.routing_number && (
+                                <span className="ml-1.5 text-emerald-700">from bank</span>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="text-rose-400">No routing #</span>
+                          )}
                         </div>
                       </div>
 
@@ -212,6 +221,7 @@ export function ChecksClient({
           account={selected}
           bankName={selected.bank?.name ?? ""}
           bankCity={[selected.bank?.city, selected.bank?.state].filter(Boolean).join(", ")}
+          bankRoutingNumber={selected.bank?.routing_number}
           onClose={() => setSelected(null)}
           onRecorded={handleRecorded}
           onDeleted={handleDeleted}

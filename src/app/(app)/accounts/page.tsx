@@ -14,7 +14,14 @@ import type { Account } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-type BankRef = { id: string; name: string; state: string | null; cert: number | null };
+type BankRef = {
+  id: string;
+  name: string;
+  state: string | null;
+  cert: number | null;
+  /** Optional: absent until migration 0046 is run. */
+  routing_number?: string | null;
+};
 
 export default async function AccountsPage({
   searchParams,
@@ -33,7 +40,13 @@ export default async function AccountsPage({
   let prefs = DEFAULT_ATTENTION_PREFS;
 
   if (DEMO_MODE) {
-    banks = getDemoBanks().map((b) => ({ id: b.id, name: b.name, state: b.state, cert: b.cert }));
+    banks = getDemoBanks().map((b) => ({
+      id: b.id,
+      name: b.name,
+      state: b.state,
+      cert: b.cert,
+      routing_number: b.routing_number ?? null,
+    }));
     accounts = getDemoAccounts();
     defaultMonths = getDemoProfile().default_dormancy_months;
     knownHolders = getKnownHolders();
@@ -46,7 +59,7 @@ export default async function AccountsPage({
 
     // Paginated past PostgREST's default 1000-row cap (DATA-18).
     const { rows: banksData } = await fetchAllRows<BankRef>((from, to) =>
-      supabase.from("banks").select("id, name, state, cert").is("deleted_at", null).range(from, to),
+      supabase.from("banks").select("*").is("deleted_at", null).range(from, to),
     );
     const { rows: acctData } = await fetchAllRows<Account>((from, to) =>
       supabase
@@ -81,6 +94,7 @@ export default async function AccountsPage({
     bankName: bankMap.get(a.bank_id)?.name ?? "—",
     bankState: bankMap.get(a.bank_id)?.state ?? null,
     bankCert: bankMap.get(a.bank_id)?.cert ?? null,
+    bankRoutingNumber: bankMap.get(a.bank_id)?.routing_number ?? null,
   }));
 
   return (
