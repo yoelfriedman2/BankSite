@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Pencil, X, ArrowUpRight } from "lucide-react";
 import { ACCOUNT_TYPE_LABELS, type Account } from "@/lib/types";
@@ -12,6 +12,14 @@ import { ActivityDot } from "@/components/badges";
 import { useFocusTrap } from "@/lib/useFocusTrap";
 import { getBalanceHistory, type BalancePoint } from "@/app/(app)/money/actions";
 
+/** The bank drawer is `max-w-3xl` (48rem) pinned to the right edge, so a docked
+ *  panel parks its own right edge exactly there. 48rem + this panel's 28rem =
+ *  76rem of content, which is why docking only switches on at `xl` (80rem) —
+ *  below that there isn't a second lane to put it in. */
+const DRAWER_WIDTH = "xl:pr-[48rem]";
+/** Must match the `xl:duration-200` on the panel below. */
+const SLIDE_MS = 200;
+
 /** Read-only "look but don't touch" view of an account — for family members who
  *  just want to check a balance/account number without risking an accidental
  *  edit. Edit and "open in Banks" are both one click away from here. */
@@ -21,6 +29,7 @@ export function AccountViewModal({
   bankCert,
   bankRoutingNumber,
   defaultDormancyMonths,
+  docked = false,
   onClose,
   onEdit,
 }: {
@@ -31,6 +40,13 @@ export function AccountViewModal({
    *  own. Undefined until migration 0046 is run. */
   bankRoutingNumber?: string | null;
   defaultDormancyMonths: number;
+  /** Opened from inside the bank drawer: on a wide screen (`xl` and up) render
+   *  as a second full-height sheet sliding out from behind the drawer instead
+   *  of a centered modal over it, so the bank stays put and readable. Narrower
+   *  than `xl` — including every phone — this has no effect and the centered
+   *  modal is used exactly as before. Standalone callers (the Accounts page,
+   *  which has no drawer to dock to) leave this off. */
+  docked?: boolean;
   onClose: () => void;
   onEdit: () => void;
 }) {
@@ -38,18 +54,57 @@ export function AccountViewModal({
   const cdDays = account.cd_maturity_date ? daysUntil(account.cd_maturity_date) : null;
   const cdColor =
     cdDays == null ? "" : cdDays < 0 ? "text-slate-600" : cdDays <= 30 ? "text-rose-600" : cdDays <= 90 ? "text-amber-700" : "";
-  const dialogRef = useFocusTrap<HTMLDivElement>(onClose);
+  // Slide the docked sheet in on mount and back out on close. Both are `xl:`
+  // only — at any narrower width this is still the plain centered modal, so
+  // `requestClose` must fall through to closing immediately there rather than
+  // sitting through a transition that isn't running.
+  const [entered, setEntered] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const leaveTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (!docked) return;
+    const id = requestAnimationFrame(() => setEntered(true));
+    return () => {
+      cancelAnimationFrame(id);
+      if (leaveTimer.current) window.clearTimeout(leaveTimer.current);
+    };
+  }, [docked]);
+
+  function requestClose() {
+    const sliding =
+      docked && typeof window !== "undefined" && window.matchMedia("(min-width: 80rem)").matches;
+    if (!sliding) {
+      onClose();
+      return;
+    }
+    setLeaving(true);
+    if (leaveTimer.current) window.clearTimeout(leaveTimer.current);
+    leaveTimer.current = window.setTimeout(onClose, SLIDE_MS);
+  }
+
+  const dialogRef = useFocusTrap<HTMLDivElement>(requestClose);
 
   const [balanceHistory, setBalanceHistory] = useState<BalancePoint[]>([]);
   useEffect(() => {
     getBalanceHistory(account.id).then(setBalanceHistory).catch(() => {});
   }, [account.id]);
+
+  const showSheet = entered && !leaving;
+  const accountLabel = `${account.holder || "—"}${
+    account.account_type ? ` · ${ACCOUNT_TYPE_LABELS[account.account_type]}` : ""
+  }`;
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4"
+      className={`fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4${
+        docked
+          ? // Hand the drawer back its own clicks: at `xl` this wrapper spans the
+            // whole viewport but only the sheet itself should catch a pointer.
+            ` xl:pointer-events-none xl:z-0 xl:items-stretch xl:justify-end xl:overflow-hidden xl:bg-transparent xl:p-0 ${DRAWER_WIDTH}`
+          : ""
+      }`}
       onMouseDown={(e) => {
         e.stopPropagation();
-        onClose();
+        requestClose();
       }}
     >
       <div
@@ -58,19 +113,50 @@ export function AccountViewModal({
         aria-modal="true"
         aria-labelledby="account-view-modal-title"
         onMouseDown={(e) => e.stopPropagation()}
-        className="my-8 w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
+        className={`my-8 w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl${
+          docked
+            ? " xl:pointer-events-auto xl:my-0 xl:flex xl:h-full xl:flex-col xl:rounded-none xl:shadow-[-12px_0_28px_rgba(15,23,42,0.18)] xl:transition-transform xl:duration-200 xl:ease-out motion-reduce:xl:transition-none " +
+              // Parked under the drawer (which sits a stacking level above) so
+              // it reads as sliding out from behind it, not fading in on top.
+              (showSheet ? "xl:translate-x-0" : "xl:translate-x-full")
+            : ""
+        }`}
       >
-        <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-1">
+        <div
+          className={`flex items-start justify-between gap-3 px-5 pt-5 pb-1${
+            docked ? " xl:shrink-0 xl:border-b xl:border-slate-200 xl:pb-4" : ""
+          }`}
+        >
           <div className="min-w-0 flex-1">
-            <h2 id="account-view-modal-title" className="truncate text-lg font-semibold text-slate-900">{bankName}</h2>
-            <p className="mt-0.5 text-xs text-slate-500">
-              {account.holder || "—"}
-              {account.account_type && ` · ${ACCOUNT_TYPE_LABELS[account.account_type]}`}
+            {/* Docked, the bank's own drawer is open right beside this with the
+             *  same name in its header, so lead with the account instead and
+             *  demote the bank name — but only at the width where docking is
+             *  actually in effect. Narrower, this is still a lone centered
+             *  modal and the bank name is the only thing identifying it. */}
+            <h2 id="account-view-modal-title" className="truncate text-lg font-semibold text-slate-900">
+              {docked ? (
+                <>
+                  <span className="xl:hidden">{bankName}</span>
+                  <span className="hidden xl:inline">{accountLabel}</span>
+                </>
+              ) : (
+                bankName
+              )}
+            </h2>
+            <p className="mt-0.5 truncate text-xs text-slate-500">
+              {docked ? (
+                <>
+                  <span className="xl:hidden">{accountLabel}</span>
+                  <span className="hidden xl:inline">{bankName}</span>
+                </>
+              ) : (
+                accountLabel
+              )}
             </p>
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             aria-label="Close"
             className="shrink-0 rounded-lg p-1 text-slate-600 hover:bg-black/5 hover:text-slate-600"
           >
@@ -78,7 +164,11 @@ export function AccountViewModal({
           </button>
         </div>
 
-        <div className="bg-amber-50/50 px-4 pb-1 pt-3">
+        <div
+          className={`bg-amber-50/50 px-4 pb-1 pt-3${
+            docked ? " xl:min-h-0 xl:flex-1 xl:overflow-y-auto" : ""
+          }`}
+        >
           <Box>
             <BoxHeader title="Account details" />
             <Frow label="Holder" value={account.holder} />
@@ -184,10 +274,17 @@ export function AccountViewModal({
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-3 px-5 py-4">
+        <div
+          className={`flex items-center justify-between gap-3 px-5 py-4${
+            docked ? " xl:shrink-0 xl:justify-end xl:border-t xl:border-slate-200" : ""
+          }`}
+        >
+          {/* Docked, this would link to the bank already open beside it. */}
           <Link
             href={bankCert != null ? `/banks?cert=${bankCert}` : "/banks"}
-            className="flex items-center gap-1.5 text-sm font-medium text-amber-700 hover:text-amber-800"
+            className={`flex items-center gap-1.5 text-sm font-medium text-amber-700 hover:text-amber-800${
+              docked ? " xl:hidden" : ""
+            }`}
           >
             View bank
             <ArrowUpRight className="h-4 w-4" />

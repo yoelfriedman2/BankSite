@@ -101,6 +101,21 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 - ~~Run migration **0026_fdic_admin_role.sql**~~ — confirmed run (2026-07-07). The owner can now
   grant the FDIC-admin role toggle on Admin → Users.
 
+## Decide: should the account *editor* dock too? (2026-07-30)
+
+The read-only account view now docks as a second sheet beside the bank drawer on wide screens
+(≥1280px) instead of opening as a centered box over it — see CLAUDE.md's entry for the design.
+The **editor** (`AccountModal`) deliberately wasn't touched, so clicking "Edit" from the docked
+sheet still throws a centered modal over everything, which is the same jump the docking was meant
+to remove — just one step later in the flow.
+
+Not done as part of that change for a real reason, not an oversight: `AccountModal` is `max-w-lg`
+(512px), and 768 + 512 = 1280 exactly, so docking it at the same `xl` breakpoint leaves literally
+zero gap at the left edge. Making it fit means one of — dock the editor only above a wider
+breakpoint (~1400px), narrow it to `max-w-md` and restack its `grid-cols-2` field rows, or fold
+edit into the view sheet itself as an in-place mode swap (the nicest result, the biggest change).
+Worth deciding before anyone calls this flow finished.
+
 ## Live: manual backup + single-user restore (2026-07-07, dry-run confirmed 2026-07-12)
 
 New Admin → Users "Backups" panel: "Back up now" (builds a fresh full-DB snapshot, saves it to the

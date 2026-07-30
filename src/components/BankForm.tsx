@@ -511,7 +511,9 @@ export function BankForm({
         aria-labelledby="bank-form-title"
         onSubmit={handleSubmit}
         onMouseDown={(e) => e.stopPropagation()}
-        className="flex h-full w-full max-w-3xl flex-col bg-white shadow-2xl"
+        // `relative z-10` keeps the drawer one stacking level above the docked
+        // account sheet below, so that sheet slides out from *behind* it.
+        className="relative z-10 flex h-full w-full max-w-3xl flex-col bg-white shadow-2xl"
       >
         <header className="flex items-start justify-between gap-3 border-b border-slate-200 px-6 py-4">
           <div className="min-w-0 flex-1">
@@ -1353,6 +1355,7 @@ export function BankForm({
           bankCert={initial.cert}
           bankRoutingNumber={values.routing_number || initial.routing_number}
           defaultDormancyMonths={defaultDormancyMonths}
+          docked
           onClose={() => setViewingAccount(null)}
           onEdit={() => {
             setAcctModal({ account: viewingAccount });

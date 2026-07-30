@@ -174,6 +174,65 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-07-30 (the account view docks beside the bank drawer instead of covering it)** — User feedback
+on the drawer's flow: the bank opens as a nice two-column sheet (shared right, only-you left), but
+clicking an account inside it threw a small centered box over the middle of the page — different
+shape, different place, breaking the continuity. They asked for ideas, picked the "second sheet
+sliding out to the left" option from a set of four interactive mockups, and explicitly scoped mobile
+out ("I guess on mobile we're leaving it the same").
+
+**What shipped** — no migration, no schema, no server action; `AccountViewModal.tsx` +
+2 lines of `BankForm.tsx`:
+
+- **A `docked` prop on `AccountViewModal`, off by default.** Only `BankForm` passes it. The
+  standalone Accounts page (which has no drawer to dock against) is byte-for-byte unchanged at every
+  width — verified live, not assumed.
+- **Docking is a pure CSS breakpoint, not a JS media query.** Every docked style is `xl:`-prefixed,
+  so below 1280px the component *is* the old centered modal — no state, no hydration mismatch, and
+  resizing the window switches behavior live. The one place JS reads the width is `requestClose`,
+  which checks `matchMedia("(min-width: 80rem)")` before running the 200ms exit transition —
+  otherwise a phone tap would sit through a transition that isn't running and feel laggy.
+- **The geometry, since it's load-bearing**: the drawer is `max-w-3xl` = 48rem pinned right, so the
+  sheet parks its own right edge there via `xl:pr-[48rem]` on a `justify-end` wrapper. 48rem + the
+  sheet's own 28rem = 76rem, which is exactly why the breakpoint is `xl` (80rem) and not `lg` — at
+  1280px it fits with 54px of scrim to spare, at 1024px it would not fit at all. **If either width
+  ever changes, that breakpoint has to be rechecked** — `DRAWER_WIDTH`/`SLIDE_MS` are named
+  constants at the top of the file for exactly that reason.
+- **It slides out from *behind* the drawer**, which is what sells the stack. That needs the drawer
+  one stacking level above the sheet, so `BankForm`'s `<form>` gained `relative z-10` and the docked
+  wrapper drops to `xl:z-0`. The sheet's parked state is `translate-x-full`, which lands it entirely
+  within the drawer's footprint — occluded, not just off-screen.
+- **The docked wrapper is `pointer-events-none` with `pointer-events-auto` on the sheet itself.**
+  Without this the wrapper's `fixed inset-0` would swallow every click meant for the bank drawer
+  sitting right next to it. Nested modals still work because `useFocusTrap` already scopes Escape to
+  whichever dialog actually holds focus.
+
+**Two things only visible once it was rendered against real data, not in the mockup**: the bank name
+was printed twice side by side (drawer header and sheet header), and the sheet's footer "View bank ↗"
+linked to the bank already open beside it. Fixed both — docked, the sheet leads with the account
+(`John · Checking`) and demotes the bank name to the subtitle, and the redundant link is hidden. Both
+swaps are themselves `xl:`-gated, because at 1100px `docked` is still true while the layout is the
+centered modal, where the bank name genuinely is the only thing identifying it.
+
+**Deliberately not done**: the account *editor* still opens as a centered modal over everything, so
+the jump persists one step later in the flow. It's `max-w-lg` (512px) and 768 + 512 = 1280 exactly —
+docking it at the same breakpoint leaves zero gap. Logged in TODO.md with the three real options
+rather than guessed at.
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (100 passed) all clean. Live DEMO_MODE
+CDP pass, **24/24**, asserting measured geometry rather than eyeballing it: the sheet's right edge
+within 1.5px of the drawer's left edge, full viewport height, entirely on screen, the drawer's own
+rect unchanged before/after opening, the transition genuinely animating (sampled `left` every 25ms:
+662px → 214px, so it slides rather than pops), the drawer still hit-testable through the wrapper via
+`elementFromPoint`, no second scrim, Escape closing only the sheet, the Edit hand-off, 1280px still
+fitting, 1100px falling back to centered, 375px centered with no overflow, the Accounts page still
+centered at 1440px, zero console errors. Desktop and 375px screenshots both reviewed. **One trap
+worth remembering: `TopNav`'s mobile nav drawer is permanently mounted as a `[role="dialog"]` (it
+toggles via `inert`/CSS), so any test counting open dialogs has a baseline of 1** — three assertions
+failed on that before the count was filtered by `:not([inert])`, and none of them were app bugs.
+Skipped changelog/Guide: this is a layout change to an existing flow, not a new capability, matching
+how both prior drawer/popup redesigns were handled.
+
 **2026-07-30 (routing numbers moved to the bank as a shared field)** — A family member asked why the
 routing number isn't shared, since it's the same for everyone. It was stored only on `accounts`, so
 each person retyped the same nine digits per account, and a new account always showed "Missing
