@@ -26,6 +26,13 @@ const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
 const labelClass = "mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500";
 
+/** The bank drawer is `max-w-3xl` (48rem) pinned right, so a docked sheet parks
+ *  its right edge there — matching `AccountViewModal`, which docks into this
+ *  same 28rem lane. Keep these two in step. */
+const DRAWER_WIDTH = "xl:pr-[48rem]";
+/** Must match the `xl:duration-200` on the sheet. */
+const SLIDE_MS = 200;
+
 function toValues(
   bankId: string,
   a: Account | null,
@@ -71,6 +78,8 @@ export function AccountModal({
   knownHolders,
   defaultHolder,
   defaultDormancyMonths,
+  docked = false,
+  dockedInstant = false,
   onClose,
   onSaved,
 }: {
@@ -83,6 +92,15 @@ export function AccountModal({
   knownHolders: string[];
   defaultHolder: string;
   defaultDormancyMonths: number;
+  /** Opened from inside the bank drawer: at `xl` and up, render as a sheet in
+   *  the lane beside the drawer instead of a centered modal over it — the same
+   *  lane and width `AccountViewModal` docks into, so switching between viewing
+   *  and editing moves nothing. Narrower than `xl` this has no effect. */
+  docked?: boolean;
+  /** Skip the slide-in: the view sheet was already sitting in this exact lane
+   *  and is being replaced in place, so animating would be a pointless round
+   *  trip on every Edit click. */
+  dockedInstant?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -121,8 +139,53 @@ export function AccountModal({
 
   useUnsavedChanges(dirty);
 
+  // Docked, the fields get a size down so the four side-by-side pairs still fit
+  // two-across in a 28rem lane instead of having to stack. Both are `xl:`-only,
+  // so the centered modal (narrow screens, and the standalone Accounts page)
+  // keeps the roomier sizing it has today.
+  const inputCls = docked ? `${inputClass} xl:px-2 xl:py-1.5 xl:text-[13px]` : inputClass;
+  // Only the letter-spacing goes, not the size: `tracking-wide` on an uppercase
+  // label is what actually eats the horizontal room, and shrinking the font
+  // instead made the routing field's hint line taller than the label beside it,
+  // knocking the two inputs out of alignment.
+  const labelCls = docked ? `${labelClass} xl:tracking-normal` : labelClass;
+  const pairCls = docked ? "grid grid-cols-2 gap-3 xl:gap-2" : "grid grid-cols-2 gap-3";
+  const rowCls = docked ? "flex gap-3 xl:gap-2" : "flex gap-3";
+  // Not narrowed while docked: this row is full-width, not one of the pairs, so
+  // there's room — and at w-20 the "Day (1-28)" placeholder clips.
+  const dayCls = "w-28";
+  const stackCls = docked ? "space-y-3 xl:space-y-2" : "space-y-3";
+  // Stays below the label's own size, so the routing field's label line is
+  // never taller than "Account number"'s beside it and the two inputs keep
+  // lining up — the property that field was specifically built to have.
+  const hintCls = "text-[10.5px]";
+  const accountLabel = `${initial?.holder || "—"}${
+    initial?.account_type ? ` · ${ACCOUNT_TYPE_LABELS[initial.account_type]}` : ""
+  }`;
+
+  const [entered, setEntered] = useState(dockedInstant);
+  const [leaving, setLeaving] = useState(false);
+  const leaveTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (!docked || dockedInstant) return;
+    const id = requestAnimationFrame(() => setEntered(true));
+    return () => {
+      cancelAnimationFrame(id);
+      if (leaveTimer.current) window.clearTimeout(leaveTimer.current);
+    };
+  }, [docked, dockedInstant]);
+
   function attemptClose() {
-    if (confirmDiscard(dirty)) onClose();
+    if (!confirmDiscard(dirty)) return;
+    const sliding =
+      docked && typeof window !== "undefined" && window.matchMedia("(min-width: 80rem)").matches;
+    if (!sliding) {
+      onClose();
+      return;
+    }
+    setLeaving(true);
+    if (leaveTimer.current) window.clearTimeout(leaveTimer.current);
+    leaveTimer.current = window.setTimeout(onClose, SLIDE_MS);
   }
 
   const dialogRef = useFocusTrap<HTMLFormElement>(attemptClose);
@@ -257,7 +320,13 @@ export function AccountModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4"
+      className={`fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4${
+        docked
+          ? // Only the sheet itself should catch a pointer — the drawer sitting
+            // beside it stays clickable through this wrapper.
+            ` xl:pointer-events-none xl:z-0 xl:items-stretch xl:justify-end xl:overflow-hidden xl:bg-transparent xl:p-0 ${DRAWER_WIDTH}`
+          : ""
+      }`}
       onMouseDown={(e) => { e.stopPropagation(); attemptClose(); }}
     >
       <form
@@ -267,11 +336,34 @@ export function AccountModal({
         aria-labelledby="account-modal-title"
         onSubmit={handleSubmit}
         onMouseDown={(e) => e.stopPropagation()}
-        className="my-8 w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl"
+        className={`my-8 w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl${
+          docked
+            ? " xl:pointer-events-auto xl:my-0 xl:flex xl:h-full xl:max-w-md xl:flex-col xl:rounded-none xl:shadow-[-12px_0_28px_rgba(15,23,42,0.18)] xl:transition-transform xl:duration-200 xl:ease-out motion-reduce:xl:transition-none " +
+              (entered && !leaving ? "xl:translate-x-0" : "xl:translate-x-full")
+            : ""
+        }`}
       >
-        <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-1">
+        <div
+          className={`flex items-start justify-between gap-3 px-5 pt-5 pb-1${
+            docked ? " xl:shrink-0 xl:border-b xl:border-slate-200 xl:pb-4" : ""
+          }`}
+        >
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-medium text-amber-700">{bankName}</p>
+            {/* Docked, the bank's drawer is open right beside this with the same
+             *  name in its header — so name the account being edited instead,
+             *  which this header never actually said. Only at the width where
+             *  docking is in effect; narrower it's a lone centered modal and the
+             *  bank name is the only thing identifying it. */}
+            <p className="truncate text-xs font-medium text-amber-700">
+              {docked && initial ? (
+                <>
+                  <span className="xl:hidden">{bankName}</span>
+                  <span className="hidden xl:inline">{accountLabel}</span>
+                </>
+              ) : (
+                bankName
+              )}
+            </p>
             <h2 id="account-modal-title" className="text-lg font-semibold text-slate-900">
               {initial ? "Edit account" : "Add account"}
             </h2>
@@ -286,17 +378,21 @@ export function AccountModal({
           </button>
         </div>
 
-        <div className="max-h-[70vh] overflow-y-auto bg-amber-50/50 px-4 pb-1 pt-3">
+        <div
+          className={`max-h-[70vh] overflow-y-auto bg-amber-50/50 px-4 pb-1 pt-3${
+            docked ? " xl:min-h-0 xl:max-h-none xl:flex-1" : ""
+          }`}
+        >
 
           <Box>
             <BoxHeader title="Account details" />
-            <div className="space-y-3">
+            <div className={stackCls}>
               <div>
-                <label className={labelClass} htmlFor="holder">Account holder</label>
+                <label className={labelCls} htmlFor="holder">Account holder</label>
                 <input
                   id="holder"
                   list="known-holders"
-                  className={inputClass}
+                  className={inputCls}
                   placeholder="e.g. John"
                   value={values.holder}
                   onChange={(e) => set("holder", e.target.value)}
@@ -307,10 +403,10 @@ export function AccountModal({
                 </datalist>
               </div>
               <div>
-                <label className={labelClass} htmlFor="account_type">Account type</label>
+                <label className={labelCls} htmlFor="account_type">Account type</label>
                 <select
                   id="account_type"
-                  className={inputClass}
+                  className={inputCls}
                   value={values.account_type}
                   onChange={(e) => set("account_type", e.target.value)}
                 >
@@ -320,12 +416,12 @@ export function AccountModal({
                   ))}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className={pairCls}>
                 <div>
-                  <label className={labelClass} htmlFor="account_number">Account number</label>
+                  <label className={labelCls} htmlFor="account_number">Account number</label>
                   <input
                     id="account_number"
-                    className={inputClass}
+                    className={inputCls}
                     value={values.account_number}
                     onChange={(e) => set("account_number", e.target.value)}
                   />
@@ -335,17 +431,21 @@ export function AccountModal({
                       input keeps its normal height — so this field stays exactly
                       the same size as "Account number" beside it whether the
                       number is inherited, overridden, or absent. */}
-                  <div className="mb-1 flex items-baseline gap-2">
-                    <label className={`${labelClass} mb-0`} htmlFor="routing_number">Routing number</label>
+                  {/* h-4 matches a plain label's own line box — without it this
+                      row runs 4px taller and the routing input sits lower than
+                      "Account number" beside it (pre-existing; only obvious once
+                      the two sit close together in the docked sheet). */}
+                  <div className="mb-1 flex h-4 items-baseline gap-2">
+                    <label className={`${labelCls} mb-0`} htmlFor="routing_number">Routing number</label>
                     <span className="flex-1" />
                     {inheritingRouting && (
-                      <span className="whitespace-nowrap text-[10.5px] font-medium text-emerald-700">from bank</span>
+                      <span className={`whitespace-nowrap font-medium text-emerald-700 ${hintCls}`}>from bank</span>
                     )}
                     {overridingRouting && (
                       <button
                         type="button"
                         onClick={() => set("routing_number", "")}
-                        className="whitespace-nowrap text-[10.5px] font-medium text-amber-700 underline underline-offset-2 hover:text-amber-800"
+                        className={`whitespace-nowrap font-medium text-amber-700 underline underline-offset-2 hover:text-amber-800 ${hintCls}`}
                       >
                         reset
                       </button>
@@ -356,10 +456,10 @@ export function AccountModal({
                     inputMode="numeric"
                     className={
                       routingError
-                        ? `${inputClass} border-rose-400 focus:border-rose-500 focus:ring-rose-100`
+                        ? `${inputCls} border-rose-400 focus:border-rose-500 focus:ring-rose-100`
                         : inheritingRouting
-                          ? `${inputClass} border-emerald-200 bg-emerald-50/30`
-                          : inputClass
+                          ? `${inputCls} border-emerald-200 bg-emerald-50/30`
+                          : inputCls
                     }
                     value={values.routing_number || (bankRoutingNumber ?? "")}
                     onChange={(e) => set("routing_number", e.target.value)}
@@ -376,9 +476,9 @@ export function AccountModal({
 
           <Box>
             <BoxHeader title="Balance & fees" />
-            <div className="space-y-3">
+            <div className={stackCls}>
               <div>
-                <label className={labelClass} htmlFor="balance">Balance (USD)</label>
+                <label className={labelCls} htmlFor="balance">Balance (USD)</label>
                 <input
                   id="balance"
                   type="number"
@@ -387,7 +487,7 @@ export function AccountModal({
                   // legitimately drive a balance negative. A native min
                   // would fail HTML5 validation and block saving an
                   // unrelated edit on an account that's already negative.
-                  className={inputClass}
+                  className={inputCls}
                   value={values.balance}
                   onChange={(e) => set("balance", e.target.value)}
                 />
@@ -404,8 +504,8 @@ export function AccountModal({
                 </label>
               </div>
               <div>
-                <span className={labelClass}>Monthly fee (optional)</span>
-                <div className="flex gap-3">
+                <span className={labelCls}>Monthly fee (optional)</span>
+                <div className={rowCls}>
                   <div className="flex-1">
                     <input
                       aria-label="Monthly fee amount"
@@ -413,19 +513,19 @@ export function AccountModal({
                       step="0.01"
                       min="0"
                       placeholder="Amount"
-                      className={inputClass}
+                      className={inputCls}
                       value={values.monthly_fee}
                       onChange={(e) => set("monthly_fee", e.target.value)}
                     />
                   </div>
-                  <div className="w-28">
+                  <div className={dayCls}>
                     <input
                       aria-label="Day of month charged"
                       type="number"
                       min="1"
                       max="28"
                       placeholder="Day (1-28)"
-                      className={inputClass}
+                      className={inputCls}
                       value={values.monthly_fee_day}
                       onChange={(e) => set("monthly_fee_day", e.target.value)}
                     />
@@ -436,14 +536,14 @@ export function AccountModal({
                 </p>
               </div>
               <div>
-                <label className={labelClass} htmlFor="interest_rate">Interest rate (APY %)</label>
+                <label className={labelCls} htmlFor="interest_rate">Interest rate (APY %)</label>
                 <input
                   id="interest_rate"
                   type="number"
                   step="0.01"
                   min="0"
                   placeholder="e.g. 4.5"
-                  className={inputClass}
+                  className={inputCls}
                   value={values.interest_rate}
                   onChange={(e) => set("interest_rate", e.target.value)}
                 />
@@ -457,12 +557,12 @@ export function AccountModal({
 
           <Box>
             <BoxHeader title="Dates" />
-            <div className="space-y-3">
+            <div className={stackCls}>
               <div>
-                <label className={labelClass} htmlFor="date_opened">Date opened</label>
+                <label className={labelCls} htmlFor="date_opened">Date opened</label>
                 <DateInput
                   id="date_opened"
-                  className={inputClass}
+                  className={inputCls}
                   value={values.date_opened}
                   onChange={(v) => set("date_opened", v)}
                 />
@@ -471,26 +571,26 @@ export function AccountModal({
               {showActivity && (
                 <>
                   <div>
-                    <label className={`${labelClass} flex items-center gap-1.5`} htmlFor="last_activity_date">
+                    <label className={`${labelCls} flex items-center gap-1.5`} htmlFor="last_activity_date">
                       Last activity date
                       {liveActivityLevel !== "none" && <ActivityDot level={liveActivityLevel} />}
                     </label>
                     <DateInput
                       id="last_activity_date"
-                      className={inputClass}
+                      className={inputCls}
                       value={values.last_activity_date}
                       onChange={(v) => set("last_activity_date", v)}
                     />
                   </div>
                   <div>
-                    <label className={labelClass} htmlFor="dormancy_months_override">
+                    <label className={labelCls} htmlFor="dormancy_months_override">
                       Dormancy window (months)
                     </label>
                     <input
                       id="dormancy_months_override"
                       type="number"
                       min="1"
-                      className={inputClass}
+                      className={inputCls}
                       placeholder={`Default: ${defaultDormancyMonths}`}
                       value={values.dormancy_months_override}
                       onChange={(e) => set("dormancy_months_override", e.target.value)}
@@ -501,10 +601,10 @@ export function AccountModal({
 
               {showCd && (
                 <div>
-                  <label className={`${labelClass} ${cdColor}`} htmlFor="cd_maturity_date">CD maturity date</label>
+                  <label className={`${labelCls} ${cdColor}`} htmlFor="cd_maturity_date">CD maturity date</label>
                   <DateInput
                     id="cd_maturity_date"
-                    className={inputClass}
+                    className={inputCls}
                     value={values.cd_maturity_date}
                     onChange={(v) => set("cd_maturity_date", v)}
                   />
@@ -518,7 +618,7 @@ export function AccountModal({
             <textarea
               id="acct_notes"
               rows={2}
-              className={inputClass}
+              className={inputCls}
               value={values.notes}
               onChange={(e) => set("notes", e.target.value)}
             />
@@ -552,37 +652,37 @@ export function AccountModal({
               </p>
             )}
             {onlineAccessOpen && (!vaultActive || (vault.unlocked && !vaultDecrypting)) && (
-              <div className="space-y-3">
+              <div className={stackCls}>
                 <div>
-                  <label className={labelClass} htmlFor="online_url">Login URL</label>
+                  <label className={labelCls} htmlFor="online_url">Login URL</label>
                   <input
                     id="online_url"
-                    className={inputClass}
+                    className={inputCls}
                     placeholder="https://…"
                     value={values.online_url}
                     onChange={(e) => set("online_url", e.target.value)}
                   />
                 </div>
 
-                <div className="flex gap-3">
+                <div className={rowCls}>
                   <div className="flex-1">
-                    <label className={labelClass} htmlFor="acct_username">Username</label>
+                    <label className={labelCls} htmlFor="acct_username">Username</label>
                     <input
                       id="acct_username"
                       autoComplete="off"
-                      className={inputClass}
+                      className={inputCls}
                       value={values.username}
                       onChange={(e) => set("username", e.target.value)}
                     />
                   </div>
                   <div className="flex-1">
-                    <label className={labelClass} htmlFor="acct_password">Password</label>
+                    <label className={labelCls} htmlFor="acct_password">Password</label>
                     <div className="relative">
                       <input
                         id="acct_password"
                         type={showPassword ? "text" : "password"}
                         autoComplete="off"
-                        className={`${inputClass} pr-10`}
+                        className={`${inputCls} pr-10`}
                         value={values.password}
                         onChange={(e) => set("password", e.target.value)}
                       />
@@ -599,11 +699,11 @@ export function AccountModal({
                 </div>
 
                 <div>
-                  <label className={labelClass} htmlFor="access_notes">Access notes</label>
+                  <label className={labelCls} htmlFor="access_notes">Access notes</label>
                   <textarea
                     id="access_notes"
                     rows={2}
-                    className={inputClass}
+                    className={inputCls}
                     placeholder="security questions, which email, etc."
                     value={values.access_notes}
                     onChange={(e) => set("access_notes", e.target.value)}

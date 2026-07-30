@@ -179,7 +179,12 @@ export function BankForm({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const toast = useToast();
-  const [acctModal, setAcctModal] = useState<{ account: Account | null } | null>(null);
+  // `fromView` means the read-only sheet was already sitting in the docked lane
+  // and the editor is replacing it in place — so the editor skips its slide-in
+  // rather than animating out and back into the same spot.
+  const [acctModal, setAcctModal] = useState<
+    { account: Account | null; fromView?: boolean } | null
+  >(null);
   const [viewingAccount, setViewingAccount] = useState<Account | null>(null);
   const [printCheck, setPrintCheck] = useState<Account | null>(null);
   const [busyAcctId, setBusyAcctId] = useState<string | null>(null);
@@ -1343,6 +1348,8 @@ export function BankForm({
           knownHolders={knownHolders}
           defaultHolder={defaultHolder}
           defaultDormancyMonths={defaultDormancyMonths}
+          docked
+          dockedInstant={acctModal.fromView}
           onClose={() => setAcctModal(null)}
           onSaved={() => { setAcctModal(null); onChanged(); }}
         />
@@ -1358,7 +1365,7 @@ export function BankForm({
           docked
           onClose={() => setViewingAccount(null)}
           onEdit={() => {
-            setAcctModal({ account: viewingAccount });
+            setAcctModal({ account: viewingAccount, fromView: true });
             setViewingAccount(null);
           }}
         />

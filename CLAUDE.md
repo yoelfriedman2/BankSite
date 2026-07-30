@@ -214,10 +214,43 @@ linked to the bank already open beside it. Fixed both — docked, the sheet lead
 swaps are themselves `xl:`-gated, because at 1100px `docked` is still true while the layout is the
 centered modal, where the bank name genuinely is the only thing identifying it.
 
-**Deliberately not done**: the account *editor* still opens as a centered modal over everything, so
-the jump persists one step later in the flow. It's `max-w-lg` (512px) and 768 + 512 = 1280 exactly —
-docking it at the same breakpoint leaves zero gap. Logged in TODO.md with the three real options
-rather than guessed at.
+**Follow-up the same day — the editor docks too, so the whole flow stays in one lane.** Presented the
+two ways to fit a 512px editor into a 448px lane (stack its paired fields, or widen the lane and push
+the breakpoint to ~1340px); the user picked a third they were right about — **keep the pairs side by
+side and shrink the field chrome instead**. `AccountModal` now takes the same `docked` prop, the same
+`xl:pr-[48rem]` lane, and `xl:max-w-md` so it is exactly as wide as the view sheet it replaces:
+
+- **What "smaller fields" turned out to mean**: `xl:px-2 xl:py-1.5 xl:text-[13px]` on inputs,
+  `xl:gap-2`/`xl:space-y-2` on the rows, and — the one that actually bought the horizontal room —
+  **`xl:tracking-normal` on the labels**. `tracking-wide` on an uppercase label is what was eating the
+  width, not the font size. Measured: 186px per column, zero wrapped labels, nothing clipped.
+- **`dockedInstant`**: opening the editor from the view sheet skips the slide, because the view sheet
+  was already occupying that exact lane — animating out and back in is a 400ms round trip to end up
+  where you started. Asserted, not assumed: `left` sampled every 20ms right after the Edit click has
+  a spread of 0px. "Add account" (nothing in the lane yet) still slides normally.
+- **Two false starts worth not repeating**: `xl:w-20` on the monthly-fee day field clipped its
+  "Day (1-28)" placeholder — that row is full width, not one of the pairs, so it never needed
+  narrowing. And shrinking the *label* font to 10px made the routing field's hint line taller than
+  the label beside it, knocking the two inputs out of alignment.
+- **The editor header now names the account** (`John · Checking`) instead of repeating the bank name
+  from the drawer beside it — which also means it finally says *which* account you're editing, which
+  it never did. `xl:`-gated like the view sheet's equivalent swap.
+
+**A pre-existing bug found by measuring rather than eyeballing**: the routing-number input has always
+sat 4px lower than "Account number" beside it — its label row is a `flex items-baseline` wrapper that
+comes out 20px tall where a plain label's line box is 16px. Confirmed identical on the untouched
+Accounts page (325 vs 329) and docked (271 vs 275), so it is on `main` today and predates this work;
+docking only made it obvious by putting the two fields close together. Fixed with `h-4` on that row —
+both now align to the pixel in both modes. Note this contradicts the earlier routing-number entry's
+claim that the two fields measure equal with "bottoms at the same pixel"; that held for the field's
+own height across inherited/overridden states, not for its alignment with the field beside it.
+
+**Verification (editor)**: **27/27** live, plus the view sheet's 24/24 re-run, `tsc --noEmit`,
+`npm run build`, `npm test` (100). Asserts the editor is the same width as the view sheet it replaced,
+flush and full height, both field pairs still side by side with no wrapped label and no clipped input,
+the unsaved-changes guard still arming while dirty, Escape closing only the editor, "Add account"
+docking too, 1280px fitting, 1100px falling back to the centered 512px popup, 375px unchanged, and the
+Accounts page editor still centered at 512px with its original 216px field columns.
 
 **Verification**: `tsc --noEmit`, `npm run build`, `npm test` (100 passed) all clean. Live DEMO_MODE
 CDP pass, **24/24**, asserting measured geometry rather than eyeballing it: the sheet's right edge
