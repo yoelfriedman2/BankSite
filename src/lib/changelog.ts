@@ -32,14 +32,6 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: "2026-07-28",
-    title: "Banks open to a quick view first",
-    items: [
-      "Clicking a bank on the Banks page now opens a fast, read-only view — status, accounts, contact info, how-to-open details — instead of jumping straight into the full editor.",
-      "Click Edit from there (or the pencil icon on the row) whenever you actually want to change something, same as accounts already work.",
-    ],
-  },
-  {
-    date: "2026-07-28",
     title: "Search on Print Checks",
     items: [
       "The Print Checks page now has a search box, so you can jump straight to the bank or account holder you want instead of scrolling the full list.",

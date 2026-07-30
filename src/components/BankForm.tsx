@@ -27,6 +27,7 @@ import { BankLogo } from "@/components/BankLogo";
 import { RoutingInfoTip } from "@/components/RoutingInfoTip";
 import { routingNumberError } from "@/lib/routingNumber";
 import { AccountModal } from "@/components/AccountModal";
+import { AccountViewModal } from "@/components/AccountViewModal";
 import { CheckPrintModal } from "@/components/CheckPrintModal";
 import { DateInput } from "@/components/DateInput";
 import { todayLocalStr } from "@/lib/date";
@@ -179,6 +180,7 @@ export function BankForm({
   const [isPending, startTransition] = useTransition();
   const toast = useToast();
   const [acctModal, setAcctModal] = useState<{ account: Account | null } | null>(null);
+  const [viewingAccount, setViewingAccount] = useState<Account | null>(null);
   const [printCheck, setPrintCheck] = useState<Account | null>(null);
   const [busyAcctId, setBusyAcctId] = useState<string | null>(null);
 
@@ -739,7 +741,16 @@ export function BankForm({
                       return (
                         <li
                           key={a.id}
-                          className="flex items-center gap-2.5 rounded-lg border border-slate-200 px-2.5 py-2"
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setViewingAccount(a)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setViewingAccount(a);
+                            }
+                          }}
+                          className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 px-2.5 py-2 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
                         >
                           {level !== "none" ? (
                             <ActivityDot level={level} />
@@ -760,7 +771,7 @@ export function BankForm({
                               {a.balance != null ? ` · ${formatCurrency(a.balance)}` : ""}
                             </div>
                           </div>
-                          <div className="flex shrink-0 items-center gap-0.5">
+                          <div className="flex shrink-0 items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
                             <button type="button" onClick={() => setAcctModal({ account: a })}
                               className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-700" title="Edit">
                               <Pencil className="h-3.5 w-3.5" />
@@ -1332,6 +1343,21 @@ export function BankForm({
           defaultDormancyMonths={defaultDormancyMonths}
           onClose={() => setAcctModal(null)}
           onSaved={() => { setAcctModal(null); onChanged(); }}
+        />
+      )}
+
+      {viewingAccount && initial && (
+        <AccountViewModal
+          account={viewingAccount}
+          bankName={initial.name}
+          bankCert={initial.cert}
+          bankRoutingNumber={values.routing_number || initial.routing_number}
+          defaultDormancyMonths={defaultDormancyMonths}
+          onClose={() => setViewingAccount(null)}
+          onEdit={() => {
+            setAcctModal({ account: viewingAccount });
+            setViewingAccount(null);
+          }}
         />
       )}
 
