@@ -190,6 +190,25 @@ export function AccountModal({
 
   const dialogRef = useFocusTrap<HTMLFormElement>(attemptClose);
 
+  // Docked, this sheet's wrapper is `pointer-events-none` so the bank drawer
+  // stays live, leaving no backdrop to catch an outside click. Listen on the
+  // document in the capture phase instead, so the drawer's own
+  // `stopPropagation` can't swallow it. Goes through `attemptClose`, so an
+  // outside click on a dirty form still prompts before discarding.
+  useEffect(() => {
+    if (!docked) return;
+    function onOutside(e: MouseEvent) {
+      if (!window.matchMedia("(min-width: 80rem)").matches) return;
+      const node = dialogRef.current;
+      const target = e.target as Element | null;
+      if (!node || !target || node.contains(target)) return;
+      attemptClose();
+    }
+    document.addEventListener("mousedown", onOutside, true);
+    return () => document.removeEventListener("mousedown", onOutside, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docked, dirty]);
+
   useEffect(() => {
     if (initial?.id) {
       getBalanceHistory(initial.id).then(setBalanceHistory).catch(() => {});

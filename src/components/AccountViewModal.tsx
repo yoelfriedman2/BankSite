@@ -30,6 +30,7 @@ export function AccountViewModal({
   bankRoutingNumber,
   defaultDormancyMonths,
   docked = false,
+  frozen = false,
   onClose,
   onEdit,
 }: {
@@ -47,6 +48,10 @@ export function AccountViewModal({
    *  modal is used exactly as before. Standalone callers (the Accounts page,
    *  which has no drawer to dock to) leave this off. */
   docked?: boolean;
+  /** A snapshot of the sheet being replaced, held on screen underneath the
+   *  incoming one for the length of its slide. Inert in every sense: no focus
+   *  trap, no pointer events, hidden from assistive tech, no animation. */
+  frozen?: boolean;
   onClose: () => void;
   onEdit: () => void;
 }) {
@@ -58,17 +63,17 @@ export function AccountViewModal({
   // only — at any narrower width this is still the plain centered modal, so
   // `requestClose` must fall through to closing immediately there rather than
   // sitting through a transition that isn't running.
-  const [entered, setEntered] = useState(false);
+  const [entered, setEntered] = useState(frozen);
   const [leaving, setLeaving] = useState(false);
   const leaveTimer = useRef<number | null>(null);
   useEffect(() => {
-    if (!docked) return;
+    if (!docked || frozen) return;
     const id = requestAnimationFrame(() => setEntered(true));
     return () => {
       cancelAnimationFrame(id);
       if (leaveTimer.current) window.clearTimeout(leaveTimer.current);
     };
-  }, [docked]);
+  }, [docked, frozen]);
 
   function requestClose() {
     const sliding =
@@ -82,7 +87,28 @@ export function AccountViewModal({
     leaveTimer.current = window.setTimeout(onClose, SLIDE_MS);
   }
 
-  const dialogRef = useFocusTrap<HTMLDivElement>(requestClose);
+  const dialogRef = useFocusTrap<HTMLDivElement>(requestClose, !frozen);
+
+  // Docked, this sheet's own wrapper is `pointer-events-none` so the bank
+  // drawer beside it stays live — which means there is no backdrop left to
+  // catch an outside click. Listen on the document instead, in the capture
+  // phase so the drawer's own `stopPropagation` can't swallow it first.
+  useEffect(() => {
+    if (!docked || frozen) return;
+    function onOutside(e: MouseEvent) {
+      if (!window.matchMedia("(min-width: 80rem)").matches) return;
+      const node = dialogRef.current;
+      const target = e.target as Element | null;
+      if (!node || !target || node.contains(target)) return;
+      // An account row swaps sheets itself, with the slide — closing here
+      // first would turn that into a blink.
+      if (target.closest?.("[data-account-row]")) return;
+      requestClose();
+    }
+    document.addEventListener("mousedown", onOutside, true);
+    return () => document.removeEventListener("mousedown", onOutside, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docked, frozen]);
 
   const [balanceHistory, setBalanceHistory] = useState<BalancePoint[]>([]);
   useEffect(() => {
@@ -102,16 +128,17 @@ export function AccountViewModal({
             ` xl:pointer-events-none xl:z-0 xl:items-stretch xl:justify-end xl:overflow-hidden xl:bg-transparent xl:p-0 ${DRAWER_WIDTH}`
           : ""
       }`}
+      inert={frozen}
       onMouseDown={(e) => {
         e.stopPropagation();
-        requestClose();
+        if (!frozen) requestClose();
       }}
     >
       <div
         ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="account-view-modal-title"
+        role={frozen ? undefined : "dialog"}
+        aria-modal={frozen ? undefined : true}
+        aria-labelledby={frozen ? undefined : "account-view-modal-title"}
         onMouseDown={(e) => e.stopPropagation()}
         className={`my-8 w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl${
           docked
@@ -133,7 +160,10 @@ export function AccountViewModal({
              *  demote the bank name — but only at the width where docking is
              *  actually in effect. Narrower, this is still a lone centered
              *  modal and the bank name is the only thing identifying it. */}
-            <h2 id="account-view-modal-title" className="truncate text-lg font-semibold text-slate-900">
+            <h2
+              id={frozen ? undefined : "account-view-modal-title"}
+              className="truncate text-lg font-semibold text-slate-900"
+            >
               {docked ? (
                 <>
                   <span className="xl:hidden">{bankName}</span>

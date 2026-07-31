@@ -245,6 +245,45 @@ both now align to the pixel in both modes. Note this contradicts the earlier rou
 claim that the two fields measure equal with "bottoms at the same pixel"; that held for the field's
 own height across inherited/overridden states, not for its alignment with the field beside it.
 
+**Third round, from live use — and it caught a genuine data hazard the docking had introduced.**
+User feedback after testing on `main`: the sheets should close on an outside click like the old popups
+did, switching accounts should be visibly animated, and "sometimes you hit Edit and it doesn't open."
+
+- **The Edit bug was real and worse than reported.** Reproduced: with John's editor docked, the bank
+  drawer beside it is deliberately still clickable — so clicking Jane's row left **three** dialogs
+  stacked in one lane, and hitting Edit then showed a form headed "Jane · Savings" *containing
+  John's values*, because `AccountModal` was never keyed and its `useState` initializer only ever
+  ran once. Saving would have written to the wrong account. **This was a regression from docking**:
+  the editor's scrim used to make the drawer unclickable, so the path didn't exist before. Fixed by
+  keying both sheets on the account id, and by making view/editor mutually exclusive (the pencil and
+  "Add account" now clear any open view, and a row click closes the editor).
+- **Click-outside had to be a document listener in the capture phase.** The docked wrapper is
+  `pointer-events-none` so the drawer stays live, which means there's no backdrop left to catch the
+  click. A bubble-phase listener doesn't work either — `BankForm`'s `<form>` has
+  `onMouseDown={e => e.stopPropagation()}` and React's synthetic `stopPropagation` calls through to
+  the native event, so clicks inside the drawer would never arrive. Capture phase runs before any of
+  that, same fix `RoutingInfoTip`'s Escape handler already uses. Both sheets route through their
+  existing close path, so an outside click on a dirty editor still prompts — asserted live by
+  counting `Page.javascriptDialogOpening` events, not assumed.
+- **Account-to-account swaps render two sheets briefly.** `BankForm` holds the outgoing account in
+  state for 260ms and renders it *first* (so it paints underneath) with a new `frozen` prop —
+  `inert`, no focus trap, no `role="dialog"`, no duplicate `id`, no animation. The incoming sheet is
+  keyed so it remounts and replays the slide *over* it, rather than the lane blinking empty. Account
+  rows carry `data-account-row` so the click-outside handler leaves them alone and the row's own
+  swap (with the slide) wins.
+- **`acctModalRef` mirrors the editor state**, because a row click has to know whether the editor is
+  *still* open: the editor closes itself on the preceding mousedown, and React may not have
+  re-rendered by the time the click handler runs. If the discard prompt was declined the editor is
+  still there, and the row click is ignored rather than yanking it away.
+
+**Verification (round three)**: **19/19** live plus a dedicated 3/3 dirty-editor pass, and both
+earlier suites re-run clean (24/24, 27/27), `tsc --noEmit`, `npm run build`, `npm test` (100).
+Asserts outside clicks closing each sheet while the drawer survives, the swap genuinely sliding
+(662px → 214px) with the outgoing sheet on screen during it and cleaned up after, the reported Edit
+bug fixed (fields and header now agree), 1100px and 375px unchanged, and the Accounts page untouched.
+One test-only false failure: a 375px "backdrop" click at y=60 was actually *inside* the popup, whose
+top edge measures 48px.
+
 **Verification (editor)**: **27/27** live, plus the view sheet's 24/24 re-run, `tsc --noEmit`,
 `npm run build`, `npm test` (100). Asserts the editor is the same width as the view sheet it replaced,
 flush and full height, both field pairs still side by side with no wrapped label and no clipped input,

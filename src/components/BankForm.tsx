@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition, type FormEvent } from "react";
+import { useState, useEffect, useRef, useTransition, type FormEvent } from "react";
 import { X, Loader2, Plus, Copy, Pencil, Printer, Trash2, Lock, Users } from "lucide-react";
 import {
   ASSIGNABLE_STATUSES,
@@ -182,10 +182,46 @@ export function BankForm({
   // `fromView` means the read-only sheet was already sitting in the docked lane
   // and the editor is replacing it in place — so the editor skips its slide-in
   // rather than animating out and back into the same spot.
-  const [acctModal, setAcctModal] = useState<
+  const [acctModal, setAcctModalState] = useState<
     { account: Account | null; fromView?: boolean } | null
   >(null);
+  // Mirrored in a ref because clicking an account row has to know whether the
+  // editor is *still* open at click time: the editor closes itself on the
+  // preceding mousedown, and React state may not have re-rendered in between.
+  const acctModalRef = useRef<{ account: Account | null; fromView?: boolean } | null>(null);
+  function setAcctModal(v: { account: Account | null; fromView?: boolean } | null) {
+    acctModalRef.current = v;
+    setAcctModalState(v);
+  }
   const [viewingAccount, setViewingAccount] = useState<Account | null>(null);
+  // The sheet being replaced when you click straight from one account to
+  // another. It stays rendered, frozen, for the length of the slide so the
+  // incoming sheet visibly moves in *over* it instead of the lane blinking
+  // empty — which is what makes it read as "a different account opened."
+  const [outgoingView, setOutgoingView] = useState<Account | null>(null);
+  const outgoingTimer = useRef<number | null>(null);
+
+  function openAccountView(a: Account) {
+    // The editor closed itself on this click's mousedown — unless it was dirty
+    // and the discard prompt was declined, in which case it's still open and
+    // this click should be ignored rather than yanking it away.
+    if (acctModalRef.current) return;
+    setViewingAccount((current) => {
+      if (current && current.id !== a.id) {
+        setOutgoingView(current);
+        if (outgoingTimer.current) window.clearTimeout(outgoingTimer.current);
+        outgoingTimer.current = window.setTimeout(() => setOutgoingView(null), 260);
+      }
+      return a;
+    });
+  }
+
+  useEffect(
+    () => () => {
+      if (outgoingTimer.current) window.clearTimeout(outgoingTimer.current);
+    },
+    [],
+  );
   const [printCheck, setPrintCheck] = useState<Account | null>(null);
   const [busyAcctId, setBusyAcctId] = useState<string | null>(null);
 
@@ -750,11 +786,15 @@ export function BankForm({
                           key={a.id}
                           role="button"
                           tabIndex={0}
-                          onClick={() => setViewingAccount(a)}
+                          // Marked so an open account sheet's click-outside
+                          // handler leaves this click alone — the row swaps
+                          // sheets itself, with the slide.
+                          data-account-row
+                          onClick={() => openAccountView(a)}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
                               e.preventDefault();
-                              setViewingAccount(a);
+                              openAccountView(a);
                             }
                           }}
                           className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 px-2.5 py-2 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
@@ -779,7 +819,7 @@ export function BankForm({
                             </div>
                           </div>
                           <div className="flex shrink-0 items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
-                            <button type="button" onClick={() => setAcctModal({ account: a })}
+                            <button type="button" onClick={() => { setViewingAccount(null); setAcctModal({ account: a }); }}
                               className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-700" title="Edit">
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
@@ -804,7 +844,7 @@ export function BankForm({
                 {initial && (
                   <button
                     type="button"
-                    onClick={() => setAcctModal({ account: null })}
+                    onClick={() => { setViewingAccount(null); setAcctModal({ account: null }); }}
                     className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100"
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -1339,6 +1379,10 @@ export function BankForm({
 
       {acctModal && initial && (
         <AccountModal
+          // Keyed so switching which account is being edited always remounts
+          // with that account's values. Without it the form's state initializer
+          // never re-runs and you get one account's data under another's name.
+          key={acctModal.account?.id ?? "new"}
           bankId={initial.id}
           bankName={initial.name}
           // Live form value first, so a routing number typed in this same
@@ -1355,8 +1399,25 @@ export function BankForm({
         />
       )}
 
+      {/* Rendered before the live sheet so it paints underneath it. */}
+      {outgoingView && initial && (
+        <AccountViewModal
+          key={`outgoing-${outgoingView.id}`}
+          account={outgoingView}
+          bankName={initial.name}
+          bankCert={initial.cert}
+          bankRoutingNumber={values.routing_number || initial.routing_number}
+          defaultDormancyMonths={defaultDormancyMonths}
+          docked
+          frozen
+          onClose={() => {}}
+          onEdit={() => {}}
+        />
+      )}
+
       {viewingAccount && initial && (
         <AccountViewModal
+          key={viewingAccount.id}
           account={viewingAccount}
           bankName={initial.name}
           bankCert={initial.cert}
