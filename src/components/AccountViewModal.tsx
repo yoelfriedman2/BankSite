@@ -12,11 +12,23 @@ import { ActivityDot } from "@/components/badges";
 import { useFocusTrap } from "@/lib/useFocusTrap";
 import { getBalanceHistory, type BalancePoint } from "@/app/(app)/money/actions";
 
-/** The bank drawer is `max-w-3xl` (48rem) pinned to the right edge, so a docked
- *  panel parks its own right edge exactly there. 48rem + this panel's 28rem =
- *  76rem of content, which is why docking only switches on at `xl` (80rem) —
- *  below that there isn't a second lane to put it in. */
-const DRAWER_WIDTH = "xl:pr-[48rem]";
+/** Where a docked sheet parks.
+ *  - `drawer` — beside the bank drawer, which is `max-w-3xl` (48rem) pinned
+ *    right, so the sheet puts its own right edge exactly there. 48rem + this
+ *    sheet's 28rem = 76rem, which is why docking only switches on at `xl`
+ *    (80rem); below that there isn't a second lane to put it in.
+ *  - `page` — flush to the right edge of the viewport, for a page with no
+ *    drawer of its own (the Accounts list). That page is responsible for
+ *    padding its own content out of the way. */
+export type DockLane = "drawer" | "page";
+// NOTE: these must stay whole, space-separated class names in the source, and
+// the interpolation that uses them must have a space before `${` — Tailwind
+// scans source text for candidates, so `xl:p-0${...}` silently fails to
+// generate `xl:p-0` at all. That cost a debugging round once already.
+const LANE_OFFSET: Record<DockLane, string> = {
+  drawer: "xl:pr-[48rem]",
+  page: "",
+};
 /** Must match the `xl:duration-200` on the panel below. */
 const SLIDE_MS = 200;
 
@@ -29,8 +41,9 @@ export function AccountViewModal({
   bankCert,
   bankRoutingNumber,
   defaultDormancyMonths,
-  docked = false,
+  docked,
   frozen = false,
+  footerAction,
   onClose,
   onEdit,
 }: {
@@ -41,17 +54,19 @@ export function AccountViewModal({
    *  own. Undefined until migration 0046 is run. */
   bankRoutingNumber?: string | null;
   defaultDormancyMonths: number;
-  /** Opened from inside the bank drawer: on a wide screen (`xl` and up) render
-   *  as a second full-height sheet sliding out from behind the drawer instead
-   *  of a centered modal over it, so the bank stays put and readable. Narrower
-   *  than `xl` — including every phone — this has no effect and the centered
-   *  modal is used exactly as before. Standalone callers (the Accounts page,
-   *  which has no drawer to dock to) leave this off. */
-  docked?: boolean;
+  /** On a wide screen (`xl` and up), render as a full-height sheet in the
+   *  named lane instead of a centered modal over the page. Narrower than `xl`
+   *  — including every phone — this has no effect and the centered modal is
+   *  used exactly as before. Omit for a plain centered modal. */
+  docked?: DockLane;
   /** A snapshot of the sheet being replaced, held on screen underneath the
    *  incoming one for the length of its slide. Inert in every sense: no focus
    *  trap, no pointer events, hidden from assistive tech, no animation. */
   frozen?: boolean;
+  /** An extra control for the footer, left of "Edit" — the Accounts page passes
+   *  its per-row quick-log button so activity can be logged from the sheet
+   *  rather than closing it and hunting for the row again. */
+  footerAction?: React.ReactNode;
   onClose: () => void;
   onEdit: () => void;
 }) {
@@ -125,7 +140,7 @@ export function AccountViewModal({
         docked
           ? // Hand the drawer back its own clicks: at `xl` this wrapper spans the
             // whole viewport but only the sheet itself should catch a pointer.
-            ` xl:pointer-events-none xl:z-0 xl:items-stretch xl:justify-end xl:overflow-hidden xl:bg-transparent xl:p-0 ${DRAWER_WIDTH}`
+            ` xl:pointer-events-none xl:z-0 xl:items-stretch xl:justify-end xl:overflow-hidden xl:bg-transparent xl:p-0 ${LANE_OFFSET[docked]}`
           : ""
       }`}
       inert={frozen}
@@ -164,7 +179,7 @@ export function AccountViewModal({
               id={frozen ? undefined : "account-view-modal-title"}
               className="truncate text-lg font-semibold text-slate-900"
             >
-              {docked ? (
+              {docked === "drawer" ? (
                 <>
                   <span className="xl:hidden">{bankName}</span>
                   <span className="hidden xl:inline">{accountLabel}</span>
@@ -174,7 +189,7 @@ export function AccountViewModal({
               )}
             </h2>
             <p className="mt-0.5 truncate text-xs text-slate-500">
-              {docked ? (
+              {docked === "drawer" ? (
                 <>
                   <span className="xl:hidden">{accountLabel}</span>
                   <span className="hidden xl:inline">{bankName}</span>
@@ -309,24 +324,28 @@ export function AccountViewModal({
             docked ? " xl:shrink-0 xl:justify-end xl:border-t xl:border-slate-200" : ""
           }`}
         >
-          {/* Docked, this would link to the bank already open beside it. */}
+          {/* Only redundant in the drawer lane, where that bank is open beside
+              this sheet. On the Accounts page it's the whole point of the link. */}
           <Link
             href={bankCert != null ? `/banks?cert=${bankCert}` : "/banks"}
             className={`flex items-center gap-1.5 text-sm font-medium text-amber-700 hover:text-amber-800${
-              docked ? " xl:hidden" : ""
+              docked === "drawer" ? " xl:hidden" : ""
             }`}
           >
             View bank
             <ArrowUpRight className="h-4 w-4" />
           </Link>
-          <button
-            type="button"
-            onClick={onEdit}
-            className="flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
-          >
-            <Pencil className="h-4 w-4" />
-            Edit
-          </button>
+          <div className="flex items-center gap-2">
+            {footerAction}
+            <button
+              type="button"
+              onClick={onEdit}
+              className="flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
+            >
+              <Pencil className="h-4 w-4" />
+              Edit
+            </button>
+          </div>
         </div>
       </div>
     </div>

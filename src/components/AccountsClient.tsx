@@ -437,10 +437,69 @@ export function AccountsClient({
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [attentionOnly, setAttentionOnly] = useState(initialAttention);
-  const [editing, setEditing] = useState<AccountRow | null>(null);
+  const [editing, setEditingState] = useState<AccountRow | null>(null);
+  // Mirrored in a ref because a row click has to know whether the editor is
+  // *still* open at click time: it closes itself on the preceding mousedown,
+  // and React may not have re-rendered before the click handler runs.
+  const editingRef = useRef<AccountRow | null>(null);
+  function setEditing(v: AccountRow | null) {
+    editingRef.current = v;
+    setEditingState(v);
+  }
   const [viewing, setViewing] = useState<AccountRow | null>(null);
+  // Whether the editor is replacing a view sheet that was already sitting in
+  // the lane — `viewing` is cleared by then, so it can't be inferred later.
+  const [editFromView, setEditFromView] = useState(false);
+  // Held on screen, frozen, for the length of the incoming sheet's slide so
+  // clicking straight from one account to another reads as a new sheet moving
+  // in over the old one rather than the lane blinking empty.
+  const [outgoingView, setOutgoingView] = useState<AccountRow | null>(null);
+  const outgoingTimer = useRef<number | null>(null);
   const [logPendingId, setLogPendingId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  // A sheet is docked (rather than a centered popup) only at `xl` and up, and
+  // the table folds two columns while it is. That's a real layout decision, not
+  // a style — so it needs the width in JS, not just a `xl:` class. Starts false
+  // so the first client render matches the server's.
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 80rem)");
+    const sync = () => setWide(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  const sheetOpen = !!viewing || !!editing;
+  /** With a sheet docked there isn't room for all 8 columns, so the two you
+   *  never pick a row by fold away — and both are shown in full in the open
+   *  sheet anyway. See the width math in the commit that added this. */
+  const folded = wide && sheetOpen;
+
+  function openAccountView(r: AccountRow) {
+    // The editor closed itself on this click's mousedown — unless it was dirty
+    // and the discard prompt was declined, in which case it's still open and
+    // this click should be ignored rather than yanking it away.
+    if (editingRef.current) return;
+    setViewing((current) => {
+      if (current && current.id !== r.id) {
+        setOutgoingView(current);
+        if (outgoingTimer.current) window.clearTimeout(outgoingTimer.current);
+        outgoingTimer.current = window.setTimeout(() => setOutgoingView(null), 260);
+      }
+      return r;
+    });
+  }
+
+  // Keep an open sheet showing live data: after a save the page refreshes and
+  // hands down new rows, and the sheet should follow rather than sit on the
+  // values it was opened with. Also closes itself if the account disappeared.
+  useEffect(() => {
+    setViewing((cur) => (cur ? rows.find((r) => r.id === cur.id) ?? null : null));
+    return () => {
+      if (outgoingTimer.current) window.clearTimeout(outgoingTimer.current);
+    };
+  }, [rows]);
 
   // Deep link: /accounts?openId=<account id> (from the global search) opens
   // that specific account's read-only view directly, rather than just
@@ -567,7 +626,13 @@ export function AccountsClient({
   }
 
   return (
-    <div>
+    // The docked sheet is `fixed`, so the page has to move its own content out
+    // from under it — otherwise the table's right-hand columns sit beneath it.
+    <div
+      className={`transition-[padding] duration-200 ease-out motion-reduce:transition-none${
+        sheetOpen ? " xl:pr-[28rem]" : ""
+      }`}
+    >
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Accounts</h1>
@@ -786,17 +851,34 @@ export function AccountsClient({
 
       {/* Table (md and up) */}
       <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white md:block">
-        <table className="w-full min-w-[1000px] table-fixed text-sm">
-          <colgroup>
-            <col className="w-[20%]" />
-            <col className="w-[13%]" />
-            <col className="w-[11%]" />
-            <col className="w-[11%]" />
-            <col className="w-[11%]" />
-            <col className="w-[14%]" />
-            <col className="w-[16%]" />
-            <col className="w-[4%]" />
-          </colgroup>
+        {/* Folded, the table takes whatever the lane leaves it: 6 columns fit
+            comfortably, and a minimum here only buys a horizontal scrollbar
+            that appears the instant you click a row, which reads as a bug. */}
+        <table className={`w-full table-fixed text-sm ${folded ? "min-w-0" : "min-w-[1000px]"}`}>
+          {/* Two column sets: with a sheet docked there is only 730px left at
+              1440px, which is exactly the full table minus Account # and CD
+              maturity. Percentages re-normalise to 100 in the folded set. */}
+          {folded ? (
+            <colgroup>
+              <col className="w-[28%]" />
+              <col className="w-[18%]" />
+              <col className="w-[15%]" />
+              <col className="w-[15%]" />
+              <col className="w-[19%]" />
+              <col className="w-[5%]" />
+            </colgroup>
+          ) : (
+            <colgroup>
+              <col className="w-[20%]" />
+              <col className="w-[13%]" />
+              <col className="w-[11%]" />
+              <col className="w-[11%]" />
+              <col className="w-[11%]" />
+              <col className="w-[14%]" />
+              <col className="w-[16%]" />
+              <col className="w-[4%]" />
+            </colgroup>
+          )}
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs tracking-wide text-slate-500">
               <Th label="Bank" sortKey="bank" />
@@ -816,17 +898,17 @@ export function AccountsClient({
                   content: <TypeFilterOptions value={typeFilter} onChange={setTypeFilter} />,
                 }}
               />
-              <Th label="Account #" />
+              {!folded && <Th label="Account #" />}
               <Th label="Balance" sortKey="balance" align="right" />
               <Th label="Last activity" sortKey="lastActivity" />
-              <Th label="CD maturity" />
+              {!folded && <Th label="CD maturity" />}
               <th className="px-4 py-3 text-right font-medium"></th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-slate-600">
+                <td colSpan={folded ? 6 : 8} className="px-4 py-12 text-center text-slate-600">
                   {rows.length === 0
                     ? "No accounts yet. Open a bank to add one."
                     : "No accounts match your filters."}
@@ -839,8 +921,14 @@ export function AccountsClient({
                 return (
                   <tr
                     key={r.id}
-                    onClick={() => setViewing(r)}
-                    className="cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50/70"
+                    // Marked so an open sheet's click-outside handler leaves
+                    // this click alone — the row swaps sheets itself, with the
+                    // slide, rather than closing and reopening.
+                    data-account-row
+                    onClick={() => openAccountView(r)}
+                    className={`cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50/70 ${
+                      viewing?.id === r.id || editing?.id === r.id ? "bg-amber-50/60" : ""
+                    }`}
                   >
                     <td className="px-4 py-3">
                       <div className="font-medium text-slate-900">{r.bankName}</div>
@@ -859,13 +947,15 @@ export function AccountsClient({
                         <span className="text-slate-300">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 tabular-nums text-slate-600">
-                      {r.account_number ? (
-                        maskAccountNumber(r.account_number)
-                      ) : (
-                        <span className="text-slate-300">—</span>
-                      )}
-                    </td>
+                    {!folded && (
+                      <td className="px-4 py-3 tabular-nums text-slate-600">
+                        {r.account_number ? (
+                          maskAccountNumber(r.account_number)
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-right tabular-nums text-slate-600">
                       {formatCurrency(r.balance)}
                     </td>
@@ -892,13 +982,15 @@ export function AccountsClient({
                         return <span className="text-slate-300">—</span>;
                       })()}
                     </td>
-                    <td className="px-4 py-3">
-                      {r.account_type === "cd" && r.cd_maturity_date ? (
-                        <CdMaturityCell account={r} />
-                      ) : (
-                        <span className="text-slate-300">—</span>
-                      )}
-                    </td>
+                    {!folded && (
+                      <td className="px-4 py-3">
+                        {r.account_type === "cd" && r.cd_maturity_date ? (
+                          <CdMaturityCell account={r} />
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+                    )}
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         {r.account_type !== "cd" && (
@@ -910,6 +1002,8 @@ export function AccountsClient({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
+                            setViewing(null);
+                            setEditFromView(false);
                             setEditing(r);
                           }}
                           className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-700"
@@ -927,15 +1021,44 @@ export function AccountsClient({
         </table>
       </div>
 
+      {/* Rendered before the live sheet so it paints underneath it. */}
+      {outgoingView && (
+        <AccountViewModal
+          key={`outgoing-${outgoingView.id}`}
+          account={outgoingView}
+          bankName={outgoingView.bankName}
+          bankCert={outgoingView.bankCert}
+          bankRoutingNumber={outgoingView.bankRoutingNumber}
+          defaultDormancyMonths={defaultDormancyMonths}
+          docked="page"
+          frozen
+          onClose={() => {}}
+          onEdit={() => {}}
+        />
+      )}
       {viewing && (
         <AccountViewModal
+          // Keyed so switching accounts remounts and replays the slide.
+          key={viewing.id}
           account={viewing}
           bankName={viewing.bankName}
           bankCert={viewing.bankCert}
           bankRoutingNumber={viewing.bankRoutingNumber}
           defaultDormancyMonths={defaultDormancyMonths}
+          docked="page"
+          // The reason you opened the sheet is often the activity dot, so let
+          // it be acted on here instead of closing and hunting for the row.
+          footerAction={
+            viewing.account_type !== "cd" ? (
+              <QuickLogButton
+                pending={logPendingId === viewing.id}
+                onLog={(type) => handleLogToday(viewing, type)}
+              />
+            ) : null
+          }
           onClose={() => setViewing(null)}
           onEdit={() => {
+            setEditFromView(true);
             setEditing(viewing);
             setViewing(null);
           }}
@@ -943,6 +1066,10 @@ export function AccountsClient({
       )}
       {editing && (
         <AccountModal
+          // Keyed so editing a different account always remounts with that
+          // account's values — without it the form's state initializer never
+          // re-runs and you get one account's data under another's name.
+          key={editing.id}
           bankId={editing.bank_id}
           bankName={editing.bankName}
           bankRoutingNumber={editing.bankRoutingNumber}
@@ -950,8 +1077,15 @@ export function AccountsClient({
           knownHolders={knownHolders}
           defaultHolder={editing.holder ?? ""}
           defaultDormancyMonths={defaultDormancyMonths}
+          docked="page"
+          // Opened from the view sheet, which already occupies this exact lane.
+          dockedInstant={editFromView}
           onClose={() => setEditing(null)}
           onSaved={() => {
+            // Drop back to the read-only sheet for the same account rather than
+            // all the way out to the list — the effect above refreshes it to
+            // the just-saved values once the router hands down new rows.
+            setViewing(editing);
             setEditing(null);
             router.refresh();
           }}

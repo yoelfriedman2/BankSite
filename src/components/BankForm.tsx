@@ -1392,7 +1392,7 @@ export function BankForm({
           knownHolders={knownHolders}
           defaultHolder={defaultHolder}
           defaultDormancyMonths={defaultDormancyMonths}
-          docked
+          docked="drawer"
           dockedInstant={acctModal.fromView}
           onClose={() => setAcctModal(null)}
           onSaved={() => { setAcctModal(null); onChanged(); }}
@@ -1408,7 +1408,7 @@ export function BankForm({
           bankCert={initial.cert}
           bankRoutingNumber={values.routing_number || initial.routing_number}
           defaultDormancyMonths={defaultDormancyMonths}
-          docked
+          docked="drawer"
           frozen
           onClose={() => {}}
           onEdit={() => {}}
@@ -1423,7 +1423,7 @@ export function BankForm({
           bankCert={initial.cert}
           bankRoutingNumber={values.routing_number || initial.routing_number}
           defaultDormancyMonths={defaultDormancyMonths}
-          docked
+          docked="drawer"
           onClose={() => setViewingAccount(null)}
           onEdit={() => {
             setAcctModal({ account: viewingAccount, fromView: true });
