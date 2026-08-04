@@ -328,7 +328,7 @@ details" on Print Checks until someone looked it up again.
    one of its five (211170282) on its website. So the file is only useful as a *confirmer*, never a
    source. Manual entry stays the input, same as the NIC files.
 
-**What shipped** (migration **0046_bank_routing_number.sql** — *pending, see TODO.md*):
+**What shipped** (migration **0046_bank_routing_number.sql** — *confirmed run 2026-08-04*):
 
 - **`banks.routing_number`, joined to `SHARED_FIELDS`** (`banks/actions.ts`), so it propagates to
   every user's copy of a cert exactly like `city`/`website`. Privacy reasoning, since it's a fair
