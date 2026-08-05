@@ -931,13 +931,15 @@ export function AccountsClient({
                     }`}
                   >
                     <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900">{r.bankName}</div>
+                      <div className="truncate font-medium text-slate-900" title={r.bankName}>
+                        {r.bankName}
+                      </div>
                       {r.bankState && (
                         <div className="text-xs text-slate-600">{r.bankState}</div>
                       )}
                       <AttentionBubble reasons={reasons} />
                     </td>
-                    <td className="px-4 py-3 text-slate-700">
+                    <td className="truncate px-4 py-3 text-slate-700" title={r.holder || undefined}>
                       {r.holder || <span className="text-slate-300">—</span>}
                     </td>
                     <td className="px-4 py-3 text-slate-600">
