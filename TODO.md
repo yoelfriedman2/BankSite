@@ -2,7 +2,43 @@
 
 Running list of things to review and decide. (Feature ideas live in IDEAS.md — this is for open work items.)
 
+## Wanted: a real cross-user RLS isolation test (not yet scoped/started)
+
+User explicitly asked for this (2026-08-04) after a scare over an unrelated leaked-comment bug: "how
+do we prevent [private data ever leaking between users]." The honest answer is that isolation is
+enforced by Postgres RLS, not by anything in the UI — but **nothing in the test suite actually
+exercises that**. The 100 existing unit tests are all pure-logic (dates, interest math, dormancy,
+routing checksums); RLS itself has zero automated coverage, a gap the external audit already flagged
+as SEC-22 and deliberately left open.
+
+**Rough shape, not yet built**: a CI test that creates two real Supabase users (service-role client),
+has each create a bank + account under their own RLS-scoped client, then asserts each user's queries
+return only their own rows and are rejected/empty against the other's. Estimated ~150–250 lines, but
+the real cost is the harness, not the assertions — per-run disposable test users with reliable
+cleanup, a second set of Supabase secrets wired into `.github/workflows/ci.yml`, and making sure a
+flaky run never touches real data. **Can't be built or run from this sandbox** — `DEMO_MODE` bypasses
+auth/RLS entirely (that's the point, for UI work), so this needs a real Postgres project and has to
+run in CI, not here. Treat as its own scoped session when picked up, not folded into an unrelated
+change. Not urgent — nothing today suggests RLS is actually broken; this is insurance against a
+*future* mistake (the kind SEC-01 almost was), not a fix for a live problem.
+
 ## One-time setup pending
+
+- **Run migration `0047_function_search_path_hardening.sql`** — closes 12 of the "Function Search
+  Path Mutable" warnings from the 2026-08-04 Supabase security-lint scan (`set_updated_at`,
+  `swap_queue_positions`, `charge_monthly_fee`(`_with_history`), `credit_monthly_interest`
+  (`_with_history`), `sweep_accounts`, `return_sweep`, `refresh_bank_branches`,
+  `update_account_balance`, `claim_check_number`, `append_activity_log`) by pinning
+  `SET search_path = ''` on each — pure hardening, no behavior change (all 12 are `SECURITY
+  INVOKER` and every table reference inside them is already schema-qualified). The rest of that
+  scan's findings need no action: `handle_new_user`'s "callable by anon" flag is a known false
+  positive (it's a trigger function — Postgres rejects calling it outside a trigger context);
+  `is_approved`'s is intentional (documented in its own migration 0036 comment — safe for anon,
+  returns `false`); `rls_auto_enable` isn't a function this codebase created (not in any
+  migration — looks Supabase-platform-internal, left alone); `pg_trgm` living in the `public`
+  schema is cosmetic and moving it risks the migration-0045 trigram indexes for no real benefit;
+  and "leaked password protection disabled" is moot since login is Google/Microsoft OAuth only —
+  no password auth provider is enabled, so there's no password to check.
 
 - ~~Run migration `0046_bank_routing_number.sql`~~ — **confirmed run 2026-08-04** (verified against
   `information_schema.columns`, not just assumed). Adds `banks.routing_number` (shared, nullable), so

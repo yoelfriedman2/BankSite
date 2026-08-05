@@ -22,15 +22,22 @@ import { useVault } from "@/components/VaultKeyProvider";
 import { VaultUnlockPrompt } from "@/components/VaultUnlockPrompt";
 import { isEncryptedVaultValue, decryptVaultField, encryptVaultField } from "@/lib/vaultCrypto";
 import { useFocusTrap } from "@/lib/useFocusTrap";
+import type { DockLane } from "@/components/AccountViewModal";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
 const labelClass = "mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500";
 
-/** The bank drawer is `max-w-3xl` (48rem) pinned right, so a docked sheet parks
- *  its right edge there — matching `AccountViewModal`, which docks into this
- *  same 28rem lane. Keep these two in step. */
-const DRAWER_WIDTH = "xl:pr-[48rem]";
+/** Lane offsets, matching `AccountViewModal` — the view sheet and this editor
+ *  dock into the same 28rem lane, so keep these two in step. */
+// NOTE: these must stay whole, space-separated class names in the source, and
+// the interpolation that uses them must have a space before `${` — Tailwind
+// scans source text for candidates, so `xl:p-0${...}` silently fails to
+// generate `xl:p-0` at all. That cost a debugging round once already.
+const LANE_OFFSET: Record<DockLane, string> = {
+  drawer: "xl:pr-[48rem]",
+  page: "",
+};
 /** Must match the `xl:duration-200` on the sheet. */
 const SLIDE_MS = 200;
 
@@ -79,7 +86,7 @@ export function AccountModal({
   knownHolders,
   defaultHolder,
   defaultDormancyMonths,
-  docked = false,
+  docked,
   dockedInstant = false,
   onClose,
   onSaved,
@@ -93,11 +100,11 @@ export function AccountModal({
   knownHolders: string[];
   defaultHolder: string;
   defaultDormancyMonths: number;
-  /** Opened from inside the bank drawer: at `xl` and up, render as a sheet in
-   *  the lane beside the drawer instead of a centered modal over it — the same
-   *  lane and width `AccountViewModal` docks into, so switching between viewing
-   *  and editing moves nothing. Narrower than `xl` this has no effect. */
-  docked?: boolean;
+  /** At `xl` and up, render as a sheet in the named lane instead of a centered
+   *  modal — the same lane and width `AccountViewModal` docks into, so
+   *  switching between viewing and editing moves nothing. Narrower than `xl`
+   *  this has no effect. Omit for a plain centered modal. */
+  docked?: DockLane;
   /** Skip the slide-in: the view sheet was already sitting in this exact lane
    *  and is being replaced in place, so animating would be a pointless round
    *  trip on every Edit click. */
@@ -189,9 +196,14 @@ export function AccountModal({
     };
   }, [docked, dockedInstant]);
 
-  function attemptClose() {
+  /** `immediate` skips the exit slide and closes in the same tick. Needed when
+   *  the click that closes this is also about to open something else (an
+   *  account row): the parent reads "is the editor still open?" on that click,
+   *  and a 200ms animated close would still look open and swallow it. */
+  function attemptClose({ immediate = false }: { immediate?: boolean } = {}) {
     if (!confirmDiscard(dirty)) return;
     const sliding =
+      !immediate &&
       docked && typeof window !== "undefined" && window.matchMedia("(min-width: 80rem)").matches;
     if (!sliding) {
       onClose();
@@ -202,7 +214,7 @@ export function AccountModal({
     leaveTimer.current = window.setTimeout(onClose, SLIDE_MS);
   }
 
-  const dialogRef = useFocusTrap<HTMLFormElement>(attemptClose);
+  const dialogRef = useFocusTrap<HTMLFormElement>(() => attemptClose());
 
   // Docked, this sheet's wrapper is `pointer-events-none` so the bank drawer
   // stays live, leaving no backdrop to catch an outside click. Listen on the
@@ -216,7 +228,7 @@ export function AccountModal({
       const node = dialogRef.current;
       const target = e.target as Element | null;
       if (!node || !target || node.contains(target)) return;
-      attemptClose();
+      attemptClose({ immediate: !!target.closest?.("[data-account-row]") });
     }
     document.addEventListener("mousedown", onOutside, true);
     return () => document.removeEventListener("mousedown", onOutside, true);
@@ -377,7 +389,7 @@ export function AccountModal({
         docked
           ? // Only the sheet itself should catch a pointer — the drawer sitting
             // beside it stays clickable through this wrapper.
-            ` xl:pointer-events-none xl:z-0 xl:items-stretch xl:justify-end xl:overflow-hidden xl:bg-transparent xl:p-0 ${DRAWER_WIDTH}`
+            ` xl:pointer-events-none xl:z-0 xl:items-stretch xl:justify-end xl:overflow-hidden xl:bg-transparent xl:p-0 ${LANE_OFFSET[docked]}`
           : ""
       }`}
       onMouseDown={(e) => { e.stopPropagation(); attemptClose(); }}
@@ -408,7 +420,7 @@ export function AccountModal({
              *  docking is in effect; narrower it's a lone centered modal and the
              *  bank name is the only thing identifying it. */}
             <p className="truncate text-xs font-medium text-amber-700">
-              {docked && initial ? (
+              {docked === "drawer" && initial ? (
                 <>
                   <span className="xl:hidden">{bankName}</span>
                   <span className="hidden xl:inline">{accountLabel}</span>
@@ -423,7 +435,7 @@ export function AccountModal({
           </div>
           <button
             type="button"
-            onClick={attemptClose}
+            onClick={() => attemptClose()}
             aria-label="Close"
             className="shrink-0 rounded-lg p-1 text-slate-600 hover:bg-black/5 hover:text-slate-600"
           >
@@ -898,7 +910,7 @@ export function AccountModal({
         <div className="flex justify-end gap-3 px-5 py-4">
           <button
             type="button"
-            onClick={attemptClose}
+            onClick={() => attemptClose()}
             className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
           >
             Cancel

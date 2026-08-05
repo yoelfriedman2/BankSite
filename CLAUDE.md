@@ -366,6 +366,83 @@ failed on that before the count was filtered by `:not([inert])`, and none of the
 Skipped changelog/Guide: this is a layout change to an existing flow, not a new capability, matching
 how both prior drawer/popup redesigns were handled.
 
+**2026-08-04 (bug fix: long real bank names broke the folded Accounts table)** — Live user report with a
+screenshot: the docked account sheet from the round above made the Accounts table "look wrong,"
+everything "pushed to the side." Root cause wasn't the docking geometry — it was that the bank-name
+and holder table cells had **no truncation at all**, so a real long name ("Ascend Bank (formerly The
+Guilford Savings Bank)") wrapped across 3-4 lines; in the narrower folded layout that shows while the
+sheet is open, that ballooned every row to ~110px, which is what actually read as "crushed." Demo
+data's short bank names ("Union County Savings Bank") never exposed this — a recurring lesson in this
+file: verify against realistic real-world *content*, not just the seed default. Fixed with a plain
+single-line `truncate` + `title` tooltip on both cells, matching the pattern `BanksClient.tsx` already
+uses for its own bank-name column — applies to the unfolded table too, since it's the same row markup
+either way. **Verified against the real string from the report**, not a synthetic one: temporarily
+overrode a demo bank's name/holder to the exact reported values, confirmed 1 line / 61px row height
+instead of 4 lines / ~110px in both the folded and unfolded states, then reverted the override (confirmed
+via `git diff` showing nothing) before committing. All five earlier docking suites re-run clean
+(97 assertions), `tsc --noEmit`, `npm run build`, `npm test` (100). Bug fix, no changelog/Guide entry.
+
+**2026-07-31 (the Accounts page docks too — one lane concept, two pages)** — Asked whether I'd rethink
+the Accounts page now that the drawer docks. Answer was yes, one structural change: it was the last
+screen still opening an account as a centered popup, and it's the one page you work *down a list* on,
+so the popup hid the list on every open. User agreed. Shipped with three smaller fixes it needed.
+
+- **`docked` became a lane, not a boolean.** `DockLane = "drawer" | "page"` (exported from
+  `AccountViewModal`, used by both sheets). `drawer` parks the sheet's right edge at the bank
+  drawer's left edge (`xl:pr-[48rem]`); `page` puts it flush to the viewport's right edge. Everything
+  else — width, slide, click-outside, focus trap, compact editor fields — is shared.
+- **Two behaviors turned out to be drawer-specific** and are now gated on `docked === "drawer"`:
+  hiding the footer's "View bank ↗" (redundant only when that bank is open beside you — on the
+  Accounts page it's the point of the link), and demoting the bank name in the header (same reason).
+- **The page pads itself out from under the sheet** (`xl:pr-[28rem]` on `AccountsClient`'s root)
+  rather than the sheet overlaying the table, and **the table folds two columns while a sheet is
+  open** — Account # and CD maturity, the two you never pick a row by, both shown in full in the open
+  sheet. That needs the viewport width in JS (a `matchMedia` + `folded` flag), not just an `xl:`
+  class, because a `<colgroup>` can't be responsive: hidden `<col>` elements don't collapse. Two
+  colgroups are rendered instead, with percentages re-normalised to 100.
+- **Keying both sheets by account id was mandatory here, not optional** — neither was keyed on this
+  page. Harmless while the popup's backdrop made the table unclickable; docking removes that backdrop
+  and makes it reachable, which is exactly the wrong-account bug from the drawer round.
+- **Two real gaps closed**: the read-only sheet now carries the row's quick-log control (via a new
+  `footerAction` slot) — it showed the activity dot that made you open it and then offered no way to
+  act on it; and saving drops back to the read-only sheet for the same account, refreshed from the
+  new rows by an effect keyed on `rows`, instead of closing out to the list.
+- **A genuine bug the earlier drawer round missed**, found because a test crashed: clicking an
+  account row while the editor was open closed the editor but did *not* open that row's sheet. The
+  editor's 200ms exit animation meant the parent's "is the editor still open?" ref was still set when
+  the click handler ran, so the open was suppressed. `attemptClose({ immediate })` now closes without
+  the slide when the click is on a `[data-account-row]`. Fixes the drawer too.
+
+**Two traps worth not repeating, both cost a debugging round:**
+1. **`xl:p-0${LANE_OFFSET[docked]}` silently produced no `xl:p-0` at all.** Tailwind scans source
+   *text* for class candidates, so a `${` butted directly against a class name breaks extraction —
+   the sheet rendered with the centered modal's `p-4` still applied. **Always leave a space before an
+   interpolation inside a className string.** Symptom is one utility mysteriously not applying while
+   its neighbours do.
+2. **`getBoundingClientRect()` does not reflect Tailwind v4's `translate`** (v4 uses the `translate`
+   property, not `transform`), so a slide test that samples `left` reads a constant and looks like
+   "no animation." Assert on `getComputedStyle(el).translate` instead — it goes `100%` → `0px` across
+   ~13 sampled steps.
+
+**Verification**: **23/23** on a new Accounts suite, plus all four earlier suites re-run
+(24/24, 28/28, 19/19, 3/3 — 97 live assertions total), `tsc --noEmit`, `npm run build`, `npm test`
+(100). Asserts the sheet flush at the page's right edge, the table no longer under it, columns
+folding and returning, no horizontal scrollbar in either state, the swap sliding with the outgoing
+sheet held, quick-log present, "View bank" kept, the editor at the same 448px in the same lane,
+Edit showing the account actually clicked, 1100px/375px unchanged, and the bank drawer's own lane
+untouched. Three assertions in the older suites asserted the *old* Accounts-page behavior and were
+updated to the new intent rather than "fixed."
+
+**A self-inflicted verification trap**: running `npm run build` while the dev server was live
+overwrites `.next` and leaves the running server serving a 404 for its own CSS — the page renders
+completely unstyled and looks like a catastrophic regression. It isn't. Stop the dev server before
+building. Separately, `pkill -f "next dev"` matches *its own* shell command line and kills the
+calling shell (silent exit 1, nothing after it runs) — use `pkill -f "[n]ext dev"`.
+
+**And one real bug caught only by looking at a screenshot**: a `//` comment inserted at JSX children
+position rendered as visible body text above the table. `tsc`, the build, and every DOM assertion
+passed with it there. Use `{/* */}` in JSX, and look at the page, not just the assertions.
+
 **2026-07-30 (routing numbers moved to the bank as a shared field)** — A family member asked why the
 routing number isn't shared, since it's the same for everyone. It was stored only on `accounts`, so
 each person retyped the same nine digits per account, and a new account always showed "Missing
