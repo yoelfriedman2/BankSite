@@ -305,6 +305,48 @@ failed on that before the count was filtered by `:not([inert])`, and none of the
 Skipped changelog/Guide: this is a layout change to an existing flow, not a new capability, matching
 how both prior drawer/popup redesigns were handled.
 
+**2026-08-04 (the docked Accounts sheet was squeezing the table for no reason on wide monitors)** —
+Follow-up the same day: the truncation fix above made rows tidy, but the user pushed back with a real
+screenshot on a genuinely wide monitor — the sheet still read as a slab bolted to the edge with no
+relation to the table, squeezing it hard even though the screen clearly had room to spare. Presented
+the root cause and two fix options as an interactive mockup before touching code, per explicit request.
+
+**Root cause, confirmed by tracing the actual layout, not guessed**: every page's content sits in
+`(app)/layout.tsx`'s `<main class="mx-auto max-w-6xl ...">` — capped at 1152px and centered next to
+the 240px sidebar. On a laptop that column fills the screen; on a wide monitor it doesn't, and there's
+already unused margin on both sides *before* any sheet opens. The docked sheet is `position: fixed`,
+which ignores that centered container entirely and parks against the **true browser edge** — so widening
+the monitor never changed the outcome: **the table always got squeezed to the same 640px** whether the
+screen was 1440px or 2560px, and past 1152px+sidebar the "extra" space didn't even reach the sheet — it
+just sat there as blank page between the two (616px of it, at 2560px). Verified with a standalone
+Node calculation before wiring it into anything visual, then double-checked the visual mockup's own
+numbers against that calculation and found — and fixed — a bug in the mockup itself before showing it
+(it was measuring the outer capped container's edge instead of the table's real visible edge, which
+made the "dead gap" overlay render on top of table content instead of after it).
+
+**What shipped**: `<main>` now takes `xl:has-[[data-accounts-sheet-open]]:max-w-none` — a Tailwind
+`has-*` variant, not a JS media query — so the shared content column widens *only* while an Accounts
+sheet is actually docked inside it, at exactly the breakpoint the sheet itself docks at. `AccountsClient`
+sets that plain `data-accounts-sheet-open` attribute on its own root when `sheetOpen` is true; no prop
+threading through the layout tree, no coupling beyond a DOM attribute `layout.tsx` already knows how to
+look for. `main`'s cap reverts the instant the attribute is gone — confirmed live, not assumed. Every
+other page keeps its unmodified 1152px cap, since the attribute only ever exists on the Accounts page.
+
+**Verified live at 2560px**: table went from a fixed 640px to 1806px (mockup had predicted 1808px —
+close enough to confirm the mockup's math was sound), sheet still flush to the true viewport edge, and
+the remaining space between table and sheet is 33px — the page's ordinary edge margin, not a new dead
+zone. At 1440px the win is real but modest (640px → 686px), matching the honest framing given in the
+mockup rather than overselling a dramatic change that only shows up on genuinely wide screens. Below the
+`xl` breakpoint `main` never widens (confirmed the cap stays at 1152px at 1100px), since sheets fall
+back to centered popups there and have no reason to touch the layout. The Banks page, which never sets
+the attribute, stays capped at 1152px even at 2560px — confirmed directly, not inferred.
+
+**Verification**: all six live suites re-run clean (**112 assertions total**: the five from the docking
+work plus a new 15-assertion pass specifically for this fix, including the `has-*` variant actually
+firing — a Tailwind feature with zero prior usage anywhere in this codebase, so it was confirmed working
+in a real browser rather than assumed from the version number), `tsc --noEmit`, `npm run build`,
+`npm test` (100). Bug fix to a very recently shipped feature, no changelog/Guide entry.
+
 **2026-08-04 (bug fix: long real bank names broke the folded Accounts table)** — Live user report with a
 screenshot: the docked account sheet from the round above made the Accounts table "look wrong,"
 everything "pushed to the side." Root cause wasn't the docking geometry — it was that the bank-name

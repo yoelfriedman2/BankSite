@@ -628,7 +628,14 @@ export function AccountsClient({
   return (
     // The docked sheet is `fixed`, so the page has to move its own content out
     // from under it — otherwise the table's right-hand columns sit beneath it.
+    // `data-accounts-sheet-open` is read by `(app)/layout.tsx`'s `<main>` via a
+    // `has-*` selector so the shared max-w-6xl content column can widen while
+    // a sheet is docked — without it, the sheet's own fixed-position 448px is
+    // carved out of that already-capped 1152px column instead of genuinely
+    // idle space next to it, which is what made the table look crushed on any
+    // screen wider than the cap (see CLAUDE.md for the real numbers).
     <div
+      data-accounts-sheet-open={sheetOpen ? true : undefined}
       className={`transition-[padding] duration-200 ease-out motion-reduce:transition-none${
         sheetOpen ? " xl:pr-[28rem]" : ""
       }`}

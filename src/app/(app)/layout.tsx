@@ -105,7 +105,15 @@ export default async function AppLayout({
         <SideNav displayName={displayName} isOwner={isOwner} userId={userId} />
         <div className="flex min-w-0 flex-1 flex-col">
           <TopNav displayName={displayName} isOwner={isOwner} userId={userId} />
-          <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+          {/* The Accounts page docks an account sheet beside its own table (see
+              AccountsClient) rather than overlaying it — that only works if this
+              max-width can grow to give the sheet room the table doesn't have to
+              give up. `has-[[data-accounts-sheet-open]]` lets the Accounts page
+              signal that up through a plain DOM attribute, no prop threading
+              through every intermediate layout. Scoped to `xl:`, matching the
+              breakpoint the sheet itself docks at — below that it's back to a
+              centered popup and this container never needs to widen. */}
+          <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8 xl:has-[[data-accounts-sheet-open]]:max-w-none">
             {children}
           </main>
         </div>
