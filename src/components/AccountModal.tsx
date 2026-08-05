@@ -9,6 +9,7 @@ import {
   upsertAccount,
   type AccountFormValues,
 } from "@/app/(app)/accounts/actions";
+import { shareRoutingNumberToBank } from "@/app/(app)/banks/actions";
 import { getBalanceHistory, type BalancePoint } from "@/app/(app)/money/actions";
 import { AccountDocuments } from "@/components/AccountDocuments";
 import { useUnsavedChanges, confirmDiscard } from "@/components/useUnsavedChanges";
@@ -127,10 +128,23 @@ export function AccountModal({
   // clearing the input is the same gesture as "reset". Both hints only appear
   // when the bank actually has a number to fall back to — with no bank value
   // this is just the plain field it has always been.
-  const hasBankRouting = !!(bankRoutingNumber ?? "").trim();
+  //
+  // effectiveBankRouting starts from the prop but is local state, not the prop
+  // itself: a successful "share ↑" changes what the bank has *this session*,
+  // and the prop won't reflect that until the drawer/page re-fetches — this
+  // is what lets the field flip to "from bank" (green) immediately, which
+  // doubles as the share's own success confirmation.
+  const [effectiveBankRouting, setEffectiveBankRouting] = useState(bankRoutingNumber ?? null);
+  const hasBankRouting = !!(effectiveBankRouting ?? "").trim();
   const inheritingRouting = hasBankRouting && values.routing_number.trim() === "";
   const overridingRouting = hasBankRouting && values.routing_number.trim() !== "";
   const routingError = routingNumberError(values.routing_number);
+  // Only offered when the bank has nothing on file: if it already has a
+  // (possibly different) number, sharing would silently overwrite whatever
+  // every other family member is currently using — that case goes through
+  // "reset" then retyping instead, a deliberate choice not this button.
+  const canShareRouting = !hasBankRouting && values.routing_number.trim() !== "" && !routingError;
+  const [isSharingRouting, startSharingRouting] = useTransition();
 
   const vault = useVault();
   const vaultActive = vault.enabled;
@@ -291,6 +305,26 @@ export function AccountModal({
       ...v,
       activity_log: v.activity_log.filter((_, i) => i !== index),
     }));
+  }
+
+  function handleShareRouting() {
+    const num = values.routing_number.trim();
+    if (!num || routingNumberError(num)) return;
+    const ok = window.confirm(
+      `Add ${num} as ${bankName}'s routing number?\n\n` +
+      `It'll show on the bank's page for everyone tracking it.`,
+    );
+    if (!ok) return;
+    setError(null);
+    startSharingRouting(async () => {
+      const result = await shareRoutingNumberToBank(bankId, num);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setEffectiveBankRouting(num);
+      set("routing_number", "");
+    });
   }
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -469,6 +503,17 @@ export function AccountModal({
                         reset
                       </button>
                     )}
+                    {canShareRouting && (
+                      <button
+                        type="button"
+                        onClick={handleShareRouting}
+                        disabled={isSharingRouting}
+                        title="Save this as the bank's routing number, visible to everyone tracking it"
+                        className={`whitespace-nowrap font-medium text-amber-700 underline underline-offset-2 hover:text-amber-800 disabled:opacity-60 ${hintCls}`}
+                      >
+                        {isSharingRouting ? "sharing…" : "share ↑"}
+                      </button>
+                    )}
                   </div>
                   <input
                     id="routing_number"
@@ -480,7 +525,7 @@ export function AccountModal({
                           ? `${inputCls} border-emerald-200 bg-emerald-50/30`
                           : inputCls
                     }
-                    value={values.routing_number || (bankRoutingNumber ?? "")}
+                    value={values.routing_number || (effectiveBankRouting ?? "")}
                     onChange={(e) => set("routing_number", e.target.value)}
                     aria-invalid={!!routingError}
                     aria-describedby={routingError ? "acct_routing_error" : undefined}

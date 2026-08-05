@@ -140,6 +140,7 @@ const TOPICS: Topic[] = [
       "Whenever you set or change the balance, it's saved to the account's history with the date.",
       "Set a monthly fee's amount and the day of the month it's charged, and it's deducted from the balance on its own from then on — no need to log it by hand. Leave either blank to turn it off.",
       "Click a bank's name on the Accounts list for a clean, read-only view of that account — good for a quick look without any risk of changing something by accident. From there, \"View bank\" jumps to that bank's page, and \"Edit\" opens the full editable form. The pencil icon still opens the editor directly.",
+      "If you type a routing number and the bank doesn't have one on file yet, a \"share ↑\" link appears next to the field — click it to save that number on the bank so everyone tracking it can use it too, instead of each account needing its own copy.",
     ],
   },
   {

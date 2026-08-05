@@ -174,6 +174,67 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-08-05 (push an account's routing number up to the bank, one click)** — Direct follow-up to the
+0046 routing-number work: once that shipped, the natural next question was "what if the bank has
+nothing on file and someone already knows the number?" — until now, entering it made it apply to that
+one account only; getting it onto the bank (so everyone inherits it) meant a separate edit in the bank
+drawer. Closed that gap with a small "share ↑" link.
+
+- **Where it lives**: the account editor's routing-number field already has a label-line slot that
+  shows `from bank` (green) or `reset` (amber) depending on state — those two cover 3 of 4 possible
+  (bank has one / account has one) combinations, and the 4th (bank has none, account has one) rendered
+  nothing there. `share ↑` fills exactly that gap, so it costs zero new height/rows and can never
+  collide with the other two hints — the three states are mutually exclusive by construction.
+  Deliberately **not** offered when the bank already has a *different* number — that would silently
+  overwrite what every other family member is currently using; that case still goes through "reset"
+  then retyping, same as before.
+- **New `shareRoutingNumberToBank(bankId, routingNumber)`** in `banks/actions.ts`, placed right after
+  `upsertBank` — re-validates the checksum server-side (same `routingNumberError` used everywhere
+  else, since this is a directly-callable server action), writes the caller's own bank row, then
+  propagates to every other user's copy of the same cert via the admin client — same shape and same
+  DATA-01 "include trashed copies too" reasoning as `upsertBank`'s own shared-field propagation, and
+  stamps `shared_fields_updated_at`/`shared_updated_by`/`shared_updated_summary` so the amber
+  "updated" dot fires for everyone else exactly like any other shared-field edit. Logged via
+  `logAudit` the same way. Deliberately does **not** touch the account row — the bank write is
+  immediate and unconditional, while clearing the account's own (now-redundant) copy is just a normal
+  field edit (`set("routing_number", "")`) that needs the usual Save to persist, same as typing
+  anything else in the form. That keeps the two writes independent: cancelling the account edit after
+  sharing leaves the bank's number in place without silently discarding an unsaved account edit too.
+- **`AccountModal.tsx`** gained local `effectiveBankRouting` state (seeded from the `bankRoutingNumber`
+  prop, updated on a successful share) so the field flips to the green "from bank" state immediately —
+  that flip **is** the success confirmation, no toast needed, and it's why a local override of the
+  prop is necessary: the prop itself won't reflect the change until the page/drawer re-fetches.
+- **Confirm text went through two rounds of wording**, both from direct chat feedback before writing
+  any copy into the app: v1 named the mechanism ("this account will switch to using the shared one
+  instead of its own copy") — cut entirely on request as irrelevant; what actually matters to someone
+  clicking it is *where the number becomes visible*, not how the field resolves afterward. Final:
+  "Add `<number>` as `<bank>`'s routing number? It'll show on the bank's page for everyone tracking
+  it." A plain `window.confirm()`, matching the confirm pattern already used for deletes elsewhere in
+  this app — adds no layout of its own, which sidesteps "how do you fit a confirmation without messing
+  up the other fields" entirely rather than solving it with cramped inline UI.
+- Seeded demo bank 1 (no bank-level routing number, per the 0046 work) with a routing number on its
+  one account (`011401928`, real/checksum-valid) so this is click-testable in DEMO_MODE — previously
+  neither the bank nor the account there had one, so the exact state this button is offered in didn't
+  exist in the seed data.
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (100 passed) all clean. Live DEMO_MODE
+CDP pass (`scratchpad/cdp.mjs`, reused): confirmed the button appears only in the "bank has none,
+account has one" state and disappears once shared; confirmed the field flips to the green "from bank"
+state with the account's own value cleared; confirmed Save + a full page reload shows the number as
+inherited (bank-level, server-persisted) rather than a client-only illusion; confirmed zero console
+errors; confirmed no 375px overflow on the standalone Accounts-page editor. Separately verified the
+**docked** lane (opened from inside the bank drawer at 1440px): the button renders as `share ↑` with
+no wrap, the routing input stays exactly as wide as "Account number" beside it (186px, matching the
+docked lane's existing measurement), and both inputs' top/bottom edges still align — the property this
+field has been built to hold since the docking work shipped. Two real test-harness traps hit and
+resolved along the way, not app bugs: (1) a bare `[placeholder*="Search"]` selector matched
+`GlobalSearch`'s page-wide combobox instead of the Banks page's own search box, the same UX-08 trap an
+earlier session already documented — fixed by matching the exact placeholder text; (2) the account row
+inside the bank drawer displays its account number masked (`••0001`), so a script matching on the real
+digits found nothing — fixed by selecting the (single, in this seed) row directly instead. No
+migration — pure application code on top of the already-run 0046. Changelog and Guide entries added
+(genuinely new, user-visible capability).
+
 **2026-07-30 (the account view docks beside the bank drawer instead of covering it)** — User feedback
 on the drawer's flow: the bank opens as a nice two-column sheet (shared right, only-you left), but
 clicking an account inside it threw a small centered box over the middle of the page — different

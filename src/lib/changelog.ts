@@ -21,6 +21,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-08-05",
+    title: "Share a routing number straight from the account editor",
+    items: [
+      "If you type a routing number on an account and the bank doesn't have one on file yet, a small \"share ↑\" link appears right next to the field — one click saves it on the bank so everyone tracking it can see it, instead of everyone having to enter it separately.",
+    ],
+  },
+  {
     date: "2026-07-30",
     title: "Routing numbers are saved on the bank, once",
     items: [

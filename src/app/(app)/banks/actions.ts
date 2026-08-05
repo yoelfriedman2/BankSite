@@ -466,6 +466,103 @@ export async function upsertBank(
   return {};
 }
 
+/** Pushes one account's own routing number up to become the bank's shared
+ *  one, from the account editor's "share ↑" button. Only meant to be offered
+ *  when the bank has no routing number of its own yet — this always
+ *  OVERWRITES whatever is there, so a bank that already has a (possibly
+ *  different) number needs the deliberate "reset"-then-retype path instead,
+ *  never a silent overwrite from this action.
+ *
+ *  Deliberately does not touch the account row at all: this and the client's
+ *  own "clear my override" edit are two independent, separately-saved
+ *  changes (bank write happens immediately; the account field just becomes
+ *  a normal unsaved edit like any other, persisted on the next Save). That
+ *  keeps this action's DB write scoped to exactly the one table it's
+ *  actually named for. */
+export async function shareRoutingNumberToBank(
+  bankId: string,
+  routingNumber: string,
+): Promise<{ error?: string }> {
+  const rtnErr = routingNumberError(routingNumber);
+  if (rtnErr) return { error: rtnErr };
+  const normalized = normalizeRoutingNumber(routingNumber);
+
+  if (DEMO_MODE) {
+    updateDemoBank(bankId, { routing_number: normalized });
+    revalidate();
+    return {};
+  }
+
+  const supabase = await createClient();
+  // Same invite-only guard as upsertBank: this propagates to every other
+  // user's copy via the admin client below.
+  const user = await getApprovedUser();
+  if (!user) return { error: "Not authorized." };
+
+  const routingOk = await hasRoutingColumn(supabase);
+  if (!routingOk) return { error: "This needs a migration that hasn't been run yet — see TODO.md." };
+
+  // RLS-scoped lookup: only ever returns a row this user actually owns.
+  const { data: bank, error: fetchErr } = await supabase
+    .from("banks")
+    .select("cert, name")
+    .eq("id", bankId)
+    .maybeSingle();
+  if (fetchErr || !bank) return { error: "Bank not found." };
+
+  const { error: updateErr } = await supabase
+    .from("banks")
+    .update({ routing_number: normalized })
+    .eq("id", bankId);
+  if (updateErr) return { error: friendlyDbError(updateErr.message) };
+
+  // A bank added without a cert (manually, not via FDIC seed) has no other
+  // users' copies to find — nothing to propagate, and that's fine.
+  if (bank.cert != null) {
+    const { data: updaterProfile } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", user.id)
+      .maybeSingle();
+    const updaterName =
+      (updaterProfile?.display_name as string | null) ||
+      (user.user_metadata?.full_name as string | undefined) ||
+      user.email ||
+      null;
+
+    const admin = createAdminClient();
+    // Not filtering out trashed copies — same DATA-01 reasoning as upsertBank's
+    // own propagation: a family member's trashed copy still occupies the
+    // (user_id, cert) row and should see the current number whenever they
+    // restore it, not a stale one from before this share.
+    const { error: propagateErr } = await admin
+      .from("banks")
+      .update({
+        routing_number: normalized,
+        shared_fields_updated_at: new Date().toISOString(),
+        shared_updated_by: user.id,
+        shared_updated_by_name: updaterName,
+        shared_updated_summary: "routing number",
+      })
+      .eq("cert", bank.cert)
+      .neq("user_id", user.id);
+    if (propagateErr) {
+      console.error(`[shareRoutingNumberToBank] propagating routing number for cert=${bank.cert} failed:`, propagateErr.message);
+    }
+
+    await logAudit({
+      actorId: user.id,
+      actorName: updaterName,
+      action: "bank_shared_update",
+      summary: `${updaterName ?? "Someone"} shared a routing number for ${bank.name}`,
+      cert: bank.cert,
+    });
+  }
+
+  revalidate();
+  return {};
+}
+
 export async function setBankStatus(
   id: string,
   status: BankStatus,
