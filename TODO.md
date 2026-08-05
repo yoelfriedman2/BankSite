@@ -52,26 +52,6 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
   the row is not evidence the migration ran; a save → close → reopen round-trip (or the
   `information_schema` query) is.
 
-- **Routing-number follow-ups** — both parked deliberately behind 0046. **#1 (bulk backfill) and #2
-  (website scrape) below are both still not built.** What *did* ship 2026-08-05 is a related but
-  narrower thing, easy to conflate with #1 so calling it out explicitly: a manual, one-account-at-a-
-  time "share ↑" button in the account editor, live now, that pushes that one account's own routing
-  number up to the bank when the bank has none (see CLAUDE.md's 2026-08-05 entry). It only fires when
-  someone happens to be editing an account that already has the number — it does nothing for certs
-  nobody's touched recently, and it doesn't do the cross-account "these already agree, promote it"
-  comparison #1 describes below. So #1's real scope may shrink over time as family members save
-  accounts and notice the button, but the automated/bulk version itself is still unbuilt.
-  1. **Backfill (bulk, not built)** — for each cert where every account's routing number agrees, copy that value up to
-     the bank (cross-user, so one person's entry serves the family), then clear the now-redundant
-     per-account copies so an account-level value genuinely means "this one is different." The
-     clearing step is the only part that writes to existing account rows, so it wants its own review
-     before running. Certs where accounts disagree should be listed, not auto-resolved — a
-     disagreement is either a real wire-vs-ACH split or somebody's typo. Recommended shape: a
-     read-only reporting pass first (what would change, and which certs disagree), reviewed, then the
-     write pass — same discipline the FDIC sync tool was built with.
-  2. **Scrape the number off the bank's website** — a per-bank "look up" button, not a bulk job. The
-     extractor logic is already written and tested (see notes below); what's unknown is the hit rate.
-
 - ~~Run migration `0045_search_and_rls_indexes.sql`~~ — confirmed run. Closes PERF-05: adds the
   `pg_trgm` extension and GIN trigram indexes on `banks.name`/`city` and `accounts.holder`/
   `account_number` (columns searched via leading-wildcard `.ilike`), plus plain btree indexes on
