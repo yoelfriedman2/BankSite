@@ -305,6 +305,22 @@ failed on that before the count was filtered by `:not([inert])`, and none of the
 Skipped changelog/Guide: this is a layout change to an existing flow, not a new capability, matching
 how both prior drawer/popup redesigns were handled.
 
+**2026-08-04 (bug fix: long real bank names broke the folded Accounts table)** — Live user report with a
+screenshot: the docked account sheet from the round above made the Accounts table "look wrong,"
+everything "pushed to the side." Root cause wasn't the docking geometry — it was that the bank-name
+and holder table cells had **no truncation at all**, so a real long name ("Ascend Bank (formerly The
+Guilford Savings Bank)") wrapped across 3-4 lines; in the narrower folded layout that shows while the
+sheet is open, that ballooned every row to ~110px, which is what actually read as "crushed." Demo
+data's short bank names ("Union County Savings Bank") never exposed this — a recurring lesson in this
+file: verify against realistic real-world *content*, not just the seed default. Fixed with a plain
+single-line `truncate` + `title` tooltip on both cells, matching the pattern `BanksClient.tsx` already
+uses for its own bank-name column — applies to the unfolded table too, since it's the same row markup
+either way. **Verified against the real string from the report**, not a synthetic one: temporarily
+overrode a demo bank's name/holder to the exact reported values, confirmed 1 line / 61px row height
+instead of 4 lines / ~110px in both the folded and unfolded states, then reverted the override (confirmed
+via `git diff` showing nothing) before committing. All five earlier docking suites re-run clean
+(97 assertions), `tsc --noEmit`, `npm run build`, `npm test` (100). Bug fix, no changelog/Guide entry.
+
 **2026-07-31 (the Accounts page docks too — one lane concept, two pages)** — Asked whether I'd rethink
 the Accounts page now that the drawer docks. Answer was yes, one structural change: it was the last
 screen still opening an account as a centered popup, and it's the one page you work *down a list* on,
