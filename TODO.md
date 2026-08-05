@@ -4,20 +4,27 @@ Running list of things to review and decide. (Feature ideas live in IDEAS.md —
 
 ## One-time setup pending
 
-- **Run migration `0046_bank_routing_number.sql`** — adds `banks.routing_number` (shared, nullable).
-  Lets a routing number be stored once per bank and inherited by every account there, instead of
-  being retyped per account. **Degrades gracefully until run**: reads use `select("*")`, and
-  `upsertBank` probes for the column once and strips the field from its write payloads if it's
-  missing — so bank saves keep working normally on an un-migrated database, the routing row just
-  doesn't appear. Nothing already stored on an account is read, rewritten, or cleared.
+- ~~Run migration `0046_bank_routing_number.sql`~~ — **confirmed run 2026-08-04** (verified against
+  `information_schema.columns`, not just assumed). Adds `banks.routing_number` (shared, nullable), so
+  a routing number is stored once per bank and inherited by every account there instead of being
+  retyped per account. Nothing already stored on an account was read, rewritten, or cleared.
 
-  Two follow-ups deliberately left for separate passes, both discussed and agreed:
+  Note for anyone re-checking this: the app looks **identical** whether or not the column exists —
+  the bank drawer renders the "Routing number" row unconditionally and shows `—` when empty, and
+  `upsertBank` silently strips the field from its write payload when the column is missing. Seeing
+  the row is not evidence the migration ran; a save → close → reopen round-trip (or the
+  `information_schema` query) is.
+
+- **Routing-number follow-ups** — both parked deliberately behind 0046, both still open now that it
+  has run:
   1. **Backfill** — for each cert where every account's routing number agrees, copy that value up to
      the bank (cross-user, so one person's entry serves the family), then clear the now-redundant
      per-account copies so an account-level value genuinely means "this one is different." The
      clearing step is the only part that writes to existing account rows, so it wants its own review
      before running. Certs where accounts disagree should be listed, not auto-resolved — a
-     disagreement is either a real wire-vs-ACH split or somebody's typo.
+     disagreement is either a real wire-vs-ACH split or somebody's typo. Recommended shape: a
+     read-only reporting pass first (what would change, and which certs disagree), reviewed, then the
+     write pass — same discipline the FDIC sync tool was built with.
   2. **Scrape the number off the bank's website** — a per-bank "look up" button, not a bulk job. The
      extractor logic is already written and tested (see notes below); what's unknown is the hit rate.
 
