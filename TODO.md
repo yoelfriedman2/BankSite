@@ -52,7 +52,13 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
   `information_schema` query) is.
 
 - **Routing-number follow-ups** — both parked deliberately behind 0046, both still open now that it
-  has run:
+  has run. **2026-08-05**: a manual, one-at-a-time version of the backfill is now live — a "share ↑"
+  button in the account editor pushes one account's own routing number up to the bank when the bank
+  has none (see CLAUDE.md's 2026-08-05 entry). That covers the case where someone happens to be
+  editing an account that already has the number; it doesn't cover certs nobody's touched recently or
+  the cross-account "these agree, promote it" comparison below, so the backfill item is still real —
+  just possibly smaller in scope than before, since some certs may get filled in organically as
+  family members save accounts and notice the button.
   1. **Backfill** — for each cert where every account's routing number agrees, copy that value up to
      the bank (cross-user, so one person's entry serves the family), then clear the now-redundant
      per-account copies so an account-level value genuinely means "this one is different." The

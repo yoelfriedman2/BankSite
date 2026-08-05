@@ -306,6 +306,10 @@ function createInitialStore(): DemoStore {
       holder: "John",
       account_type: "savings",
       account_number: "5550010001",
+      // Bank 1 has no routing_number of its own (see BANK_OVERRIDES above) —
+      // a real, checksum-valid number here so the "share ↑" button (push this
+      // account's number up to become the bank's) is click-testable.
+      routing_number: "011401928",
       balance: 250,
       last_activity_date: monthsAgo(13), // red
       notes: "Needs a transaction ASAP.",
