@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Pencil, X, ArrowUpRight } from "lucide-react";
+import { Pencil, X, ArrowUpRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { ACCOUNT_TYPE_LABELS, type Account } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { effectiveRoutingNumber } from "@/lib/routingNumber";
@@ -44,6 +44,7 @@ export function AccountViewModal({
   docked,
   frozen = false,
   footerAction,
+  prevNext,
   onClose,
   onEdit,
 }: {
@@ -67,6 +68,17 @@ export function AccountViewModal({
    *  its per-row quick-log button so activity can be logged from the sheet
    *  rather than closing it and hunting for the row again. */
   footerAction?: React.ReactNode;
+  /** Step to the previous/next row in whatever order the caller's own list is
+   *  currently sorted and filtered to — the Accounts page passes this so the
+   *  sheet can be paged through without closing it and clicking another row.
+   *  Omitted by the bank drawer's usage, where "the list" is just that one
+   *  bank's handful of accounts and stepping through it isn't the point. */
+  prevNext?: {
+    onPrev: () => void;
+    onNext: () => void;
+    hasPrev: boolean;
+    hasNext: boolean;
+  };
   onClose: () => void;
   onEdit: () => void;
 }) {
@@ -124,6 +136,30 @@ export function AccountViewModal({
     return () => document.removeEventListener("mousedown", onOutside, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docked, frozen]);
+
+  // ↑/↓ mirror the header's ‹/› buttons — the list being stepped through is
+  // vertical, arrow keys just match that; the buttons themselves point
+  // left/right because that's the familiar "prev/next" shape, not because
+  // the motion is horizontal. Skipped while focus is in a text field so this
+  // can't hijack normal editing elsewhere on the page.
+  useEffect(() => {
+    if (!prevNext || frozen) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+      const el = document.activeElement;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (el as HTMLElement | null)?.isContentEditable) return;
+      if (e.key === "ArrowUp" && prevNext!.hasPrev) {
+        e.preventDefault();
+        prevNext!.onPrev();
+      } else if (e.key === "ArrowDown" && prevNext!.hasNext) {
+        e.preventDefault();
+        prevNext!.onNext();
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [prevNext, frozen]);
 
   const [balanceHistory, setBalanceHistory] = useState<BalancePoint[]>([]);
   useEffect(() => {
@@ -199,14 +235,40 @@ export function AccountViewModal({
               )}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={requestClose}
-            aria-label="Close"
-            className="shrink-0 rounded-lg p-1 text-slate-600 hover:bg-black/5 hover:text-slate-600"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex shrink-0 items-center gap-0.5">
+            {prevNext && (
+              <>
+                <button
+                  type="button"
+                  onClick={prevNext.onPrev}
+                  disabled={!prevNext.hasPrev}
+                  aria-label="Previous account"
+                  title="Previous account (↑)"
+                  className="rounded-lg p-1 text-slate-600 hover:bg-black/5 hover:text-slate-600 disabled:opacity-30 disabled:hover:bg-transparent"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={prevNext.onNext}
+                  disabled={!prevNext.hasNext}
+                  aria-label="Next account"
+                  title="Next account (↓)"
+                  className="rounded-lg p-1 text-slate-600 hover:bg-black/5 hover:text-slate-600 disabled:opacity-30 disabled:hover:bg-transparent"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={requestClose}
+              aria-label="Close"
+              className="rounded-lg p-1 text-slate-600 hover:bg-black/5 hover:text-slate-600"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         <div

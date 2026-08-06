@@ -366,6 +366,39 @@ failed on that before the count was filtered by `:not([inert])`, and none of the
 Skipped changelog/Guide: this is a layout change to an existing flow, not a new capability, matching
 how both prior drawer/popup redesigns were handled.
 
+**2026-08-06 (prev/next arrows on the open account sheet)** — User asked for a way to step through
+accounts on the Accounts page without closing the sheet and clicking another row, and specifically
+wanted to see a few placement options before anything got built. Presented three (chevrons beside the
+close button, a "N of M" counter in the footer, floating round buttons on the sheet's own edges) as a
+live interactive mockup — the third was ruled out up front as needing a fallback design for narrow
+screens anyway, so it would mean maintaining two designs for one feature. User picked the chevrons.
+
+**What shipped**: `AccountViewModal` gained an optional `prevNext` prop
+(`{ onPrev, onNext, hasPrev, hasNext }`) — two small `ChevronLeft`/`ChevronRight` buttons in the
+header's existing action row, before the close X, disabled (not hidden) at either end of the list so
+you always know when you've hit the first or last row rather than looping silently. `AccountsClient`
+is the only caller that passes it: `hasPrev`/`hasNext` and the two callbacks are derived from
+`filtered.findIndex()` against the *same* already-sorted-and-filtered array the table itself renders
+from, so prev/next always matches whatever a click on the row above/below would have opened — sorted
+by balance, filtered to "Needs attention," searched, doesn't matter, it's the same array either way.
+Reuses the existing `openAccountView()` helper for the actual navigation, so a prev/next step gets the
+identical slide-and-ghost animation a row-to-row click already has — no separate code path to keep in
+sync. The bank drawer's own usage of `AccountViewModal` simply doesn't pass `prevNext`, so nothing
+renders there — "the list" inside one bank's drawer is a handful of accounts, not a paginated view.
+**Keyboard**: ↑/↓ mirror the click, since the list being stepped through is vertical even though the
+buttons themselves point left/right (that's just the familiar prev/next shape) — skipped whenever
+focus is in a text input/textarea/select/contenteditable elsewhere on the page, so it can't hijack
+normal typing.
+
+**Verification**: **16/16** new live assertions plus all six earlier suites re-run clean (**128
+assertions total**), `tsc --noEmit`, `npm run build`, `npm test` (100). Confirms prev disabled on the
+first row and next disabled on the last, a button click and both arrow keys each advance/retreat to
+the correct account, the header text actually changes, the swap still animates and holds the outgoing
+sheet exactly like a row click does, sorting by Balance and re-opening correctly changes which account
+"next" leads to (not just re-testing the default Bank sort), the bank drawer's sheet has zero prev/next
+buttons, and 375px still shows working buttons in the centered popup with no overflow. Changelog and
+Guide entries added — a genuine new capability, not a fix.
+
 **2026-08-04 (the docked Accounts sheet was squeezing the table for no reason on wide monitors)** —
 Follow-up the same day: the truncation fix above made rows tidy, but the user pushed back with a real
 screenshot on a genuinely wide monitor — the sheet still read as a slab bolted to the edge with no

@@ -21,6 +21,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-08-06",
+    title: "Step through accounts without closing the one you're looking at",
+    items: [
+      "Opening an account on the Accounts page now shows ‹ › arrows next to Close — step to the previous or next account in whatever order the list is currently sorted or filtered to, no need to close and click another row.",
+      "Works with the arrow keys too (↑ for previous, ↓ for next) while an account is open.",
+    ],
+  },
+  {
     date: "2026-08-05",
     title: "Share a routing number straight from the account editor",
     items: [

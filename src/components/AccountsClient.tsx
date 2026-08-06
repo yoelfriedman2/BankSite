@@ -1065,6 +1065,18 @@ export function AccountsClient({
               />
             ) : null
           }
+          // Steps through `filtered` — the same sorted/filtered rows on
+          // screen right now, not the unfiltered full list — so prev/next
+          // always matches what a row click would have opened next.
+          prevNext={(() => {
+            const i = filtered.findIndex((r) => r.id === viewing.id);
+            return {
+              hasPrev: i > 0,
+              hasNext: i >= 0 && i < filtered.length - 1,
+              onPrev: () => i > 0 && openAccountView(filtered[i - 1]),
+              onNext: () => i >= 0 && i < filtered.length - 1 && openAccountView(filtered[i + 1]),
+            };
+          })()}
           onClose={() => setViewing(null)}
           onEdit={() => {
             setEditFromView(true);
