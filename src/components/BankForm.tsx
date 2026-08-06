@@ -30,6 +30,7 @@ import { AccountModal } from "@/components/AccountModal";
 import { AccountViewModal } from "@/components/AccountViewModal";
 import { CheckPrintModal } from "@/components/CheckPrintModal";
 import { DateInput } from "@/components/DateInput";
+import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 import { todayLocalStr } from "@/lib/date";
 import {
   upsertBank,
@@ -666,8 +667,8 @@ export function BankForm({
                   )
                 ) : (
                   <>
-                    <textarea
-                      rows={3}
+                    <AutoGrowTextarea
+                      minRows={3}
                       autoFocus
                       className={inputClass}
                       value={values.notes}
@@ -1158,8 +1159,8 @@ export function BankForm({
                     {commentError && (
                       <p className="mb-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{commentError}</p>
                     )}
-                    <textarea
-                      rows={2}
+                    <AutoGrowTextarea
+                      minRows={2}
                       className={inputClass}
                       placeholder="Add a note for everyone…"
                       value={commentBody}
@@ -1499,8 +1500,8 @@ function CannotOpenPromptModal({
           You marked <span className="font-medium text-slate-700">{bankName}</span> as
           can&apos;t open. Choose how much to share — your optional note rides along either way.
         </p>
-        <textarea
-          rows={3}
+        <AutoGrowTextarea
+          minRows={3}
           className={`${inputClass} mt-3`}
           placeholder="Optional note for everyone (e.g. local residents only, rejected by mail)…"
           value={shareNote}
