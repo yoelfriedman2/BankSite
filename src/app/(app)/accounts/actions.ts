@@ -14,7 +14,7 @@ import {
   getDemoAccounts,
   type AccountFields,
 } from "@/lib/demo";
-import { AUTO_OPEN_FROM_STATUSES, type Account, type ActivityType } from "@/lib/types";
+import { AUTO_OPEN_FROM_STATUSES, type Account, type ActivityType, type BankStatus } from "@/lib/types";
 import { skipCurrentMonthIfPast } from "@/lib/monthlyFee";
 import { stampOnRateChange } from "@/lib/interestAccrual";
 import { friendlyDbError } from "@/lib/friendlyError";
@@ -349,7 +349,7 @@ export async function upsertAccount(
     .select("status")
     .eq("id", values.bank_id)
     .maybeSingle();
-  if (bank && AUTO_OPEN_FROM_STATUSES.has(bank.status)) {
+  if (bank && AUTO_OPEN_FROM_STATUSES.has(bank.status as BankStatus)) {
     await supabase
       .from("banks")
       .update({ status: "open" })
@@ -512,8 +512,9 @@ export async function duplicateAccount(
     .single();
   if (readError || !source) return { error: readError?.message ?? "Not found." };
 
-  const copy = fieldsFromAccount(source as Account);
-  const bankId = (source as Account).bank_id;
+  const src = source as unknown as Account;
+  const copy = fieldsFromAccount(src);
+  const bankId = src.bank_id;
   const { data: created, error } = await supabase
     .from("accounts")
     .insert({
@@ -527,7 +528,7 @@ export async function duplicateAccount(
       username: null,
       password: null,
       access_notes: null,
-      interest_last_accrued_on: stampOnRateChange((source as Account).interest_rate, new Date()),
+      interest_last_accrued_on: stampOnRateChange(src.interest_rate, new Date()),
       user_id: user.id,
       bank_id: bankId,
     })
@@ -540,7 +541,7 @@ export async function duplicateAccount(
     .select("status")
     .eq("id", bankId)
     .maybeSingle();
-  if (bank && AUTO_OPEN_FROM_STATUSES.has(bank.status)) {
+  if (bank && AUTO_OPEN_FROM_STATUSES.has(bank.status as BankStatus)) {
     await supabase.from("banks").update({ status: "open" }).eq("id", bankId);
   }
 
@@ -700,8 +701,12 @@ export async function logActivityToday(
   const { error: rpcErr } = await supabase.rpc("append_activity_log", {
     p_account_id: id,
     p_date: today,
-    p_note: null,
-    p_type: type,
+    // The generated RPC arg types don't reflect the SQL function's true
+    // nullability for these two params (Postgres happily accepts NULL here,
+    // matching the DEMO_MODE fallback above) — cast at the boundary rather
+    // than widening the shared Database type.
+    p_note: null as unknown as string,
+    p_type: type as unknown as string,
   });
   if (!rpcErr) {
     revalidate();

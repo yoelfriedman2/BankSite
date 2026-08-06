@@ -7,6 +7,7 @@ import { getApprovedUser } from "@/lib/access";
 import { formatAssets } from "@/lib/format";
 import { friendlyDbError } from "@/lib/friendlyError";
 import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
+import type { TablesUpdate } from "@/lib/supabase/database.types";
 
 /* FDIC sync: poll-and-propose only. The check is read-only and available to
    every signed-in user. Applying a change (rename/website/assets/city-state/
@@ -324,7 +325,7 @@ export async function applyFdicCityState(
 ): Promise<{ error?: string }> {
   const user = await currentUser();
   if (!(await canApplyFdicChanges(user))) return { error: "Not authorized." };
-  const patch: Record<string, unknown> = {};
+  const patch: TablesUpdate<"banks"> = {};
   if (city) patch.city = city;
   if (state) patch.state = String(state).toUpperCase();
   if (!Object.keys(patch).length) return {};
