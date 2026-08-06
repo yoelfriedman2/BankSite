@@ -10,6 +10,7 @@ import { logAudit, type AuditEntry } from "@/lib/audit";
 import { friendlyDbError } from "@/lib/friendlyError";
 import { fetchAllRows } from "@/lib/pagination";
 import { normalizeRoutingNumber, routingNumberError } from "@/lib/routingNumber";
+import type { TablesInsert, TablesUpdate } from "@/lib/supabase/database.types";
 import type { User } from "@supabase/supabase-js";
 import {
   DEMO_MODE,
@@ -307,7 +308,7 @@ export async function upsertBank(
   } else {
     const { data: inserted, error } = await supabase
       .from("banks")
-      .insert(withoutRoutingIfMissing({ regulator: null, ...patch, user_id: user.id }, routingOk))
+      .insert(withoutRoutingIfMissing({ regulator: null, ...patch, name: patch.name!, user_id: user.id }, routingOk))
       .select("id")
       .single();
     if (error) return { error: friendlyDbError(error.message) };
@@ -335,7 +336,7 @@ export async function upsertBank(
         (existingBanks ?? []).filter((b) => b.deleted_at).map((b) => b.user_id as string),
       );
       const sharedFieldsForCert = {
-        name: patch.name,
+        name: patch.name!,
         city: patch.city,
         state: patch.state,
         assets: patch.assets,
@@ -445,7 +446,7 @@ export async function upsertBank(
     const { error: propagateErr } = await admin
       .from("banks")
       .update(withoutRoutingIfMissing(sharedPatch, routingOk))
-      .eq("cert", patch.cert)
+      .eq("cert", patch.cert!)
       .neq("user_id", user.id);
     if (propagateErr) {
       console.error(`[upsertBank] propagating shared-field update for cert=${patch.cert} failed:`, propagateErr.message);
@@ -759,7 +760,7 @@ export async function getTrash(): Promise<{
       ...b,
       accountCount: accountsByBank.get(b.id) ?? 0,
     })),
-    accounts: ((trashedAccounts ?? []) as Account[]).map((a) => ({
+    accounts: ((trashedAccounts ?? []) as unknown as Account[]).map((a) => ({
       ...a,
       bankName: nameMap.get(a.bank_id) ?? "—",
     })),
@@ -833,7 +834,7 @@ export async function importBanks(
     .maybeSingle();
   const displayName = (profile?.display_name as string | null) ?? "Import";
 
-  const accountInserts: Record<string, unknown>[] = [];
+  const accountInserts: TablesInsert<"accounts">[] = [];
   const noteInserts: { cert: number; body: string }[] = [];
   let banksTouched = 0;
   let accountsUpdated = 0;
@@ -864,7 +865,7 @@ export async function importBanks(
     if (found) {
       bankId = found.id;
       bankCert = found.cert ?? row.cert;
-      const upd: Record<string, unknown> = {};
+      const upd: TablesUpdate<"banks"> = {};
       // A row matching a trashed bank restores it, rather than falling
       // through to the insert branch below and hitting the unique
       // (user_id, cert) constraint the trashed row still occupies.
@@ -953,7 +954,7 @@ export async function importBanks(
       } else if (decision === "update" && row.matched_account_id) {
         // Only overwrite fields this row actually carries a value for — same
         // "don't blank out what wasn't in the file" rule as the bank update above.
-        const upd: Record<string, unknown> = {};
+        const upd: TablesUpdate<"accounts"> = {};
         if (row.holder != null) upd.holder = row.holder;
         if (row.account_type != null) upd.account_type = row.account_type;
         if (row.account_number != null) upd.account_number = row.account_number;
@@ -1016,7 +1017,7 @@ export async function importBanks(
         user_id: user.id,
         account_id: a.id as string,
         as_of_date: today,
-        balance: a.balance,
+        balance: a.balance!,
         reason: "opening balance",
       }));
     if (historyRows.length) {
@@ -1144,14 +1145,14 @@ export async function seedBanks(): Promise<{ seeded?: number; error?: string }> 
       regulator: (s.regulator as string | null) ?? null,
       assets: (s.assets as number | null) ?? null,
       holding_company: (s.holding_company as string | null) ?? null,
-      open_methods: s.open_methods ?? null,
-      eligibility: s.eligibility ?? null,
-      eligibility_date: s.eligibility_date ?? null,
-      branch_location: s.branch_location ?? null,
-      phone: s.phone ?? null,
-      website: s.website ?? null,
-      min_to_open: s.min_to_open ?? null,
-      conversion_stage: s.conversion_stage ?? "none",
+      open_methods: (s.open_methods as string[] | null) ?? null,
+      eligibility: (s.eligibility as string | null) ?? null,
+      eligibility_date: (s.eligibility_date as string | null) ?? null,
+      branch_location: (s.branch_location as string | null) ?? null,
+      phone: (s.phone as string | null) ?? null,
+      website: (s.website as string | null) ?? null,
+      min_to_open: (s.min_to_open as number | null) ?? null,
+      conversion_stage: (s.conversion_stage as string | null) ?? "none",
     }));
 
   if (payload.length > 0) {

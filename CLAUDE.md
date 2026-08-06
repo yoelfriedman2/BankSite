@@ -628,6 +628,61 @@ correctly restores the full list, a nonsense query shows the "no matches" messag
 blank page, no 375px mobile overflow, and zero console errors. `DEMO_MODE` was flipped to `true`
 (temporary `.env.local`) for this pass and removed entirely before finishing, per the standing rule.
 
+**2026-07-28 (external audit — round 22: TYPE-01 fixed — all 100 findings now closed)** — Direct
+continuation of round 21, same session. User asked what TYPE-01 meant in plain terms, then ran it
+themselves: `npx supabase login` (a real device-code mixup along the way, self-corrected), found the
+project ref via the Supabase dashboard URL, then `npx supabase gen types typescript --project-id <ref>
+> database.types.ts`, and pasted the result back into chat — the first time this project's generated DB
+types have existed, since this sandbox has never been able to reach a live Postgres connection to
+generate them itself.
+
+Saved as `src/lib/supabase/database.types.ts`, wired into all three Supabase clients (`server.ts`,
+`admin.ts`, `client.ts`) as `createClient<Database>(...)`. Not a clean drop-in — two real things
+surfaced:
+
+1. **Every table resolved to `never`.** Root-caused by reading `@supabase/ssr@0.5.2`'s (the installed
+   version) type declarations directly: its `createServerClient`/`createBrowserClient` generics compute
+   the schema lookup against the raw `Database` type without stripping the CLI's newer
+   `__InternalSupabase` marker key first, unlike `@supabase/supabase-js@2.108.1` (already installed),
+   which handles it correctly. Fixed with a targeted `npm install @supabase/ssr@latest` (0.5.2 →
+   0.12.4, same sandbox `xlsx`-CDN-swap workaround as every prior dependency change in this project,
+   reverted after) — confirmed via its bundled CHANGELOG.md that nothing between those versions changed
+   the `getAll`/`setAll` cookie API this app already uses, so this reads as a safe upgrade.
+2. **42 genuine type mismatches**, once every real Supabase call was actually checked against the live
+   schema for the first time. These clustered into ~8 repeated root causes, not 42 independent
+   problems: a shared `fetchAllRows()` pagination helper whose callback type didn't structurally match
+   a real Postgrest builder (fixed once in `lib/pagination.ts`, resolved 16 call sites); several
+   `Record<string, unknown>` dynamic-patch variables retyped via the generated `TablesUpdate`/
+   `TablesInsert` helpers instead of a bare untyped record; `as Account`/`as Account[]` casts that no
+   longer "sufficiently overlapped" because the DB's `activity_log: Json` is looser than the app's real
+   `{date, note, type?}[]` shape (fixed with `as unknown as X`); a few places passing a plain fetched
+   `string` where the app's narrower `BankStatus` literal type was expected, always backed by a real DB
+   constraint TypeScript can't see; a couple of genuine `T | null` vs `T`-required mismatches, each
+   verified as a real, provable runtime invariant before adding a narrowing `!` (e.g. `up-next/
+   actions.ts`'s queue swap only ever runs on rows a prior `.filter()` already confirmed have a real
+   position — matching the same pattern the file already used two lines above). `lib/backup.ts`'s
+   disaster-recovery restore code (reads an arbitrary uploaded backup file whose shape genuinely isn't
+   knowable until runtime) was deliberately left on its loose `Row = Record<string, unknown>` type and
+   cast at the three boundary points where it touches the strict client, with a comment explaining why
+   — forcing that file's dynamic-by-design data through strict per-table types would fight the actual
+   architecture, not fix a real gap. No blanket type-widening shortcut anywhere in this round — every
+   fix is either a provable narrowing or a proper generated-type usage, so the real safety net TYPE-01
+   exists to build is intact, not just silenced.
+
+**Verification**: `tsc --noEmit` went from ~319 lines of errors (mostly the `never`-everywhere symptom)
+to 0. `npm test` 100/100. `npm run build` clean. A DEMO_MODE smoke test across 9 major pages came back
+all 200 with zero new server-log errors — DEMO_MODE bypasses real Supabase entirely, so this confirms
+the app compiles/renders correctly with the new types, not real database behavior; the client-typing
+changes are 100% compile-time annotations with zero runtime effect, and the one genuinely
+runtime-affecting change (the `@supabase/ssr` bump) was verified via its changelog rather than a live
+login this sandbox can't perform. `package.json`/`package-lock.json` were restored to their exact
+`xlsx`-CDN-pinned committed shape aside from the one real, intentional `@supabase/ssr` bump, via the
+same surgical JSON-patch approach this file's SEC-22 entry documented for this exact recurring sandbox
+situation. `DEMO_MODE` was flipped to `true` for the smoke test and back to `false` before finishing.
+**`EXTERNAL-AUDIT-TRACKER.md` updated: all 100 findings are now closed.** Going forward, the generated
+types file needs to be re-run after any future schema-changing migration — it isn't a permanent
+one-time fix, the same way running the migration itself isn't.
+
 **2026-07-28 (external audit — round 21: the last batch — UX-19/UX-21/PERF-02/INT-11/GAP-02 reviewed
 and declined, GAP-03 fixed — 99 of 100 findings now closed)** — Direct continuation of round 20, later
 session: user asked how many findings were left, then to go through the rest. Presented each of the 8

@@ -203,9 +203,9 @@ export async function moveInQueue(
   // never regresses below what already worked.
   const { error: rpcErr } = await supabase.rpc("swap_queue_positions", {
     p_bank_a: a.id,
-    p_pos_a: a.queue_position,
+    p_pos_a: a.queue_position!,
     p_bank_b: b.id,
-    p_pos_b: b.queue_position,
+    p_pos_b: b.queue_position!,
   });
   if (!rpcErr) {
     revalidatePath("/up-next");

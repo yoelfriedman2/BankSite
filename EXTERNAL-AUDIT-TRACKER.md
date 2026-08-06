@@ -97,7 +97,7 @@ decision or bigger effort before it can be safely fixed
 - [x] REL-04 — External API calls lack timeout/retry/backoff policy — partially fixed (the timeout half): new shared `lib/fetchWithTimeout.ts` (the same AbortController pattern already used for bank-website verification, now extracted and reused) applied to the 2 FDIC BankFind calls that previously had no bound at all (`fetchFdic`, `fetchFdicLocations`) plus the holding-company RSSD lookup. Retry/backoff and client-side (Nominatim autocomplete) cancellation are unaddressed.
 - [x] OBS-01 — Monitoring captures only a subset of real failures — fixed the specific, real gap: Sentry was already fully wired (client/server/edge configs, `instrumentation.ts` capturing thrown errors) but every server action that deliberately catches a raw DB/network error and returns a friendly `{ error }` string — the established pattern throughout this whole app, used so a user gets a nice toast instead of a generic crash screen — never reported anything to Sentry, since nothing was ever thrown. Real production failures were only ever visible if a user happened to report them. Fixed at the single highest-leverage choke point rather than touching every catch block individually: `friendlyDbError()` (`lib/friendlyError.ts`) is the one shared helper 15+ server-action files already route their raw DB-error message through, so a Sentry report was added to exactly its recognized-pattern branches (unique/FK/not-null/check-constraint violations, invalid syntax, network/timeout — each unambiguously a real system-level error, never something the app's own hand-written validation text would coincidentally match) — the unrecognized fallback case (more likely to be legitimate app-authored text) is deliberately left unreported, to avoid trading one blind spot for a noisy one. RLS/permission-denied is reported at `"warning"` rather than `"error"`, since a fail-closed RLS check (SEC-03) denying a pending/denied user is sometimes correct behavior, not a bug. Separately, the daily cron route (`api/cron/reminders/route.ts`) — which runs fully unattended, no signed-in user, no toast possible — had 16 `console.error` call sites whose only audience was request logs nobody actively watches; a new local `logCronError()` helper (console.error, unchanged, plus a Sentry report) replaces all 16 call sites.
 - [x] OPS-02 — Maintenance scripts have hard-coded paths, weak safety — fixed: `scripts/gen-seed.mjs` hardcoded `readFileSync("C:/Users/ben/Downloads/2023.xlsx")` (someone else's machine's absolute path) and `scripts/import-2023-notes.mjs` fell back to the same hardcoded path if `EXCEL_PATH` wasn't set — both now require `EXCEL_PATH` explicitly, exiting with a clear, actionable error if it's missing (matching the existing pattern `scripts/plaid-coverage.mjs` already used for its own required env vars). Also found and fixed a related, real "weak safety" gap in the same file: `import-2023-notes.mjs` fell back to a hardcoded real production Supabase project URL if `NEXT_PUBLIC_SUPABASE_URL` wasn't set, and separately read a service-role key from `SUPABASE_SERVICE_KEY` — a name that doesn't match this project's actual `.env.local` convention (`SUPABASE_SERVICE_ROLE_KEY`), meaning it silently required a separately hand-exported env var nowhere else in the project uses. Now reads both from `.env.local` (same variable names the app itself uses, via the same small `loadEnv()` helper `plaid-coverage.mjs` already has its own copy of) or the environment, and exits with a clear error if either is missing — removing the silent-fallback-to-a-real-production-project risk entirely rather than just moving where the hardcoded value lives.
-- [ ] TYPE-01 — No generated DB types / schema-contract check
+- [x] TYPE-01 — No generated DB types / schema-contract check — fixed. The user ran `supabase gen types typescript` from their own machine against the live database (this sandbox still can't reach it directly) and provided the output; wired the real generated `Database` type into all three Supabase clients (`lib/supabase/server.ts`, `admin.ts`, `client.ts`) as `createClient<Database>(...)`. This immediately surfaced two real gaps: (1) the installed `@supabase/ssr@0.5.2` predated CLI support for the new type-generation format (every table resolved to `never`) — fixed by upgrading to `@supabase/ssr@0.12.4`, confirmed via its changelog to carry no breaking API changes for the `getAll`/`setAll` cookie pattern this app already uses; (2) 42 genuine type mismatches between the DB's loosely-typed columns (plain `string`/`Json`) and the app's stricter hand-written domain types (`BankStatus`, `AccountType`, `Account.activity_log`'s real shape, etc.) — each fixed individually (narrowing casts backed by a provable runtime invariant, or typing dynamic patch/insert objects with the generated `TablesInsert`/`TablesUpdate` helpers) rather than with a blanket type-widening escape hatch, so the real safety net TYPE-01 asks for is intact. `lib/backup.ts`'s restore-from-arbitrary-backup-file code paths are a deliberate exception — cast at the boundary with an explanatory comment, since that data's shape is genuinely unknown until runtime by design. `tsc --noEmit` is 0 errors, `npm test` 100/100, `npm run build` clean, and a DEMO_MODE smoke test across every major page showed no new errors. Going forward, this needs to be re-run (`supabase gen types typescript --project-id <ref> > src/lib/supabase/database.types.ts`) after any future migration that changes the schema, the same way a new migration itself needs a manual step today — it isn't a permanent one-time fix.
 - [x] PERF-05 — No indexes/query-plan tuning for search & RLS — fixed via migration **0045_search_and_rls_indexes.sql**. Grounded in the actual query code, not a profiled query plan (this sandbox has no live Postgres connection to run EXPLAIN against — see TODO.md). Two concrete gaps: (1) search (`GlobalSearch`'s bank/account search, and the bank-relationship search in `banks/actions.ts`) uses leading-wildcard `.ilike("name", "%term%")`, which a plain btree index can't accelerate at all — added the `pg_trgm` extension (standard, available on Supabase) and GIN trigram indexes on `banks.name`/`city` and `accounts.holder`/`account_number`, the columns actually searched this way. (2) `account_documents` (migration 0014) had zero indexes at all — every RLS check on it evaluates `auth.uid() = user_id` per row with nothing to narrow it, and both real read paths (`getAccountDocuments`/`getAllMyDocuments`) filter by `account_id`/`user_id` directly — added plain btree indexes on both, matching every other per-user table in this project, which already has this and was just missed here. Purely additive (new indexes only, changes no query results) — see TODO.md for the migration.
 
 ## Part 5 — Integration / Edge Cases (12)
@@ -358,10 +358,10 @@ this round's verification — flipped back to `false` before finishing, per the 
   now go through the atomic RPC path instead of the non-atomic fallback).
 - ~~Migration 0045_search_and_rls_indexes.sql~~ — confirmed run. The `pg_trgm` extension and
   trigram/btree indexes are live; PERF-05 is fully closed.
-- **Only 1 finding remains open** — TYPE-01 (generated DB types via the Supabase CLI), blocked on
-  this sandbox having no real Postgres connection (its egress policy blocks it), not on any decision.
-  Every other finding in all 100 is now fixed, closed as a non-issue, or a deliberate accepted-risk
-  decision made with the user. Round 21 closed out the last batch of Medium/Low items: UX-19/UX-21
+- **All 100 findings are now resolved** — fixed, closed as a non-issue, or a deliberate accepted-risk
+  decision made with the user. TYPE-01 (the last one) closed in round 22 once the user ran the
+  Supabase CLI from their own machine and provided the output this sandbox couldn't reach directly —
+  see the item above. Round 21 closed out the last batch of Medium/Low items: UX-19/UX-21
   (non-visual calendar/map equivalents, offline/update PWA support) and PERF-02 (over-fetching) were
   reviewed and explicitly declined — each is a real, bigger-scope change (or, for PERF-02, not
   something felt at this app's actual scale — see the item above for what a real fix would require)
@@ -372,6 +372,73 @@ this round's verification — flipped back to `false` before finishing, per the 
   fix — see the item above for detail. DATA-15's checkbox was also corrected to `[x]` in this round
   (a bookkeeping fix only — it was already decided/declined back in round 13, the box was just never
   flipped).
+
+**Round 22 (TYPE-01 fixed — all 100 findings now closed)** — Direct continuation of round 21, same
+session. User asked what TYPE-01 actually meant in plain terms, then whether they could just run the
+Supabase step themselves. Walked them through it live in chat: `npx supabase login` (a real device-code
+mixup along the way, self-corrected — the terminal read a queued second command as the login's
+verification-code input on the first attempt, failed validation, then a fresh prompt correctly accepted
+a real code and logged in), found the real project ref via the Supabase dashboard URL (an earlier guess
+using an 8-char string, actually a leftover fragment from the login mixup, correctly failed the CLI's
+own `abcdefghijklmnopqrst`-shape validation), then `npx supabase gen types typescript --project-id
+<ref> > database.types.ts`. User pasted the generated file back into chat.
+
+Saved it as `src/lib/supabase/database.types.ts` and wired it into all three Supabase client
+constructors (`server.ts`, `admin.ts`, `client.ts`) as `createClient<Database>(...)`. This surfaced two
+real things, not a clean drop-in:
+
+1. **Every table resolved to `never`.** Root-caused (not guessed) by reading the actual installed
+   `@supabase/ssr@0.5.2`'s type declarations: its `createServerClient`/`createBrowserClient` generics
+   compute `SchemaName extends string & keyof Database` directly against the raw `Database` type,
+   never stripping the CLI's newer `__InternalSupabase` marker key first — so the schema lookup missed
+   every real table. `@supabase/supabase-js@2.108.1` (already installed) already handled this correctly;
+   `@supabase/ssr` just hadn't caught up. Fixed with a targeted `npm install @supabase/ssr@latest`
+   (0.5.2 → 0.12.4, same sandbox `xlsx`-CDN-swap workaround as every other dependency change in this
+   project, reverted after) — confirmed via its bundled CHANGELOG.md that nothing between those
+   versions changed the `getAll`/`setAll` cookie API this app already uses (the modern, non-deprecated
+   form), so this reads as a safe upgrade, not a risky one.
+2. **42 genuine type mismatches**, once real types made every `.from()`/`.insert()`/`.update()`/`.rpc()`
+   call actually checked against the live schema for the first time. Grouped into ~8 repeated root
+   causes rather than fixed as 42 independent problems: a shared `fetchAllRows()` pagination helper
+   whose declared callback type didn't structurally match a real Postgrest builder's `.then()` (fixed
+   once in `lib/pagination.ts`, resolved 16 call sites across the app); several `Record<string,
+   unknown>` dynamic-patch-object variables now properly typed via the generated `TablesUpdate`/
+   `TablesInsert` helpers instead of a bare untyped record; a handful of `as Account`/`as Account[]`
+   casts that no longer "sufficiently overlapped" because the DB's `activity_log: Json` is looser than
+   the app's real `{date, note, type?}[]` shape (fixed with `as unknown as X`, the documented TS
+   escape hatch for a value-level cast the type checker can't verify structurally); a few places
+   passing a plain fetched `string` where the app's own narrower literal type (`BankStatus`) was
+   expected, always backed by a real DB constraint TypeScript just can't see; a couple of genuine
+   `T | null` vs `T`-required mismatches, each verified against the surrounding code as a real, provable
+   runtime invariant (e.g. `up-next/actions.ts`'s queue swap only ever runs on rows a prior `.filter()`
+   already confirmed have a real position) before adding a narrowing `!`, using the exact same pattern
+   the file already used two lines above in one case. `lib/backup.ts`'s disaster-recovery restore code
+   (which reads an arbitrary uploaded backup file whose exact shape genuinely isn't knowable until
+   runtime) was deliberately left on the loose `Record<string, unknown>` `Row` type and cast at the
+   three boundary points where it touches the strict client, with a comment explaining why — forcing
+   this one file's dynamic-by-design data through the strict per-table types would fight the actual
+   architecture rather than fix a real gap.
+
+No blanket type-widening shortcut anywhere in this round — every one of the 42 fixes is either a real,
+provable narrowing (backed by reading the surrounding code, not assumed) or a proper generated-type
+usage, so the real safety net TYPE-01 exists to build is actually intact, not just silenced.
+
+**Verification**: `tsc --noEmit` went from ~319 lines of errors (mostly the `never`-everywhere symptom)
+to 0. `npm test` 100/100 (the pre-existing 84 plus a few added by other sessions working on this repo
+in parallel this same day — none from this round). `npm run build` clean. A DEMO_MODE smoke test across
+9 major pages (`/`, `/banks`, `/accounts`, `/road-trip`, `/admin`, `/fdic-sync`, `/holding-companies`,
+`/money`, `/settings`) came back all 200 with zero new server-log errors — DEMO_MODE bypasses real
+Supabase entirely, so this only confirms the app still compiles/renders correctly with the new types in
+place, not real database behavior; the client-typing changes themselves are 100% compile-time
+annotations with zero runtime effect, and the one genuinely runtime-affecting change (the `@supabase/
+ssr` version bump) was verified via its changelog rather than a live login this sandbox can't perform.
+`package.json`/`package-lock.json` were restored to their exact `xlsx`-CDN-pinned committed shape aside
+from the one real, intentional `@supabase/ssr` version bump, via the same surgical JSON-patch approach
+documented in this file's SEC-22 entry for exactly this recurring sandbox situation. `DEMO_MODE` was
+flipped to `true` for the smoke test and back to `false` before finishing, per the standing rule.
+**Going forward, this needs to be re-run after any future schema-changing migration** (the same manual
+step as running the migration itself) — it isn't a permanent one-time fix; noted in the tracker entry
+above and in `CLAUDE.md`.
 
 **Round 21 (the last batch — UX-19/UX-21/PERF-02/INT-11/GAP-02 reviewed and declined, GAP-03 fixed —
 99 of 100 findings now closed)** — Direct continuation of round 20, later session: user asked how many
