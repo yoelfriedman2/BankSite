@@ -127,6 +127,15 @@ export async function getDocumentUrl(storagePath: string): Promise<string> {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
+  // The one thing that can never lie: every real storage_path is minted by
+  // uploadDocument as `${user.id}/...`, so anything else literally cannot be
+  // this caller's own file. Reject before even touching the DB — this is what
+  // actually stops a forged metadata row (caller's own account_id, but a
+  // stolen storage_path) from working, since neither ownership check below
+  // ever re-derives or verifies storage_path against anything. Migration 0048
+  // enforces the identical prefix at the RLS layer too, for defense in depth.
+  if (!storagePath.startsWith(`${user.id}/`)) throw new Error("Not found");
+
   // Ownership check: RLS returns a row only if the current user owns this file.
   // Without this, the admin signed-URL call below would mint a URL for any path.
   const { data: owned } = await supabase
@@ -137,12 +146,11 @@ export async function getDocumentUrl(storagePath: string): Promise<string> {
   if (!owned) throw new Error("Not found");
 
   // Defense in depth: also verify the account this row claims to belong to is
-  // actually one the caller owns. account_documents' RLS policy only checks
-  // user_id, not account_id — a Server Action is directly callable, so a
-  // crafted request could otherwise insert a metadata row with a real
-  // storage_path but a stolen account_id, and the check above alone would
-  // still pass it. accounts' own RLS scopes this query to rows the caller
-  // really owns.
+  // actually one the caller owns. A crafted request could otherwise insert a
+  // metadata row with the caller's own account_id but a stolen storage_path —
+  // the prefix check above is what actually blocks that case, but this catches
+  // the account_id-mismatch shape too. accounts' own RLS scopes this query to
+  // rows the caller really owns.
   const { data: ownedAccount } = await supabase
     .from("accounts")
     .select("id")
@@ -173,6 +181,11 @@ export async function deleteDocument(docId: string): Promise<void> {
     .eq("id", docId)
     .maybeSingle();
   if (!row) throw new Error("Not found");
+
+  // Same forged-row defense as getDocumentUrl above: a metadata row's own
+  // fields are never proof its storage_path is really this caller's file, so
+  // check the prefix explicitly rather than trusting the row we just read.
+  if (!(row.storage_path as string).startsWith(`${user.id}/`)) throw new Error("Not found");
 
   // Remove the storage file BEFORE the metadata row, not after (DATA-17) — the
   // previous order deleted the row first, so a failed (unchecked) storage

@@ -836,6 +836,7 @@ export async function importBanks(
   const displayName = (profile?.display_name as string | null) ?? "Import";
 
   const accountInserts: TablesInsert<"accounts">[] = [];
+  const accountInsertLabels: string[] = [];
   const noteInserts: { cert: number; body: string }[] = [];
   let banksTouched = 0;
   let accountsUpdated = 0;
@@ -1016,6 +1017,10 @@ export async function importBanks(
           username: row.username,
           password: row.password,
         });
+        // Kept in lockstep with accountInserts so a batch-insert failure below
+        // can name every affected row individually, not just report "1 row
+        // didn't import" when it was actually every queued account.
+        accountInsertLabels.push(`${row.name}${row.holder ? ` (${row.holder})` : ""}`);
       }
     }
   }
@@ -1027,9 +1032,16 @@ export async function importBanks(
       .insert(accountInserts)
       .select("id, balance");
     // Every bank write from the loop above has already succeeded — a failure
-    // here (all new accounts inserted in one batch) must not discard that.
+    // here (all new accounts inserted in one batch, no per-row transaction)
+    // must not discard that, and must not be under-reported either: every
+    // queued account failed together, so push one rowErrors entry per row
+    // instead of a single combined message — otherwise the review screen's
+    // "N rows didn't import" count (which counts rowErrors entries) would
+    // read "1" even when, say, ten accounts actually failed to import.
     if (error) {
-      rowErrors.push(`Adding ${accountInserts.length} new account(s): ${friendlyDbError(error.message)}`);
+      for (const label of accountInsertLabels) {
+        rowErrors.push(`${label}: ${friendlyDbError(error.message)}`);
+      }
     } else {
       accountsInsertedCount = insertedAccounts?.length ?? 0;
     }

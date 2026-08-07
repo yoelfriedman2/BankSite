@@ -174,6 +174,51 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-08-07, second pass (the same independent review found 3 real gaps in the first round's fixes)**
+— The reviewer re-checked the 6 fixes below and correctly found the first round's fixes for 3 of them
+were each incomplete in a specific, concrete way. Re-verified all 3 against the actual code (not just
+taken on faith) before fixing:
+
+1. **High — migration 0048's new RLS check verified the metadata row's `account_id`, but never
+   `storage_path` itself.** A user's own `account_id` on a forged row would still pass every check
+   even if `storage_path` pointed at someone else's real file — the fix only closed the
+   account-mismatch shape, not the actual path-forgery shape the finding described. Since 0048 hadn't
+   been run yet, edited it in place (rather than layering a second migration on an unapplied one) to
+   also require `storage_path like (auth.uid()::text || '/%')` — the exact prefix `uploadDocument`
+   already mints every real path with, so this is still purely narrowing. `getDocumentUrl` and
+   `deleteDocument` (`accounts/documents.ts`) both gained the identical app-level prefix check ahead of
+   their existing DB reads, so the protection is real today even before the migration runs, not just
+   once it does. **Migration 0048 still not confirmed run — see TODO.md** (now includes this check too).
+2. **High — the full backup still silently dropped individual documents, and couldn't recover an
+   encrypted vault.** `api/export/full/route.ts`'s document loop discarded a failed
+   `.storage.download()` with a bare `continue` — no warning, unlike the table-read failures right
+   next to it. Now collects a `docWarnings` list (with the real error message) and folds it into the
+   same `0_INCOMPLETE_BACKUP_README.txt` used for table-read failures — moved that file's write to
+   after the document loop so it can cover both. Separately: the Accounts sheet already includes
+   Username/Password verbatim, which is ciphertext once vault encryption is on — but nothing in the
+   export carried `profiles.vault_salt`, without which that ciphertext can never be re-derived even
+   with the correct master password (PBKDF2 needs the exact salt it was derived with). Added a new
+   single-row "Profile & vault" sheet (display name, vault-enabled flag, vault salt, vault check) and a
+   new "Road trips" sheet (title/public/created/updated + the raw plan JSON — the admin weekly backup
+   already includes `road_trips`, the personal export just never had caught up). `SettingsForm.tsx`'s
+   description updated again to actually list both new inclusions.
+3. **Medium — a failed bulk account-insert during import still reported only 1 failure, even when
+   every queued account failed together.** `importBanks`'s account insert is one batch statement (no
+   per-row transaction) — a failure there fails every account in it, but the code only ever pushed one
+   combined `rowErrors` message, so the review screen's "N rows didn't import" (which counts
+   `rowErrors` entries) understated the real count for any batch bigger than 1. Added a parallel
+   `accountInsertLabels` array kept in lockstep with `accountInserts`, so a batch failure now pushes
+   one labeled `rowErrors` entry per row — the count is accurate now, matching what actually failed.
+   Bank writes from the same import remaining committed is unchanged and intentional (same "report
+   what actually happened, not full atomicity" scope as the first round's fix) — this fixes the
+   specific miscount, not the underlying non-atomicity, which would need a Postgres RPC to fully close.
+
+**Verification**: `tsc --noEmit`, `npm test` (100/100), `npm run build` all clean. All three fixes are
+real-Supabase-only paths (RLS, export pagination/zip contents, multi-row import error handling) — same
+accepted, documented limitation as the first round for this category of fix — verified by reading each
+changed branch against the original code and confirming the change is additive with no alteration to
+the already-correct success path.
+
 **2026-08-07 (independent-review fixes: document-auth bypass, backup honesty, import atomicity, and
 three smaller UX/data gaps)** — A different AI reviewed the codebase (outside the 100-item
 `EXTERNAL-AUDIT-TRACKER.md` process — the user pasted its 6 findings, 2 High/4 Medium) and I
