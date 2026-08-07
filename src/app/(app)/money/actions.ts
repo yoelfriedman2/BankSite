@@ -24,6 +24,15 @@ export type SweepAccountOption = {
   balance: number | null;
 };
 
+export type OutstandingBorrowedFund = {
+  id: string;
+  sourceName: string;
+  reason: string;
+  amount: number;
+  borrowedAt: string;
+  note: string | null;
+};
+
 export type BalanceAsOfRow = {
   accountId: string;
   holder: string | null;
@@ -114,6 +123,101 @@ export async function getOutstandingSweeps(): Promise<OutstandingSweep[]> {
     holder: acctMap.get(s.account_id as string)?.holder ?? null,
     bankName: acctMap.get(s.account_id as string)?.bankName ?? "—",
   }));
+}
+
+/** Money borrowed from a non-bank source (a person, a line of credit, etc.)
+ *  that's still outstanding. Same "out, needs to come back" shape as
+ *  getOutstandingSweeps, but there's no account/balance behind these rows —
+ *  see migration 0049. */
+export async function getOutstandingBorrowedFunds(): Promise<OutstandingBorrowedFund[]> {
+  if (DEMO_MODE) return [];
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data } = await supabase
+    .from("borrowed_funds")
+    .select("id, source_name, reason, amount, borrowed_at, note")
+    .is("returned_at", null)
+    .order("borrowed_at", { ascending: false });
+
+  return (data ?? []).map((b) => ({
+    id: b.id as string,
+    sourceName: b.source_name as string,
+    reason: b.reason as string,
+    amount: Number(b.amount),
+    borrowedAt: b.borrowed_at as string,
+    note: (b.note as string | null) ?? null,
+  }));
+}
+
+/** Record money borrowed from a non-bank source under a reason (same
+ *  free-text convention as account sweeps, so a borrowed amount can be
+ *  grouped alongside a sweep raised for the same event). */
+export async function addBorrowedFund(fields: {
+  sourceName: string;
+  reason: string;
+  amount: number;
+  borrowedAt: string;
+  note?: string;
+}): Promise<{ error?: string }> {
+  const sourceName = fields.sourceName.trim();
+  const reason = fields.reason.trim();
+  if (!sourceName) return { error: "Add who or where this was borrowed from." };
+  if (!reason) return { error: "Add a reason for the move." };
+  if (!(fields.amount > 0)) return { error: "Enter an amount greater than $0." };
+
+  if (DEMO_MODE) {
+    revalidate();
+    return {};
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { error } = await supabase.from("borrowed_funds").insert({
+    user_id: user.id,
+    source_name: sourceName,
+    reason,
+    amount: fields.amount,
+    borrowed_at: fields.borrowedAt,
+    note: fields.note?.trim() ? fields.note.trim() : null,
+  });
+  if (error) return { error: friendlyDbError(error.message) };
+
+  revalidate();
+  return {};
+}
+
+/** Mark a borrowed amount repaid — no balance to touch, just clears it from
+ *  the outstanding list, same as returnSweep clears a sweep. */
+export async function returnBorrowedFund(id: string): Promise<{ error?: string }> {
+  if (DEMO_MODE) {
+    revalidate();
+    return {};
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  // Server-side "today" — no single user timezone to reference here, same
+  // convention as every other server-stamped date in this app (see lib/date.ts).
+  const { error } = await supabase
+    .from("borrowed_funds")
+    .update({ returned_at: new Date().toISOString().slice(0, 10) })
+    .eq("id", id)
+    .is("returned_at", null);
+  if (error) return { error: friendlyDbError(error.message) };
+
+  revalidate();
+  return {};
 }
 
 export type SweepWarning = { count: number; total: number };

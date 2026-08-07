@@ -60,6 +60,8 @@ function toValues(
         ? String(a.dormancy_months_override)
         : "",
     cd_maturity_date: a?.cd_maturity_date ?? "",
+    cd_term_months: a?.cd_term_months != null ? String(a.cd_term_months) : "",
+    cd_auto_renew: a?.cd_auto_renew ?? null,
     date_opened: a?.date_opened ?? "",
     notes: a?.notes ?? "",
     online_url: a?.online_url ?? "",
@@ -676,15 +678,60 @@ export function AccountModal({
               )}
 
               {showCd && (
-                <div>
-                  <label className={`${labelCls} ${cdColor}`} htmlFor="cd_maturity_date">CD maturity date</label>
-                  <DateInput
-                    id="cd_maturity_date"
-                    className={inputCls}
-                    value={values.cd_maturity_date}
-                    onChange={(v) => set("cd_maturity_date", v)}
-                  />
-                </div>
+                <>
+                  <div>
+                    <label className={`${labelCls} ${cdColor}`} htmlFor="cd_maturity_date">CD maturity date</label>
+                    <DateInput
+                      id="cd_maturity_date"
+                      className={inputCls}
+                      value={values.cd_maturity_date}
+                      onChange={(v) => set("cd_maturity_date", v)}
+                    />
+                  </div>
+                  <div>
+                    <span className={labelCls}>Term &amp; renewal (optional)</span>
+                    <div className={rowCls}>
+                      <div className={dayCls}>
+                        <input
+                          aria-label="CD term, in months"
+                          type="number"
+                          min="1"
+                          placeholder="Term (mo)"
+                          className={inputCls}
+                          value={values.cd_term_months}
+                          onChange={(e) => set("cd_term_months", e.target.value)}
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <select
+                          aria-label="Auto-renews at maturity"
+                          className={inputCls}
+                          value={
+                            values.cd_auto_renew === true
+                              ? "true"
+                              : values.cd_auto_renew === false
+                                ? "false"
+                                : ""
+                          }
+                          onChange={(e) =>
+                            set(
+                              "cd_auto_renew",
+                              e.target.value === "" ? null : e.target.value === "true",
+                            )
+                          }
+                        >
+                          <option value="">Not set</option>
+                          <option value="true">Auto-renews</option>
+                          <option value="false">Does not auto-renew</option>
+                        </select>
+                      </div>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-600">
+                      Whether it auto-renews changes how the maturity alert reads as the date
+                      approaches.
+                    </p>
+                  </div>
+                </>
               )}
             </div>
           </Box>

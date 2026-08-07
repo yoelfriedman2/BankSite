@@ -27,6 +27,8 @@ function makeAccount(overrides: Partial<Account> = {}): Account {
     last_activity_date: null,
     dormancy_months_override: null,
     cd_maturity_date: null,
+    cd_term_months: null,
+    cd_auto_renew: null,
     date_opened: "2020-01-01",
     notes: null,
     online_url: null,
@@ -218,5 +220,60 @@ describe("getAttentionReasons / needsAttention", () => {
     const cd = makeAccount({ account_type: "cd", cd_maturity_date: "2026-01-15", balance: 5000 });
     const reasons = getAttentionReasons(cd, 12, now);
     expect(reasons.some((r) => r.text.includes("matures"))).toBe(true);
+  });
+
+  it("cd_auto_renew unset keeps the original generic wording/severity", () => {
+    const cd = makeAccount({ account_type: "cd", cd_maturity_date: "2026-01-15", balance: 5000 });
+    const [reason] = getAttentionReasons(cd, 12, now);
+    expect(reason.level).toBe("orange");
+    expect(reason.text).toBe("CD matures in 14 days");
+  });
+
+  it("cd_auto_renew true softens the wording and stays orange even once matured", () => {
+    const upcoming = makeAccount({
+      account_type: "cd",
+      cd_maturity_date: "2026-01-15",
+      cd_auto_renew: true,
+      balance: 5000,
+    });
+    expect(getAttentionReasons(upcoming, 12, now)[0]).toEqual({
+      level: "orange",
+      text: "CD matures in 14 days — renews automatically if you don't act",
+    });
+
+    const matured = makeAccount({
+      account_type: "cd",
+      cd_maturity_date: "2025-12-20",
+      cd_auto_renew: true,
+      balance: 5000,
+    });
+    expect(getAttentionReasons(matured, 12, now)[0]).toEqual({
+      level: "orange",
+      text: "CD matured and renewed automatically — check the new rate",
+    });
+  });
+
+  it("cd_auto_renew false escalates to red once actually matured", () => {
+    const upcoming = makeAccount({
+      account_type: "cd",
+      cd_maturity_date: "2026-01-15",
+      cd_auto_renew: false,
+      balance: 5000,
+    });
+    expect(getAttentionReasons(upcoming, 12, now)[0]).toEqual({
+      level: "orange",
+      text: "CD matures in 14 days — you'll need to act, it does not auto-renew",
+    });
+
+    const matured = makeAccount({
+      account_type: "cd",
+      cd_maturity_date: "2025-12-20",
+      cd_auto_renew: false,
+      balance: 5000,
+    });
+    expect(getAttentionReasons(matured, 12, now)[0]).toEqual({
+      level: "red",
+      text: "CD has matured and needs your action — it does not auto-renew",
+    });
   });
 });

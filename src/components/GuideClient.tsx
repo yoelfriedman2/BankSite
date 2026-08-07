@@ -162,6 +162,7 @@ const TOPICS: Topic[] = [
       "Turn any of these alerts off, or change your minimum balance, in Settings → Alerts & emails.",
       "When you log an activity entry — from the account editor, or the quick log button on the Accounts list — you can optionally tag what it was: online login, transaction, a check sent, a letter sent, a phone call. Never required.",
       "Every account on the Accounts list that needs attention shows why, right next to it — low balance, no activity in months, a CD maturing soon.",
+      "A CD's editor has an optional term length and an auto-renew setting. Once set, the maturity alert reads differently depending on it — \"renews automatically, review the new rate\" if it does, or a more urgent \"needs your action\" once matured if it doesn't.",
     ],
   },
   {
@@ -173,11 +174,14 @@ const TOPICS: Topic[] = [
       "See what's still out, grouped by reason",
       "Check it back in when it's returned",
       "Real balances update automatically",
+      "Also tracks money borrowed from a person or other outside source",
     ],
     tips: [
       "When you move money out, it's deducted from the account and the new, lower balance is kept — not just noted.",
       "Returning it adds it back to the balance.",
       "Every move and return is timestamped in the account's balance history.",
+      "Borrowed money — from a person, a line of credit, anything that isn't one of your tracked accounts — has its own \"Borrowed money\" section on the same page. It doesn't touch any account balance, just tracks who it's from, how much, and a \"Repaid\" checkmark for when it's back.",
+      "Give a sweep and a borrowed amount the same reason (e.g. \"Winchester Savings IPO\") to see the full picture of what you raised for one event.",
     ],
   },
   {

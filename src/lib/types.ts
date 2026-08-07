@@ -105,6 +105,8 @@ export interface Account {
   last_activity_date: string | null;
   dormancy_months_override: number | null;
   cd_maturity_date: string | null;
+  cd_term_months: number | null; // CD's original term, informational (migration 0048)
+  cd_auto_renew: boolean | null; // null = not specified; migration 0048
   date_opened: string | null;
   notes: string | null;
   online_url: string | null;
@@ -137,6 +139,22 @@ export interface AccountSweep {
   returned_at: string | null;
   note: string | null;
   created_at: string;
+}
+
+/** Money borrowed from a non-bank source (a person, a line of credit, etc.) to
+ *  help fund a subscription/IPO — same "out, needs to come back" bookkeeping
+ *  as AccountSweep, but with no account/balance behind it (migration 0049). */
+export interface BorrowedFund {
+  id: string;
+  user_id: string;
+  source_name: string; // who/what it's from, e.g. "Dad", "HELOC"
+  reason: string; // free text, shares the same convention as AccountSweep.reason
+  amount: number;
+  borrowed_at: string;
+  returned_at: string | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 /** A dated balance point for an account. Balance as of date D = latest row with as_of_date <= D. */

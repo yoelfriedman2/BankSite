@@ -258,14 +258,25 @@ export function AccountViewModal({
             <BoxHeader title="Dates" />
             <Frow label="Date opened" value={formatDate(account.date_opened)} />
             {account.account_type === "cd" ? (
-              <Frow
-                label="CD maturity"
-                value={
-                  account.cd_maturity_date ? (
-                    <span className={cdColor}>{formatDate(account.cd_maturity_date)}</span>
-                  ) : null
-                }
-              />
+              <>
+                <Frow
+                  label="CD maturity"
+                  value={
+                    account.cd_maturity_date ? (
+                      <span className={cdColor}>{formatDate(account.cd_maturity_date)}</span>
+                    ) : null
+                  }
+                />
+                {account.cd_term_months != null && (
+                  <Frow label="Term" value={`${account.cd_term_months} months`} />
+                )}
+                {account.cd_auto_renew != null && (
+                  <Frow
+                    label="At maturity"
+                    value={account.cd_auto_renew ? "Auto-renews" : "Does not auto-renew"}
+                  />
+                )}
+              </>
             ) : (
               <Frow
                 label="Last activity"

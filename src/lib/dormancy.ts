@@ -168,10 +168,33 @@ export function getAttentionReasons(
   }
   if (prefs.alertCdMaturity && isCdMaturingSoon(account, 30, now) && account.cd_maturity_date) {
     const days = daysUntil(account.cd_maturity_date, now);
-    reasons.push({
-      level: "orange",
-      text: days >= 0 ? `CD matures in ${days} days` : "CD has matured",
-    });
+    const matured = days < 0;
+    // cd_auto_renew (migration 0048) lets this distinguish "will renew on its
+    // own, just review the new rate" from "needs your action or the money
+    // sits idle" — the latter is bumped to red once the CD has actually
+    // matured, since an idle non-renewing CD earning nothing is more urgent
+    // than one still ticking down. Neither field set (the pre-0048 default)
+    // keeps the original generic wording/severity unchanged.
+    if (account.cd_auto_renew === true) {
+      reasons.push({
+        level: "orange",
+        text: matured
+          ? "CD matured and renewed automatically — check the new rate"
+          : `CD matures in ${days} days — renews automatically if you don't act`,
+      });
+    } else if (account.cd_auto_renew === false) {
+      reasons.push({
+        level: matured ? "red" : "orange",
+        text: matured
+          ? "CD has matured and needs your action — it does not auto-renew"
+          : `CD matures in ${days} days — you'll need to act, it does not auto-renew`,
+      });
+    } else {
+      reasons.push({
+        level: "orange",
+        text: matured ? "CD has matured" : `CD matures in ${days} days`,
+      });
+    }
   }
   if (prefs.alertLowBalance && isBelowMinBalance(account, prefs.minBalance)) {
     reasons.push({

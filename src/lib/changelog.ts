@@ -21,6 +21,23 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-08-07",
+    title: "Track money borrowed from outside your accounts",
+    items: [
+      "Money moved now has a second section for cash borrowed from a person or any other source outside your tracked accounts — enter who it's from, the amount, and a note, then check it off as \"Repaid\" once it's back.",
+      "It doesn't touch any account balance, so it's purely a reminder of what's owed and to whom.",
+      "Give it the same reason as a sweep from the same event (e.g. \"Winchester Savings IPO\") to see everything raised for it in one place.",
+    ],
+  },
+  {
+    date: "2026-08-07",
+    title: "CD term length and auto-renew setting",
+    items: [
+      "CDs can now record their term length and whether they auto-renew at maturity.",
+      "Once set, the maturity alert reads differently — \"renews automatically, just check the new rate\" if it does, or a more urgent heads-up once it's matured and needs your action if it doesn't.",
+    ],
+  },
+  {
     date: "2026-08-05",
     title: "Share a routing number straight from the account editor",
     items: [

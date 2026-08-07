@@ -174,6 +174,78 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-08-07 (borrowed money tracking + CD term/auto-renew, plus a real reminder-cron bug fix)** — Came
+out of a "what would make this app better" conversation. Three small, independent pieces:
+
+- **New `borrowed_funds` table** (migration **0049_borrowed_funds.sql**, private per-user, RLS scoped
+  to `user_id = auth.uid()` — same shape as `road_trips`/migration 0032). Answers a real gap: Money
+  moved only ever tracked cash pulled from *tracked accounts*; there was nowhere to record money
+  borrowed from a person or any other outside source for the same purpose. New "Borrowed money" section
+  on `/money` (`MoneyClient.tsx`) — source name, reason, amount, date, optional note, a "Repaid"
+  checkmark. Doesn't touch any account balance (there's no real account behind it) — purely a
+  reminder of what's owed and to whom. Deliberately reuses the same free-text `reason` field/
+  convention as `account_sweeps`, so a sweep and a borrowed amount raised for the same event (e.g.
+  "Winchester Savings IPO") share datalist suggestions and both roll into a new "Total to settle"
+  summary stat. New actions in `money/actions.ts`: `getOutstandingBorrowedFunds`, `addBorrowedFund`,
+  `returnBorrowedFund` — same DEMO_MODE-is-a-pure-no-op treatment as the existing sweep actions
+  (nothing persists in demo mode, matching the already-accepted limitation for this whole page).
+  **Explicitly NOT built this round** (flagged, not decided against): a full "capital-needed planner"
+  (set a target, see which accounts/sources to pull from) — this is the tracking primitive it would be
+  built on top of, not the planner itself.
+- **CD term length + auto-renew flag** (migration **0048_cd_term_and_auto_renew.sql**,
+  `accounts.cd_term_months`/`cd_auto_renew`, both nullable). `cd_maturity_date` already existed and
+  already drove the maturity alert — this only adds the two pieces of context needed to tell "renews
+  on its own, just check the new rate" apart from "needs your action or the money sits idle."
+  `getAttentionReasons()` (`lib/dormancy.ts`) now varies both the wording and, in one case, the
+  severity: `cd_auto_renew: true` stays orange even once matured ("renewed automatically — check the
+  new rate"); `cd_auto_renew: false` **escalates to red once actually matured** (an idle non-renewing
+  CD earning nothing is more urgent than one still ticking down) with "needs your action — it does
+  not auto-renew"; unset keeps the original generic wording/severity unchanged, so an existing CD with
+  neither field touched looks exactly as it did before this shipped.
+  **A real bug caught before it shipped, not after**: `buildPatch` in `accounts/actions.ts` always
+  returns an explicit value for these two fields (`null` when unset, not `undefined`) — unlike most
+  migration-gated Account fields, which are read via `select("*")` and degrade for free when a column
+  is missing. Writing an explicit value into a genuinely-missing column fails the *whole* SQL
+  statement, not just those two fields — so without a fix, saving **any** account (not just CDs) would
+  have hard-failed on every single edit until this migration is run, a much bigger blast radius than
+  the feature itself. Fixed with a real fallback in `upsertAccount` (`isMissingCdColumnsError` + a
+  one-time retry with just those two fields stripped) on both the insert and update write paths — same
+  "can never regress below what already worked" shape as the existing `update_account_balance` RPC
+  fallback a few lines above it in the same function. **Standing lesson for next time a field is added
+  to `buildPatch`'s always-included return value**: check whether the value can be explicitly `null`
+  (not just omitted) before assuming a missing column degrades gracefully — it only does for reads.
+- **Real bug fix, no migration**: the daily reminder cron (`api/cron/reminders/route.ts`) computed
+  "months inactive" with its own inline calendar-month-diff, while the app's canonical `monthsSince()`
+  (`lib/dormancy.ts`, already used everywhere else — the in-app dormancy coloring, the Needs-attention
+  list) adjusts for day-of-month. The two could disagree by up to a month near a boundary, so the
+  cron's inactivity-reminder email and the in-app list could report a different figure for the same
+  account. Cron now imports and uses `monthsSince()` directly instead of its own copy.
+  **Deliberately NOT touched, per explicit user decision**: whether the inactivity-reminder email
+  should be unified with the full in-app "Needs attention" taxonomy (low balance, CD maturity,
+  no-activity-ever) — that's `IDEAS.md`'s already-backlogged "Weekly digest email," a real product
+  decision, not a bug. The email stays its own deliberately-scoped, separately-configured feature
+  (own threshold list in Settings → Alerts & emails), exactly as it was designed.
+
+**Verification**: `tsc --noEmit`, `npm run build` (temp `xlsx` CDN→npm swap, restored after — confirmed
+via `git diff` showing nothing), and `npm test` (**103 passed**, +3 new regression tests for the
+CD-wording/severity branches) all clean. Live DEMO_MODE CDP pass (`scratchpad/cdp.mjs`, reused): the
+Borrowed money section's empty state, summary stats, and add-dialog validation (disabled → enabled →
+closes cleanly on a valid submit, no console errors); the CD editor's term/auto-renew fields reflecting
+the seeded values (`12` months, `false`) and round-tripping through a real save (flipped to `true`,
+saved, confirmed the in-app attention text switched from "you'll need to act, it does not auto-renew"
+to "renews automatically if you don't act" on a **fresh** dev-server restart afterward, confirming the
+change persisted through the DEMO_MODE in-memory store rather than the test just re-reading its own
+mutated in-page state); zero console errors throughout; no 375px overflow on `/money` or `/accounts`.
+Demo seed's one CD account (`Passumpsic Savings Bank`) now carries `cd_term_months: 12`,
+`cd_auto_renew: false` specifically so the "you'll need to act" (not the generic pre-0048) wording is
+what's click-testable by default. Not independently click-tested: the borrowed-funds add/repay round
+trip actually persisting a row — DEMO_MODE's write actions are pure no-ops by design (matching the
+existing sweep actions), so that can only be verified against a real Supabase project once migration
+0049 is run. `DEMO_MODE` was flipped to `true` via a temporary `.env.local` (none existed in this
+fresh environment) and removed entirely before finishing, per the standing rule. Changelog and Guide
+entries added for both features (genuinely new, user-visible capabilities) — the cron fix is a bug fix
+with no new UI, so no entry, per the standing features-only policy.
+
 **2026-08-05 (push an account's routing number up to the bank, one click)** — Direct follow-up to the
 0046 routing-number work: once that shipped, the natural next question was "what if the bank has
 nothing on file and someone already knows the number?" — until now, entering it made it apply to that

@@ -10,6 +10,7 @@ import {
 import { buildBackupZip, saveBackupToStorage } from "@/lib/backup";
 import { isMonthlyFeeDue } from "@/lib/monthlyFee";
 import { isInterestAccrualDue, monthlyInterestAmount } from "@/lib/interestAccrual";
+import { monthsSince } from "@/lib/dormancy";
 
 // This route runs unattended (no signed-in user, no toast to show) — a
 // swallowed failure here previously only ever reached this app's own request
@@ -101,10 +102,12 @@ export async function GET(req: NextRequest) {
           : 0;
         if (remindedAt && today.getTime() - remindedAt < COOLDOWN_MS) continue;
 
-        const lastActivity = new Date(a.last_activity_date!);
-        const monthsInactive =
-          (today.getFullYear() - lastActivity.getFullYear()) * 12 +
-          (today.getMonth() - lastActivity.getMonth());
+        // Same "whole months elapsed" definition the app's own dormancy
+        // coloring/needs-attention list uses (day-of-month aware) — the old
+        // inline calendar-month-diff here could disagree with it by up to a
+        // month near a month boundary, so this cron and the in-app list could
+        // report a different "months inactive" for the same account.
+        const monthsInactive = monthsSince(a.last_activity_date!, today);
         for (const threshold of months) {
           if (monthsInactive >= threshold) {
             alerts.push(

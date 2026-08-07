@@ -31,6 +31,8 @@ export type AccountFormValues = {
   last_activity_date: string;
   dormancy_months_override: string;
   cd_maturity_date: string;
+  cd_term_months: string;
+  cd_auto_renew: boolean | null;
   date_opened: string;
   notes: string;
   online_url: string;
@@ -59,6 +61,17 @@ function integer(v: string): number | null {
   if (t === "") return null;
   const n = parseInt(t, 10);
   return Number.isFinite(n) ? n : null;
+}
+
+/** buildPatch always includes cd_term_months/cd_auto_renew (migration 0048)
+ *  as an explicit value (often `null`, not `undefined`), unlike a plain
+ *  `select("*")` read — so unlike most migration-gated fields in this app,
+ *  a write into these two columns before the migration runs doesn't just
+ *  silently no-op, it fails the WHOLE account save. Narrow on purpose
+ *  (matches Postgres's own "column ... does not exist" wording) so this only
+ *  ever catches that specific case, never a genuine unrelated write failure. */
+function isMissingCdColumnsError(message: string): boolean {
+  return /column .*(cd_term_months|cd_auto_renew).* does not exist/i.test(message);
 }
 
 /** Requires both fee amount and day together — a lone value either way is
@@ -102,6 +115,8 @@ function buildPatch(
     last_activity_date: lastActivity,
     dormancy_months_override: integer(values.dormancy_months_override),
     cd_maturity_date: text(values.cd_maturity_date),
+    cd_term_months: integer(values.cd_term_months),
+    cd_auto_renew: values.cd_auto_renew,
     date_opened: text(values.date_opened),
     notes: text(values.notes),
     online_url: text(values.online_url),
@@ -135,6 +150,8 @@ function fieldsFromAccount(
     last_activity_date: a.last_activity_date,
     dormancy_months_override: a.dormancy_months_override,
     cd_maturity_date: a.cd_maturity_date,
+    cd_term_months: a.cd_term_months,
+    cd_auto_renew: a.cd_auto_renew,
     date_opened: a.date_opened,
     notes: a.notes,
     online_url: a.online_url,
@@ -275,7 +292,19 @@ export async function upsertAccount(
       .from("accounts")
       .update(dbPatch)
       .eq("id", values.id);
-    if (error) return { error: friendlyDbError(error.message) };
+    if (error) {
+      if (isMissingCdColumnsError(error.message)) {
+        // Migration 0048 not run yet — retry without the two new CD fields
+        // so the rest of this save still goes through, instead of failing
+        // the whole account edit over two optional columns that may not
+        // even apply to this account.
+        const { cd_term_months: _cdTerm, cd_auto_renew: _cdRenew, ...rest } = dbPatch;
+        const { error: retryErr } = await supabase.from("accounts").update(rest).eq("id", values.id);
+        if (retryErr) return { error: friendlyDbError(retryErr.message) };
+      } else {
+        return { error: friendlyDbError(error.message) };
+      }
+    }
 
     if (balanceChanging) {
       const { error: rpcErr } = await supabase.rpc("update_account_balance", {
@@ -316,17 +345,23 @@ export async function upsertAccount(
       patch.monthly_fee != null && patch.monthly_fee_day != null
         ? skipCurrentMonthIfPast(patch.monthly_fee_day, now)
         : null;
-    const { data: created, error } = await supabase
+    const insertPayload = {
+      ...patch,
+      monthly_fee_last_charged_on: monthlyFeeLastChargedOn,
+      interest_last_accrued_on: stampOnRateChange(patch.interest_rate, now),
+      user_id: user.id,
+      bank_id: values.bank_id,
+    };
+    let { data: created, error } = await supabase
       .from("accounts")
-      .insert({
-        ...patch,
-        monthly_fee_last_charged_on: monthlyFeeLastChargedOn,
-        interest_last_accrued_on: stampOnRateChange(patch.interest_rate, now),
-        user_id: user.id,
-        bank_id: values.bank_id,
-      })
+      .insert(insertPayload)
       .select("id")
       .single();
+    if (error && isMissingCdColumnsError(error.message)) {
+      // Same migration-0048-not-run-yet fallback as the update branch above.
+      const { cd_term_months: _cdTerm, cd_auto_renew: _cdRenew, ...rest } = insertPayload;
+      ({ data: created, error } = await supabase.from("accounts").insert(rest).select("id").single());
+    }
     if (error || !created) return { error: friendlyDbError(error?.message) ?? "Could not add the account." };
 
     if (patch.balance != null) {

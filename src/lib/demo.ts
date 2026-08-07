@@ -128,6 +128,8 @@ function blankAccount(): AccountFields {
     last_activity_date: null,
     dormancy_months_override: null,
     cd_maturity_date: null,
+    cd_term_months: null,
+    cd_auto_renew: null,
     date_opened: null,
     notes: null,
     online_url: null,
@@ -321,6 +323,8 @@ function createInitialStore(): DemoStore {
       account_number: "CD-770042",
       balance: 10000,
       cd_maturity_date: daysFromNow(18), // CD maturing soon
+      cd_term_months: 12,
+      cd_auto_renew: false, // exercises the "you'll need to act" wording
     }),
     makeAccount(banks[3].id, {
       ...blankAccount(),
@@ -802,6 +806,8 @@ export function importDemoRows(rows: ImportRow[]): {
           last_activity_date: row.last_activity_date,
           dormancy_months_override: null,
           cd_maturity_date: row.cd_maturity_date,
+          cd_term_months: null,
+          cd_auto_renew: null,
           date_opened: null,
           notes: row.account_notes,
           online_url: row.online_url,
