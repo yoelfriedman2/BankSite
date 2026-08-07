@@ -39,6 +39,7 @@ export async function GET() {
     { rows: reminders, error: remindersErr },
     { rows: campaigns, error: campaignsErr },
     { rows: campaignItems, error: campaignItemsErr },
+    { rows: balanceHistory, error: historyErr },
   ] = await Promise.all([
     fetchAllRows<Bank>((from, to) =>
       supabase.from("banks").select("*").is("deleted_at", null).order("name", { ascending: true }).range(from, to),
@@ -60,7 +61,16 @@ export async function GET() {
       supabase.from("address_campaigns").select("*").order("created_at", { ascending: false }).range(from, to),
     ),
     fetchAllRows<Record<string, unknown>>((from, to) => supabase.from("address_campaign_items").select("*").range(from, to)),
+    fetchAllRows<Record<string, unknown>>((from, to) =>
+      supabase.from("account_balance_history").select("*").order("as_of_date", { ascending: false }).range(from, to),
+    ),
   ]);
+  // A failed table read here used to only ever reach a server log nobody
+  // downloading this file would ever see — the zip still built and downloaded
+  // looking completely normal either way. Collected instead, and written
+  // directly into the zip itself (see below) so an incomplete backup can
+  // never look identical to a complete one.
+  const readWarnings: string[] = [];
   for (const [table, err] of [
     ["banks", banksErr],
     ["accounts", acctsErr],
@@ -70,8 +80,12 @@ export async function GET() {
     ["reminders", remindersErr],
     ["address_campaigns", campaignsErr],
     ["address_campaign_items", campaignItemsErr],
+    ["account_balance_history", historyErr],
   ] as const) {
-    if (err) console.error(`[export/full] ${table} read failed partway through for user ${user.id}:`, err);
+    if (err) {
+      console.error(`[export/full] ${table} read failed partway through for user ${user.id}:`, err);
+      readWarnings.push(`${table}: ${err}`);
+    }
   }
 
   const bankList = (banks ?? []) as Bank[];
@@ -149,11 +163,45 @@ export async function GET() {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(addressRows), "Address changes");
   }
 
+  const historyRows = (balanceHistory ?? []).map((h) => {
+    const acct = acctById.get(h.account_id as string);
+    return {
+      Bank: acct ? bankNameById.get(acct.bank_id) ?? "" : "",
+      Holder: acct?.holder ?? "",
+      "As of": h.as_of_date,
+      Balance: h.balance,
+      Change: h.change_amount ?? "",
+      Reason: h.reason ?? "",
+    };
+  });
+  if (historyRows.length) {
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(historyRows), "Balance history");
+  }
+
   const xlsxBuf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
 
   const date = new Date().toISOString().slice(0, 10);
   const zip = new JSZip();
   zip.file(`bank-tracker-${date}.xlsx`, xlsxBuf);
+
+  // Named to sort first and stand out — if any table failed to fully read,
+  // that has to be visible inside the zip itself, not just a server log the
+  // person downloading this can never see. A backup that silently looks
+  // complete when it isn't is worse than one that's honest about the gap.
+  if (readWarnings.length) {
+    zip.file(
+      "0_INCOMPLETE_BACKUP_README.txt",
+      [
+        `This backup, built ${date}, is INCOMPLETE.`,
+        "",
+        "The following couldn't be fully read and may be missing rows:",
+        ...readWarnings.map((w) => `  - ${w}`),
+        "",
+        "Everything else in this zip finished normally. Try downloading again —",
+        "if the problem persists, let the app owner know.",
+      ].join("\n"),
+    );
+  }
 
   // Documents — download each from storage (admin bypasses storage RLS, but we
   // only ever iterate the current user's own document rows).

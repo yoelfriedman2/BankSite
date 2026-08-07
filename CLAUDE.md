@@ -174,6 +174,74 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-08-07 (independent-review fixes: document-auth bypass, backup honesty, import atomicity, and
+three smaller UX/data gaps)** — A different AI reviewed the codebase (outside the 100-item
+`EXTERNAL-AUDIT-TRACKER.md` process — the user pasted its 6 findings, 2 High/4 Medium) and I
+independently re-verified each against the actual current code before fixing any of them (all 6
+confirmed real). Fixed all 6 on "ya fix":
+
+1. **High — a signed-in user could read another user's document by guessing/enumerating its id.**
+   `getDocumentUrl` (`accounts/documents.ts`) checked `account_documents.user_id = auth.uid()` but
+   never verified the *account* the document claims to belong to is actually still owned by that same
+   user — a stale or crafted `account_documents.account_id` (e.g. left over after an account changed
+   hands some other way) could serve a signed URL for someone else's statement. Fixed at both layers:
+   the action now does a second ownership check against `accounts` before generating the URL, and new
+   migration **`0048_account_documents_ownership_rls.sql`** tightens the table's RLS policy itself to
+   require the same join — defense in depth, not just an app-level check, per this project's own
+   Server-Actions-are-directly-callable lesson (SEC-01/INT-01). **Migration not yet run — see TODO.md.**
+2. **High — the personal "Full backup" export could silently drop rows on a failed table read with no
+   indication anywhere.** `api/export/full/route.ts`'s per-table error checks only ever reached
+   `console.error` (a log nobody downloading the file would see) — the zip looked identical whether it
+   was complete or not. Now collects any failed table into a `readWarnings` list and, if non-empty,
+   writes a `0_INCOMPLETE_BACKUP_README.txt` into the zip itself naming exactly which table(s) failed
+   — a backup that's missing data now says so, instead of silently passing for complete. Also folded in
+   a real gap found while in this file: `account_balance_history` (the balance-history/reason-code
+   trail) was never included in the personal export at all, despite being in the *admin* weekly backup
+   — added as its own paginated fetch + "Balance history" sheet. `SettingsForm.tsx`'s export
+   description updated to actually list what's included instead of an overclaiming "everything."
+3. **Medium — spreadsheet import silently returned zero results for every row after the first failure,
+   even for accounts/banks that had already been successfully imported.** `importBanks`
+   (`banks/actions.ts`) had four separate write points (bank update, bank insert, per-row account
+   update, the bulk account insert) that each `return`ed immediately on their own error — so, e.g., one
+   row's account-number collision aborted the whole import and reported it as a total failure, even
+   though 40 other rows had already committed. Changed all four to collect a `rowErrors` message and
+   `continue`, so the import always processes every row it can. `ImportDialog.tsx`'s done screen now
+   shows a "N rows didn't import" amber box listing exactly which ones and why, distinct from the
+   success summary. Also fixed a smaller bug found in the same function: a freshly-inserted bank's
+   in-memory status cache was hardcoded to `"open"` regardless of what was actually inserted, which
+   could let a later row in the same import silently skip a legitimate status change. **Doesn't rework
+   this into one true atomic transaction** (that needs a Postgres RPC, a bigger change) — this is the
+   "report what actually happened instead of an all-or-nothing lie" fix, not full atomicity.
+4. **Medium — the bank drawer's "Bank name" field sat inside the emerald "Shared" column without
+   saying it's actually private**, contradicting its own surrounding section (name is deliberately
+   excluded from shared-field propagation — see "Shared vs. private bank fields" above — precisely so
+   an edit to it stays local). Added an inline `(private to you — not shared, unlike the rest of this
+   section)` note next to the label rather than restructuring the drawer's layout, which CLAUDE.md
+   already documents as fragile/tuned across many prior rounds.
+5. **Medium — marking a bank "can't open here" for everyone left the initiating user's own copy
+   unchanged if the drawer was closed without a separate "Save bank" click.** `shareCannotOpen`
+   (`banks/actions.ts`) posted the shared note and propagated `cannot_open` to every *other* user's
+   copy, but never wrote the caller's own row — the status shown in the drawer was only ever local
+   `values` state pending a save. Now writes the caller's own bank row to `cannot_open` immediately as
+   part of the same action, in both the real and DEMO_MODE code paths. Verified live: reproduced the
+   original bug (status reverting after a reload with no save), confirmed fixed after the change —
+   status now persists to `cannot_open` on confirm alone, no save required.
+6. **Medium — unchecking "Online access" in the account editor read as if it deleted the saved login**,
+   with no indication the URL/username/password were still there. Added a small "Saved, just hidden —
+   check the box above to view, edit, or clear it" note shown whenever the section is collapsed but a
+   value is actually still saved underneath — the checkbox itself already never cleared the values on
+   uncheck (kept that non-destructive behavior, it just wasn't communicated).
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (100/100) all clean. Fixes 4-6 are
+UI-observable and got a live DEMO_MODE CDP pass (fix 4's label renders correctly; fix 6's hidden-value
+note appears/disappears correctly with a saved login; fix 5 reproduced-then-fixed end-to-end including
+a genuine page reload confirming the status persisted server-side, not just in local state). Fixes 1-3
+are real-Supabase-only paths (document RLS, export pagination/zip contents, multi-row import error
+handling) not meaningfully reachable through the DEMO_MODE bypass — same accepted limitation as every
+other real-Supabase-only fix in this project's history — verified instead by reading each changed
+branch against the original code and confirming the change is additive with no alteration to the
+already-correct success path.
+
 **2026-08-05 (push an account's routing number up to the bank, one click)** — Direct follow-up to the
 0046 routing-number work: once that shipped, the natural next question was "what if the bank has
 nothing on file and someone already knows the number?" — until now, entering it made it apply to that

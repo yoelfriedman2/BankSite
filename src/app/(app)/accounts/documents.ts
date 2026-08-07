@@ -131,10 +131,24 @@ export async function getDocumentUrl(storagePath: string): Promise<string> {
   // Without this, the admin signed-URL call below would mint a URL for any path.
   const { data: owned } = await supabase
     .from("account_documents")
-    .select("id")
+    .select("id, account_id")
     .eq("storage_path", storagePath)
     .maybeSingle();
   if (!owned) throw new Error("Not found");
+
+  // Defense in depth: also verify the account this row claims to belong to is
+  // actually one the caller owns. account_documents' RLS policy only checks
+  // user_id, not account_id — a Server Action is directly callable, so a
+  // crafted request could otherwise insert a metadata row with a real
+  // storage_path but a stolen account_id, and the check above alone would
+  // still pass it. accounts' own RLS scopes this query to rows the caller
+  // really owns.
+  const { data: ownedAccount } = await supabase
+    .from("accounts")
+    .select("id")
+    .eq("id", owned.account_id)
+    .maybeSingle();
+  if (!ownedAccount) throw new Error("Not found");
 
   const admin = createAdminClient();
   const { data, error } = await admin.storage

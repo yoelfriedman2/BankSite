@@ -720,6 +720,16 @@ export function AccountModal({
                 )}
               </label>
             </div>
+            {/* Unchecking only hides this section — it never clears saved
+             *  credentials (deliberately: a stray uncheck must never silently
+             *  wipe a real saved password). Say so explicitly, since "hidden"
+             *  could otherwise read as "removed." */}
+            {!onlineAccessOpen &&
+              (values.online_url || values.username || values.password || values.access_notes) && (
+                <p className="text-xs text-slate-600">
+                  Saved, just hidden — check the box above to view, edit, or clear it.
+                </p>
+              )}
             {onlineAccessOpen && vaultActive && !vault.unlocked && <VaultUnlockPrompt />}
             {onlineAccessOpen && vaultActive && vault.unlocked && vaultDecrypting && (
               <p className="flex items-center gap-1.5 text-xs text-slate-600">

@@ -24,6 +24,15 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
 
 ## One-time setup pending
 
+- **Run migration `0048_account_documents_ownership_rls.sql`** — not yet confirmed run. Tightens the
+  `account_documents` RLS policy to also require the referenced `account_id` still belong to the
+  caller (previously only checked the document row's own `user_id`), closing a document-authorization
+  gap flagged by an independent code review on 2026-08-07 (see CLAUDE.md's entry that date). The
+  app-level half of this fix (`getDocumentUrl`'s extra ownership check) is already deployed and
+  effective without the migration — this is defense-in-depth at the DB layer, not the only thing
+  standing between a user and someone else's document today, but it should still be run so RLS itself
+  enforces it independently of the app code.
+
 - ~~Run migration `0047_function_search_path_hardening.sql`~~ — **confirmed run 2026-08-05.** Closed
   12 of the "Function Search Path Mutable" warnings from the 2026-08-04 Supabase security-lint scan
   (`set_updated_at`, `swap_queue_positions`, `charge_monthly_fee`(`_with_history`),
