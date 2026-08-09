@@ -615,6 +615,45 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_sources: {
+        Row: {
+          account_number: string | null
+          bank_name: string | null
+          created_at: string
+          id: string
+          label: string
+          last_check_number: number | null
+          payer_name: string | null
+          routing_number: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_number?: string | null
+          bank_name?: string | null
+          created_at?: string
+          id?: string
+          label: string
+          last_check_number?: number | null
+          payer_name?: string | null
+          routing_number?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_number?: string | null
+          bank_name?: string | null
+          created_at?: string
+          id?: string
+          label?: string
+          last_check_number?: number | null
+          payer_name?: string | null
+          routing_number?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       holding_companies: {
         Row: {
           assets: number | null

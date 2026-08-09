@@ -174,6 +174,92 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-08-09 (Send money / Send a letter — the mail-a-deposit chore, built)** — Came out of a
+brainstorm about the once-a-year keep-it-alive transaction: mailing a bank a letter, often with a
+check to deposit. The user's ask, narrowed over three turns of chat: pre-written letter types you
+pick from, auto-filled bank address/holder/account, editable before printing, optional deposit slip,
+and an optional check that can be drawn either on a tracked account (**deducting the balance**) or on
+a personal outside account the app doesn't track.
+
+- **"Two doors, one room," chosen explicitly over two separate pages** (offered as a choice; the user
+  picked it). `/send` = Send a letter, `/send/money` = Send money — two nav entries, two `page.tsx`
+  files, but **one** `SendClient.tsx` underneath with different defaults (money opens with the check
+  and deposit ticket switched on). The alternative — genuinely separate pages — would have duplicated
+  the bank picker, the address fill, the template engine, and the print layout, and made "I started a
+  letter and now want to enclose a check" a restart. Everything stays toggleable in either door.
+  Both pages share one loader (`send/data.ts`, `server-only`) and one `send/actions.ts`.
+- **Nav gained an `exact?: boolean` on `NavLink`** (both `SideNav.tsx` and `TopNav.tsx`, which each
+  keep their own copy of the type/GROUPS/`isActive`): `/send` needs exact matching or it also
+  highlights while you're on `/send/money`, since `isActive` otherwise treats any `href + "/"` prefix
+  as active. **Reuse this flag for any future parent route whose child is its own nav entry.**
+- **`src/lib/checkPrint.ts` is new and is now the only implementation of check printing** — the
+  number→words conversion, MICR E-13B encoding, check geometry, and the pre-printed-stock field
+  positions were all lifted out of `CheckPrintModal.tsx`, which now imports them. Same reasoning as
+  `effectiveRoutingNumber`/`withScheme`: two copies of MICR geometry would have drifted the first
+  time either was touched. `mailPrint.ts` composes letter + deposit ticket + check into one
+  multi-page document via a shared `printDocument()` shell, so a packet-printed check is byte-identical
+  to a Print-Checks-printed one (asserted in a test, not assumed). **Anything that prints a check from
+  now on goes through `checkPrint.ts` — never re-inline it.**
+- **Letters** live in `src/lib/letterTemplates.ts` (pure, testable): six types — deposit enclosed,
+  change of address, request a statement, keep the account active, close the account, blank. Tokens
+  are `{{bank}}/{{holder}}/{{account}}/{{amount}}/{{date}}/{{me}}/{{newAddress}}`. Two deliberate
+  behaviours: an **unknown** token is left visible (a typo in a hand-edited letter should be obvious,
+  not silently deleted), and a **known-but-empty** one renders as an underscore blank to write on by
+  hand — a real letter to a real bank must never print a raw `{{account}}`. Body is regenerated from
+  the template as the pickers change **until it's hand-edited**, then left alone until "Reset to
+  template."
+- **The recipient block is absolutely positioned for a #10 double-window envelope** (`lt-to` at
+  1.05in/2.05in in `mailPrint.ts`) — that's why the letter page is absolute-positioned rather than
+  normal flow. **Measure a real envelope before changing those numbers.**
+- **The deposit ticket is deliberately NOT MICR-encoded.** Deposit tickets use a different MICR
+  format from checks and getting it wrong produces paper a bank's reader mishandles; this prints a
+  clean human-readable ticket (bank, holder, account number, amount, "for deposit only") whose job is
+  telling the teller exactly which account the enclosed check goes into.
+- **Money side effects, all in one `recordMailing()` server action** rather than several client round
+  trips (a mailing is one real-world event; a half-applied one is worse than a reported failure):
+  claims the check number atomically (0044's `claim_check_number`), writes the `printed_checks` row,
+  deducts the source account, credits the destination, and appends the activity entry (0044's
+  `append_activity_log`) — every balance move through 0043's `update_account_balance`, each with the
+  established fallback to the pre-RPC two-step path. Ownership is re-checked server-side on both the
+  source and destination accounts (a server action is directly callable — SEC-01/INT-01).
+  Failures after the paper exists come back as `warnings[]` and are toasted, never swallowed.
+- **A check drawn on an outside account can't be logged in the check register** — `printed_checks.account_id`
+  is NOT NULL and FKs to `accounts`, and logging it against the *destination* would corrupt the
+  register's meaning ("checks printed FROM this account"). Only the check number carries forward, via
+  `payment_sources.last_check_number`. The UI says so plainly rather than pretending otherwise.
+- **Migration `0051_payment_sources.sql` — NOT yet run, see TODO.md.** Degrades gracefully: the
+  saved-outside-account UI swaps itself for a short notice, everything else works unchanged.
+  `database.types.ts` hand-patched for the new table (same limitation as the 0050 merge — no live
+  Supabase credentials here to regenerate against).
+- **Crediting the destination happens immediately, by explicit user decision** ("should automatically
+  deduct and give the money as well"), even though a mailed check hasn't actually posted yet. It's a
+  tickable checkbox with copy saying so. A real sent-vs-posted lifecycle was raised in the brainstorm
+  and deliberately not built.
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (**130 passed**, +27 new across
+`letterTemplates.test.ts` and `mailPrint.test.ts` — including a guard that no template can ship a
+token `renderLetter` doesn't know, and that a packet-printed check matches a standalone one exactly).
+Live DEMO_MODE CDP pass, **37/37**, with `window.open` stubbed to capture the print HTML: letter-only
+prints exactly one sheet with no check or ticket; the full packet has all three with two page breaks,
+a real MICR line, and the amount in words; the letter picks up holder/account/bank/amount with zero
+unsubstituted tokens; template switching, hand-editing, and reset all behave; the balance preview
+reads `$250.00 → $225.00` for a $25 check (asserted numerically, not eyeballed); the check number
+pre-fills and advances 1001 → 1002 after printing; exactly one nav item highlights on each of the two
+routes; no 375px overflow on either page, including with a bank selected; zero console errors.
+Desktop and mobile screenshots reviewed — which is what caught a duplicated page subtitle (the client
+repeated what the page header already said), since no assertion would have.
+
+**Three harness traps, all test-only, worth not repeating** (the driver at
+`scratchpad/cdp.mjs` now handles each): (1) **a page-level hydration probe is not enough** — the nav
+hydrates before the page's own client component, so `setInput` "succeeded" and the value was thrown
+away on the next render, which looks exactly like a broken input; the fix is to read the value back
+and retry, and to check the *specific* target element carries `__reactProps$` before clicking it.
+(2) **`return` followed by a newline hits ASI** — a multi-line expression passed to a `waitFor` that
+wraps it as `return ${expr}` always evaluates to `undefined`; wrap it as `return (${expr});`.
+(3) A bare DOM `.click()` still no-ops here (pre-existing, already documented) — dispatch real CDP
+mouse events. Chasing (1) and (2) cost two debugging rounds that both presented as app bugs and were
+neither.
+
 **2026-08-09 (borrowed money tracking + CD term/auto-renew, plus a real reminder-cron bug fix)** — Came
 out of a "what would make this app better" conversation. Three small, independent pieces:
 

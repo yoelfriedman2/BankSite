@@ -12,6 +12,8 @@ import {
   CalendarSearch,
   CalendarDays,
   Printer,
+  Send,
+  Mail,
   MapPin,
   Route,
   RefreshCw,
@@ -38,6 +40,9 @@ type NavLink = {
   icon: React.ComponentType<{ className?: string }>;
   tour: string;
   ownerOnly?: boolean;
+  /** Match this path exactly — for a parent whose child route is its own
+   *  nav entry (/send vs /send/money), so both don't highlight at once. */
+  exact?: boolean;
 };
 type NavGroup = { label: string | null; links: NavLink[] };
 
@@ -63,6 +68,8 @@ const GROUPS: NavGroup[] = [
       { href: "/balances", label: "Balance by date", icon: CalendarSearch, tour: "balances" },
       { href: "/fees-interest", label: "Fees & interest", icon: Percent, tour: "fees-interest" },
       { href: "/calendar", label: "Calendar", icon: CalendarDays, tour: "calendar" },
+      { href: "/send/money", label: "Send money", icon: Send, tour: "send-money" },
+      { href: "/send", label: "Send a letter", icon: Mail, tour: "send-letter", exact: true },
       { href: "/checks", label: "Print Checks", icon: Printer, tour: "checks" },
       { href: "/address-change", label: "Address change", icon: MapPin, tour: "address-change" },
       { href: "/fdic-sync", label: "FDIC sync", icon: RefreshCw, tour: "fdic-sync" },
@@ -82,8 +89,8 @@ const GROUPS: NavGroup[] = [
   },
 ];
 
-function isActive(pathname: string, href: string) {
-  if (href === "/") return pathname === "/";
+function isActive(pathname: string, href: string, exact = false) {
+  if (href === "/" || exact) return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -192,8 +199,8 @@ export function TopNav({
                     {group.label}
                   </div>
                 )}
-                {group.links.map(({ href, label, icon: Icon, tour }) => {
-                  const active = isActive(pathname, href);
+                {group.links.map(({ href, label, icon: Icon, tour, exact }) => {
+                  const active = isActive(pathname, href, exact);
                   return (
                     <Link
                       key={href}
