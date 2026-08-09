@@ -58,10 +58,12 @@ info, notes); each user's status/notes/accounts/balances are private via RLS.
 - **Migrations are never run automatically.** Every schema change is a numbered
   file in `supabase/migrations/` (`0026_...sql`, next number up). The user pastes
   it into the Supabase SQL editor by hand — there is no Supabase CLI wired up.
-  **Always tell the user explicitly which migration to run and why**, and prefer
-  writing page/action code so it degrades gracefully (`select("*")` + optional
-  chaining with a sane default) if the migration hasn't been run yet, rather than
-  hard-crashing. Several pages do this on purpose (e.g. `dormancy.ts`'s
+  **Always paste the actual SQL directly into the chat reply** (not just "run
+  migration 0052" with a pointer to the file) — per explicit 2026-08-09 instruction,
+  this is a standing rule going forward, not a one-off. Explain what it does and
+  why. Prefer writing page/action code so it degrades gracefully (`select("*")` +
+  optional chaining with a sane default) if the migration hasn't been run yet,
+  rather than hard-crashing. Several pages do this on purpose (e.g. `dormancy.ts`'s
   `attentionPrefsFromProfile`, the address-change page's "migration needed" notice).
 - **Shared vs. private bank fields**: `banks` rows are per-user copies keyed by
   FDIC `cert`. Editing a shared field (city, state, assets, holding_company,
