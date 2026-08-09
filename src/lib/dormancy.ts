@@ -169,7 +169,7 @@ export function getAttentionReasons(
   if (prefs.alertCdMaturity && isCdMaturingSoon(account, 30, now) && account.cd_maturity_date) {
     const days = daysUntil(account.cd_maturity_date, now);
     const matured = days < 0;
-    // cd_auto_renew (migration 0048) lets this distinguish "will renew on its
+    // cd_auto_renew (migration 0049) lets this distinguish "will renew on its
     // own, just review the new rate" from "needs your action or the money
     // sits idle" — the latter is bumped to red once the CD has actually
     // matured, since an idle non-renewing CD earning nothing is more urgent

@@ -14,6 +14,7 @@ import {
 } from "@/lib/demo";
 import type { Bank, BankStatus, OpenMethod, Priority } from "@/lib/types";
 import { friendlyDbError } from "@/lib/friendlyError";
+import type { Json } from "@/lib/supabase/database.types";
 
 /* Road trip planner: open to every signed-in user (was owner-only while
    testing — see CLAUDE.md history). */
@@ -291,7 +292,7 @@ export async function getTripPlan(id: string): Promise<{ plan?: RoadTripPlan; ti
   const { data, error } = await supabase.from("road_trips").select("plan, title").eq("id", id).maybeSingle();
   if (error) return { error: friendlyDbError(error.message) };
   if (!data) return { error: "Trip not found." };
-  return { plan: data.plan as RoadTripPlan, title: data.title as string };
+  return { plan: data.plan as unknown as RoadTripPlan, title: data.title as string };
 }
 
 export async function saveTrip(input: {
@@ -319,7 +320,7 @@ export async function saveTrip(input: {
   if (input.id) {
     const { error } = await supabase
       .from("road_trips")
-      .update({ title: input.title, is_public: input.isPublic, plan: input.plan, bank_certs: input.bankCerts, updated_at: new Date().toISOString() })
+      .update({ title: input.title, is_public: input.isPublic, plan: input.plan as unknown as Json, bank_certs: input.bankCerts, updated_at: new Date().toISOString() })
       .eq("id", input.id);
     if (error) return { error: friendlyDbError(error.message) };
     revalidatePath("/road-trip");
@@ -328,7 +329,7 @@ export async function saveTrip(input: {
 
   const { data, error } = await supabase
     .from("road_trips")
-    .insert({ user_id: user.id, title: input.title, is_public: input.isPublic, plan: input.plan, bank_certs: input.bankCerts })
+    .insert({ user_id: user.id, title: input.title, is_public: input.isPublic, plan: input.plan as unknown as Json, bank_certs: input.bankCerts })
     .select("id")
     .single();
   if (error) {

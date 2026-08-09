@@ -105,8 +105,8 @@ export interface Account {
   last_activity_date: string | null;
   dormancy_months_override: number | null;
   cd_maturity_date: string | null;
-  cd_term_months: number | null; // CD's original term, informational (migration 0048)
-  cd_auto_renew: boolean | null; // null = not specified; migration 0048
+  cd_term_months: number | null; // CD's original term, informational (migration 0049)
+  cd_auto_renew: boolean | null; // null = not specified; migration 0049
   date_opened: string | null;
   notes: string | null;
   online_url: string | null;
@@ -143,7 +143,7 @@ export interface AccountSweep {
 
 /** Money borrowed from a non-bank source (a person, a line of credit, etc.) to
  *  help fund a subscription/IPO — same "out, needs to come back" bookkeeping
- *  as AccountSweep, but with no account/balance behind it (migration 0049). */
+ *  as AccountSweep, but with no account/balance behind it (migration 0050). */
 export interface BorrowedFund {
   id: string;
   user_id: string;

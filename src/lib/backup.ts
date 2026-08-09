@@ -6,6 +6,7 @@ import * as XLSX from "xlsx";
 import JSZip from "jszip";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/pagination";
+import type { Database, TablesInsert, TablesUpdate } from "@/lib/supabase/database.types";
 
 export { fetchAllRows };
 
@@ -32,14 +33,14 @@ const TABLES = [
   // backup is ever needed for real.
   "holding_companies",
   "bank_branches",
-];
+] as const;
 
 type Row = Record<string, unknown>;
 
 /** Reads a whole table past the 1000-row PostgREST page cap. */
 async function dumpTable(
   admin: ReturnType<typeof createAdminClient>,
-  table: string,
+  table: keyof Database["public"]["Tables"],
 ): Promise<{ rows: Row[]; error?: string }> {
   return fetchAllRows<Row>((from, to) => admin.from(table).select("*").range(from, to));
 }
@@ -281,7 +282,13 @@ export async function restoreUserFromBackup(
     for (const f of PROFILE_RESTORE_FIELDS) {
       if (f in oldProfile) patch[f] = oldProfile[f];
     }
-    const { error: profErr } = await admin.from("profiles").update(patch).eq("id", newUserId);
+    // patch is built dynamically from a backup file's JSON blob — its real
+    // shape isn't known until runtime, so it's held to Row (not the strict
+    // per-table Update type) throughout this restore flow on purpose.
+    const { error: profErr } = await admin
+      .from("profiles")
+      .update(patch as unknown as TablesUpdate<"profiles">)
+      .eq("id", newUserId);
     if (profErr) warnings.push(`profiles: ${profErr.message}`);
   }
 
@@ -306,7 +313,11 @@ export async function restoreUserFromBackup(
       const { user_id: _u, ...rest } = b;
       toWrite.push({ ...rest, id: targetId, user_id: newUserId });
     }
-    const { error: bankErr } = await admin.from("banks").upsert(toWrite, { onConflict: "id" });
+    // toWrite comes from the same dynamically-shaped backup data — see the
+    // profiles restore above for why this is cast rather than tightened.
+    const { error: bankErr } = await admin
+      .from("banks")
+      .upsert(toWrite as unknown as TablesInsert<"banks">[], { onConflict: "id" });
     if (bankErr) warnings.push(`banks: ${bankErr.message}`);
     counts.banks = toWrite.length;
   }
@@ -326,7 +337,9 @@ export async function restoreUserFromBackup(
     });
     for (let i = 0; i < toWrite.length; i += 500) {
       const chunk = toWrite.slice(i, i + 500);
-      const { error: writeErr } = await admin.from(table).upsert(chunk, { onConflict: "id" });
+      const { error: writeErr } = await admin
+        .from(table)
+        .upsert(chunk as unknown as TablesInsert<typeof table>[], { onConflict: "id" });
       if (writeErr) {
         warnings.push(`${table}: ${writeErr.message}`);
         break;

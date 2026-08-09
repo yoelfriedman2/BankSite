@@ -10,6 +10,7 @@ import { logAudit, type AuditEntry } from "@/lib/audit";
 import { friendlyDbError } from "@/lib/friendlyError";
 import { fetchAllRows } from "@/lib/pagination";
 import { normalizeRoutingNumber, routingNumberError } from "@/lib/routingNumber";
+import type { TablesInsert, TablesUpdate } from "@/lib/supabase/database.types";
 import type { User } from "@supabase/supabase-js";
 import {
   DEMO_MODE,
@@ -307,7 +308,7 @@ export async function upsertBank(
   } else {
     const { data: inserted, error } = await supabase
       .from("banks")
-      .insert(withoutRoutingIfMissing({ regulator: null, ...patch, user_id: user.id }, routingOk))
+      .insert(withoutRoutingIfMissing({ regulator: null, ...patch, name: patch.name!, user_id: user.id }, routingOk))
       .select("id")
       .single();
     if (error) return { error: friendlyDbError(error.message) };
@@ -335,7 +336,7 @@ export async function upsertBank(
         (existingBanks ?? []).filter((b) => b.deleted_at).map((b) => b.user_id as string),
       );
       const sharedFieldsForCert = {
-        name: patch.name,
+        name: patch.name!,
         city: patch.city,
         state: patch.state,
         assets: patch.assets,
@@ -445,7 +446,7 @@ export async function upsertBank(
     const { error: propagateErr } = await admin
       .from("banks")
       .update(withoutRoutingIfMissing(sharedPatch, routingOk))
-      .eq("cert", patch.cert)
+      .eq("cert", patch.cert!)
       .neq("user_id", user.id);
     if (propagateErr) {
       console.error(`[upsertBank] propagating shared-field update for cert=${patch.cert} failed:`, propagateErr.message);
@@ -759,7 +760,7 @@ export async function getTrash(): Promise<{
       ...b,
       accountCount: accountsByBank.get(b.id) ?? 0,
     })),
-    accounts: ((trashedAccounts ?? []) as Account[]).map((a) => ({
+    accounts: ((trashedAccounts ?? []) as unknown as Account[]).map((a) => ({
       ...a,
       bankName: nameMap.get(a.bank_id) ?? "—",
     })),
@@ -785,6 +786,7 @@ export async function importBanks(
   accountsUpdated?: number;
   accountsSkipped?: number;
   notes?: number;
+  rowErrors?: string[];
   error?: string;
 }> {
   if (!rows || rows.length === 0) {
@@ -833,11 +835,19 @@ export async function importBanks(
     .maybeSingle();
   const displayName = (profile?.display_name as string | null) ?? "Import";
 
-  const accountInserts: Record<string, unknown>[] = [];
+  const accountInserts: TablesInsert<"accounts">[] = [];
+  const accountInsertLabels: string[] = [];
   const noteInserts: { cert: number; body: string }[] = [];
   let banksTouched = 0;
   let accountsUpdated = 0;
   let accountsSkipped = 0;
+  // A single row's write failure used to abort the whole import immediately,
+  // silently leaving every earlier row's already-committed writes in place
+  // (there's no wrapping transaction across rows — each is its own request)
+  // while reporting nothing about what actually went through. Now a failed
+  // row is skipped and recorded here instead, so the rest of the file still
+  // imports and the result honestly says which row(s) didn't.
+  const rowErrors: string[] = [];
   // Rows the review UI grouped under the same "create new bank" entry (same
   // cert, or same name when no cert) all get stamped matched_bank_id ===
   // "CREATE_NEW" — reuse the bank created for the first row in that group
@@ -864,7 +874,7 @@ export async function importBanks(
     if (found) {
       bankId = found.id;
       bankCert = found.cert ?? row.cert;
-      const upd: Record<string, unknown> = {};
+      const upd: TablesUpdate<"banks"> = {};
       // A row matching a trashed bank restores it, rather than falling
       // through to the insert branch below and hitting the unique
       // (user_id, cert) constraint the trashed row still occupies.
@@ -897,9 +907,13 @@ export async function importBanks(
           .from("banks")
           .update(upd)
           .eq("id", bankId);
-        if (error) return { error: friendlyDbError(error.message) };
+        if (error) {
+          rowErrors.push(`${row.name}: ${friendlyDbError(error.message)}`);
+          continue;
+        }
       }
     } else {
+      const insertedStatus = row.status ?? (acct ? "open" : "untracked");
       const { data, error } = await supabase
         .from("banks")
         .insert({
@@ -911,7 +925,7 @@ export async function importBanks(
           regulator: row.regulator,
           assets: row.assets,
           holding_company: row.holding_company,
-          status: row.status ?? (acct ? "open" : "untracked"),
+          status: insertedStatus,
           open_methods: row.open_methods,
           eligibility: row.eligibility,
           branch_location: row.branch_location,
@@ -926,10 +940,17 @@ export async function importBanks(
         .select("id")
         .single();
       if (error || !data) {
-        return { error: friendlyDbError(error?.message) ?? "Could not add a bank." };
+        rowErrors.push(`${row.name}: ${friendlyDbError(error?.message) ?? "Could not add a bank."}`);
+        continue;
       }
       bankId = data.id as string;
-      const entry: ExistingEntry = { id: bankId, cert: row.cert, status: "open", deletedAt: null };
+      // Cache the status actually written, not a hardcoded "open" — a later
+      // row in the same import batch matching this same bank (e.g. an
+      // account-only row) reads this cache to decide whether to auto-promote
+      // to "open", and a wrong cached value here previously meant that
+      // promotion could silently never fire for a bank whose first row had
+      // no account data.
+      const entry: ExistingEntry = { id: bankId, cert: row.cert, status: insertedStatus, deletedAt: null };
       if (row.cert != null) byCert.set(row.cert, entry);
       byName.set(row.name.toLowerCase(), entry);
       if (row.matched_bank_id === "CREATE_NEW") {
@@ -953,7 +974,7 @@ export async function importBanks(
       } else if (decision === "update" && row.matched_account_id) {
         // Only overwrite fields this row actually carries a value for — same
         // "don't blank out what wasn't in the file" rule as the bank update above.
-        const upd: Record<string, unknown> = {};
+        const upd: TablesUpdate<"accounts"> = {};
         if (row.holder != null) upd.holder = row.holder;
         if (row.account_type != null) upd.account_type = row.account_type;
         if (row.account_number != null) upd.account_number = row.account_number;
@@ -974,7 +995,10 @@ export async function importBanks(
             .update(upd)
             .eq("id", row.matched_account_id)
             .eq("bank_id", bankId);
-          if (error) return { error: friendlyDbError(error.message) };
+          if (error) {
+            rowErrors.push(`${row.name} (account update): ${friendlyDbError(error.message)}`);
+            continue;
+          }
         }
         accountsUpdated++;
       } else {
@@ -993,16 +1017,34 @@ export async function importBanks(
           username: row.username,
           password: row.password,
         });
+        // Kept in lockstep with accountInserts so a batch-insert failure below
+        // can name every affected row individually, not just report "1 row
+        // didn't import" when it was actually every queued account.
+        accountInsertLabels.push(`${row.name}${row.holder ? ` (${row.holder})` : ""}`);
       }
     }
   }
 
+  let accountsInsertedCount = 0;
   if (accountInserts.length) {
     const { data: insertedAccounts, error } = await supabase
       .from("accounts")
       .insert(accountInserts)
       .select("id, balance");
-    if (error) return { error: friendlyDbError(error.message) };
+    // Every bank write from the loop above has already succeeded — a failure
+    // here (all new accounts inserted in one batch, no per-row transaction)
+    // must not discard that, and must not be under-reported either: every
+    // queued account failed together, so push one rowErrors entry per row
+    // instead of a single combined message — otherwise the review screen's
+    // "N rows didn't import" count (which counts rowErrors entries) would
+    // read "1" even when, say, ten accounts actually failed to import.
+    if (error) {
+      for (const label of accountInsertLabels) {
+        rowErrors.push(`${label}: ${friendlyDbError(error.message)}`);
+      }
+    } else {
+      accountsInsertedCount = insertedAccounts?.length ?? 0;
+    }
 
     // Seed an opening-balance history point for each newly-imported account
     // that has a balance — same as upsertAccount's own insert path — so an
@@ -1016,7 +1058,7 @@ export async function importBanks(
         user_id: user.id,
         account_id: a.id as string,
         as_of_date: today,
-        balance: a.balance,
+        balance: a.balance!,
         reason: "opening balance",
       }));
     if (historyRows.length) {
@@ -1049,18 +1091,24 @@ export async function importBanks(
           body: n.body,
         })),
       );
-      if (noteErr) return { error: noteErr.message };
-      notesPosted = newNotes.length;
+      if (noteErr) {
+        // Every bank/account write has already succeeded by this point — a
+        // failure posting community notes must not discard that result.
+        rowErrors.push(`Community notes: ${friendlyDbError(noteErr.message)}`);
+      } else {
+        notesPosted = newNotes.length;
+      }
     }
   }
 
   revalidate();
   return {
     banks: banksTouched,
-    accounts: accountInserts.length,
+    accounts: accountsInsertedCount,
     accountsUpdated,
     accountsSkipped,
     notes: notesPosted,
+    rowErrors: rowErrors.length ? rowErrors : undefined,
   };
 }
 
@@ -1144,14 +1192,14 @@ export async function seedBanks(): Promise<{ seeded?: number; error?: string }> 
       regulator: (s.regulator as string | null) ?? null,
       assets: (s.assets as number | null) ?? null,
       holding_company: (s.holding_company as string | null) ?? null,
-      open_methods: s.open_methods ?? null,
-      eligibility: s.eligibility ?? null,
-      eligibility_date: s.eligibility_date ?? null,
-      branch_location: s.branch_location ?? null,
-      phone: s.phone ?? null,
-      website: s.website ?? null,
-      min_to_open: s.min_to_open ?? null,
-      conversion_stage: s.conversion_stage ?? "none",
+      open_methods: (s.open_methods as string[] | null) ?? null,
+      eligibility: (s.eligibility as string | null) ?? null,
+      eligibility_date: (s.eligibility_date as string | null) ?? null,
+      branch_location: (s.branch_location as string | null) ?? null,
+      phone: (s.phone as string | null) ?? null,
+      website: (s.website as string | null) ?? null,
+      min_to_open: (s.min_to_open as number | null) ?? null,
+      conversion_stage: (s.conversion_stage as string | null) ?? "none",
     }));
 
   if (payload.length > 0) {
@@ -1421,6 +1469,8 @@ export async function shareCannotOpen(
 
   if (DEMO_MODE) {
     addDemoComment(cert, body);
+    const own = getDemoBanks().find((b) => b.cert === cert);
+    if (own) updateDemoBank(own.id, { status: "cannot_open" });
     revalidate();
     return {};
   }
@@ -1434,6 +1484,22 @@ export async function shareCannotOpen(
   // Post the public note (handles author name, read-marking, and email broadcast).
   const res = await addBankComment(cert, body, notify, bankName);
   if (res.error) return res;
+
+  // Persist the caller's OWN status here too, not just everyone else's — this
+  // is only ever reachable after the caller has already picked "Can't open"
+  // for themselves (see BankForm's handleStatusClick), but that choice only
+  // lived in the drawer's local form state until now. Confirming this dialog
+  // used to update every *other* user's row immediately while leaving the
+  // caller's own row untouched until (and unless) they separately clicked
+  // "Save bank" — closing the drawer without saving left everyone else
+  // marked cannot_open while the caller's own copy silently reverted.
+  const { error: ownErr } = await supabase
+    .from("banks")
+    .update({ status: "cannot_open" })
+    .eq("cert", cert)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+  if (ownErr) return { error: friendlyDbError(ownErr.message) };
 
   if (propagate) {
     const admin = createAdminClient();

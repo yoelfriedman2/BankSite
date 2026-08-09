@@ -128,7 +128,7 @@ export async function getOutstandingSweeps(): Promise<OutstandingSweep[]> {
 /** Money borrowed from a non-bank source (a person, a line of credit, etc.)
  *  that's still outstanding. Same "out, needs to come back" shape as
  *  getOutstandingSweeps, but there's no account/balance behind these rows —
- *  see migration 0049. */
+ *  see migration 0050. */
 export async function getOutstandingBorrowedFunds(): Promise<OutstandingBorrowedFund[]> {
   if (DEMO_MODE) return [];
   const supabase = await createClient();

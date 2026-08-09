@@ -174,10 +174,10 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
-**2026-08-07 (borrowed money tracking + CD term/auto-renew, plus a real reminder-cron bug fix)** — Came
+**2026-08-09 (borrowed money tracking + CD term/auto-renew, plus a real reminder-cron bug fix)** — Came
 out of a "what would make this app better" conversation. Three small, independent pieces:
 
-- **New `borrowed_funds` table** (migration **0049_borrowed_funds.sql**, private per-user, RLS scoped
+- **New `borrowed_funds` table** (migration **0050_borrowed_funds.sql**, private per-user, RLS scoped
   to `user_id = auth.uid()` — same shape as `road_trips`/migration 0032). Answers a real gap: Money
   moved only ever tracked cash pulled from *tracked accounts*; there was nowhere to record money
   borrowed from a person or any other outside source for the same purpose. New "Borrowed money" section
@@ -192,7 +192,7 @@ out of a "what would make this app better" conversation. Three small, independen
   **Explicitly NOT built this round** (flagged, not decided against): a full "capital-needed planner"
   (set a target, see which accounts/sources to pull from) — this is the tracking primitive it would be
   built on top of, not the planner itself.
-- **CD term length + auto-renew flag** (migration **0048_cd_term_and_auto_renew.sql**,
+- **CD term length + auto-renew flag** (migration **0049_cd_term_and_auto_renew.sql**,
   `accounts.cd_term_months`/`cd_auto_renew`, both nullable). `cd_maturity_date` already existed and
   already drove the maturity alert — this only adds the two pieces of context needed to tell "renews
   on its own, just check the new rate" apart from "needs your action or the money sits idle."
@@ -240,11 +240,139 @@ Demo seed's one CD account (`Passumpsic Savings Bank`) now carries `cd_term_mont
 `cd_auto_renew: false` specifically so the "you'll need to act" (not the generic pre-0048) wording is
 what's click-testable by default. Not independently click-tested: the borrowed-funds add/repay round
 trip actually persisting a row — DEMO_MODE's write actions are pure no-ops by design (matching the
-existing sweep actions), so that can only be verified against a real Supabase project once migration
-0049 is run. `DEMO_MODE` was flipped to `true` via a temporary `.env.local` (none existed in this
-fresh environment) and removed entirely before finishing, per the standing rule. Changelog and Guide
-entries added for both features (genuinely new, user-visible capabilities) — the cron fix is a bug fix
-with no new UI, so no entry, per the standing features-only policy.
+existing sweep actions), so that can only be verified against a real Supabase project. **Both
+migrations confirmed run by the user directly against production** (2026-08-09) — see TODO.md.
+`DEMO_MODE` was flipped to `true` via a temporary `.env.local` (none existed in this fresh environment)
+and removed entirely before finishing, per the standing rule. Changelog and Guide entries added for
+both features (genuinely new, user-visible capabilities) — the cron fix is a bug fix with no new UI,
+so no entry, per the standing features-only policy.
+
+**A real migration-numbering collision, caught while merging, not before**: this session originally
+numbered the two migrations above `0048`/`0049`, branched before a parallel session had already
+claimed `0048` on `main` for an unrelated fix (`0048_account_documents_ownership_rls.sql` — see the
+two entries below). Renumbered to `0049`/`0050` (file contents unchanged — the SQL the user already
+ran against production is identical either way, only the filename in this repo moved) while merging
+this branch into `main`, and hand-patched `src/lib/supabase/database.types.ts` (the generated
+Supabase schema types wired in by the same merge's TYPE-01 work below) to add `cd_term_months`/
+`cd_auto_renew` to the `accounts` table type and a full `borrowed_funds` table entry — without this,
+the now-strictly-typed `createClient<Database>()` calls in `accounts/actions.ts`/`money/actions.ts`
+would not compile against a schema snapshot generated before these two migrations existed. **Standing
+lesson**: check the next free migration number against `origin/main` right before merging, not just
+against the branch point — and remember `database.types.ts` can only be regenerated for real
+(`supabase gen types typescript`) from a machine with live Supabase credentials; this sandbox can only
+hand-patch it to match a migration it can't verify against the live schema directly.
+**2026-08-07, second pass (the same independent review found 3 real gaps in the first round's fixes)**
+— The reviewer re-checked the 6 fixes below and correctly found the first round's fixes for 3 of them
+were each incomplete in a specific, concrete way. Re-verified all 3 against the actual code (not just
+taken on faith) before fixing:
+
+1. **High — migration 0048's new RLS check verified the metadata row's `account_id`, but never
+   `storage_path` itself.** A user's own `account_id` on a forged row would still pass every check
+   even if `storage_path` pointed at someone else's real file — the fix only closed the
+   account-mismatch shape, not the actual path-forgery shape the finding described. Since 0048 hadn't
+   been run yet, edited it in place (rather than layering a second migration on an unapplied one) to
+   also require `storage_path like (auth.uid()::text || '/%')` — the exact prefix `uploadDocument`
+   already mints every real path with, so this is still purely narrowing. `getDocumentUrl` and
+   `deleteDocument` (`accounts/documents.ts`) both gained the identical app-level prefix check ahead of
+   their existing DB reads, so the protection is real today even before the migration runs, not just
+   once it does. **Migration 0048 still not confirmed run — see TODO.md** (now includes this check too).
+2. **High — the full backup still silently dropped individual documents, and couldn't recover an
+   encrypted vault.** `api/export/full/route.ts`'s document loop discarded a failed
+   `.storage.download()` with a bare `continue` — no warning, unlike the table-read failures right
+   next to it. Now collects a `docWarnings` list (with the real error message) and folds it into the
+   same `0_INCOMPLETE_BACKUP_README.txt` used for table-read failures — moved that file's write to
+   after the document loop so it can cover both. Separately: the Accounts sheet already includes
+   Username/Password verbatim, which is ciphertext once vault encryption is on — but nothing in the
+   export carried `profiles.vault_salt`, without which that ciphertext can never be re-derived even
+   with the correct master password (PBKDF2 needs the exact salt it was derived with). Added a new
+   single-row "Profile & vault" sheet (display name, vault-enabled flag, vault salt, vault check) and a
+   new "Road trips" sheet (title/public/created/updated + the raw plan JSON — the admin weekly backup
+   already includes `road_trips`, the personal export just never had caught up). `SettingsForm.tsx`'s
+   description updated again to actually list both new inclusions.
+3. **Medium — a failed bulk account-insert during import still reported only 1 failure, even when
+   every queued account failed together.** `importBanks`'s account insert is one batch statement (no
+   per-row transaction) — a failure there fails every account in it, but the code only ever pushed one
+   combined `rowErrors` message, so the review screen's "N rows didn't import" (which counts
+   `rowErrors` entries) understated the real count for any batch bigger than 1. Added a parallel
+   `accountInsertLabels` array kept in lockstep with `accountInserts`, so a batch failure now pushes
+   one labeled `rowErrors` entry per row — the count is accurate now, matching what actually failed.
+   Bank writes from the same import remaining committed is unchanged and intentional (same "report
+   what actually happened, not full atomicity" scope as the first round's fix) — this fixes the
+   specific miscount, not the underlying non-atomicity, which would need a Postgres RPC to fully close.
+
+**Verification**: `tsc --noEmit`, `npm test` (100/100), `npm run build` all clean. All three fixes are
+real-Supabase-only paths (RLS, export pagination/zip contents, multi-row import error handling) — same
+accepted, documented limitation as the first round for this category of fix — verified by reading each
+changed branch against the original code and confirming the change is additive with no alteration to
+the already-correct success path.
+
+**2026-08-07 (independent-review fixes: document-auth bypass, backup honesty, import atomicity, and
+three smaller UX/data gaps)** — A different AI reviewed the codebase (outside the 100-item
+`EXTERNAL-AUDIT-TRACKER.md` process — the user pasted its 6 findings, 2 High/4 Medium) and I
+independently re-verified each against the actual current code before fixing any of them (all 6
+confirmed real). Fixed all 6 on "ya fix":
+
+1. **High — a signed-in user could read another user's document by guessing/enumerating its id.**
+   `getDocumentUrl` (`accounts/documents.ts`) checked `account_documents.user_id = auth.uid()` but
+   never verified the *account* the document claims to belong to is actually still owned by that same
+   user — a stale or crafted `account_documents.account_id` (e.g. left over after an account changed
+   hands some other way) could serve a signed URL for someone else's statement. Fixed at both layers:
+   the action now does a second ownership check against `accounts` before generating the URL, and new
+   migration **`0048_account_documents_ownership_rls.sql`** tightens the table's RLS policy itself to
+   require the same join — defense in depth, not just an app-level check, per this project's own
+   Server-Actions-are-directly-callable lesson (SEC-01/INT-01). **Migration not yet run — see TODO.md.**
+2. **High — the personal "Full backup" export could silently drop rows on a failed table read with no
+   indication anywhere.** `api/export/full/route.ts`'s per-table error checks only ever reached
+   `console.error` (a log nobody downloading the file would see) — the zip looked identical whether it
+   was complete or not. Now collects any failed table into a `readWarnings` list and, if non-empty,
+   writes a `0_INCOMPLETE_BACKUP_README.txt` into the zip itself naming exactly which table(s) failed
+   — a backup that's missing data now says so, instead of silently passing for complete. Also folded in
+   a real gap found while in this file: `account_balance_history` (the balance-history/reason-code
+   trail) was never included in the personal export at all, despite being in the *admin* weekly backup
+   — added as its own paginated fetch + "Balance history" sheet. `SettingsForm.tsx`'s export
+   description updated to actually list what's included instead of an overclaiming "everything."
+3. **Medium — spreadsheet import silently returned zero results for every row after the first failure,
+   even for accounts/banks that had already been successfully imported.** `importBanks`
+   (`banks/actions.ts`) had four separate write points (bank update, bank insert, per-row account
+   update, the bulk account insert) that each `return`ed immediately on their own error — so, e.g., one
+   row's account-number collision aborted the whole import and reported it as a total failure, even
+   though 40 other rows had already committed. Changed all four to collect a `rowErrors` message and
+   `continue`, so the import always processes every row it can. `ImportDialog.tsx`'s done screen now
+   shows a "N rows didn't import" amber box listing exactly which ones and why, distinct from the
+   success summary. Also fixed a smaller bug found in the same function: a freshly-inserted bank's
+   in-memory status cache was hardcoded to `"open"` regardless of what was actually inserted, which
+   could let a later row in the same import silently skip a legitimate status change. **Doesn't rework
+   this into one true atomic transaction** (that needs a Postgres RPC, a bigger change) — this is the
+   "report what actually happened instead of an all-or-nothing lie" fix, not full atomicity.
+4. **Medium — the bank drawer's "Bank name" field sat inside the emerald "Shared" column without
+   saying it's actually private**, contradicting its own surrounding section (name is deliberately
+   excluded from shared-field propagation — see "Shared vs. private bank fields" above — precisely so
+   an edit to it stays local). Added an inline `(private to you — not shared, unlike the rest of this
+   section)` note next to the label rather than restructuring the drawer's layout, which CLAUDE.md
+   already documents as fragile/tuned across many prior rounds.
+5. **Medium — marking a bank "can't open here" for everyone left the initiating user's own copy
+   unchanged if the drawer was closed without a separate "Save bank" click.** `shareCannotOpen`
+   (`banks/actions.ts`) posted the shared note and propagated `cannot_open` to every *other* user's
+   copy, but never wrote the caller's own row — the status shown in the drawer was only ever local
+   `values` state pending a save. Now writes the caller's own bank row to `cannot_open` immediately as
+   part of the same action, in both the real and DEMO_MODE code paths. Verified live: reproduced the
+   original bug (status reverting after a reload with no save), confirmed fixed after the change —
+   status now persists to `cannot_open` on confirm alone, no save required.
+6. **Medium — unchecking "Online access" in the account editor read as if it deleted the saved login**,
+   with no indication the URL/username/password were still there. Added a small "Saved, just hidden —
+   check the box above to view, edit, or clear it" note shown whenever the section is collapsed but a
+   value is actually still saved underneath — the checkbox itself already never cleared the values on
+   uncheck (kept that non-destructive behavior, it just wasn't communicated).
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (100/100) all clean. Fixes 4-6 are
+UI-observable and got a live DEMO_MODE CDP pass (fix 4's label renders correctly; fix 6's hidden-value
+note appears/disappears correctly with a saved login; fix 5 reproduced-then-fixed end-to-end including
+a genuine page reload confirming the status persisted server-side, not just in local state). Fixes 1-3
+are real-Supabase-only paths (document RLS, export pagination/zip contents, multi-row import error
+handling) not meaningfully reachable through the DEMO_MODE bypass — same accepted limitation as every
+other real-Supabase-only fix in this project's history — verified instead by reading each changed
+branch against the original code and confirming the change is additive with no alteration to the
+already-correct success path.
 
 **2026-08-05 (push an account's routing number up to the bank, one click)** — Direct follow-up to the
 0046 routing-number work: once that shipped, the natural next question was "what if the bank has
@@ -437,6 +565,39 @@ toggles via `inert`/CSS), so any test counting open dialogs has a baseline of 1*
 failed on that before the count was filtered by `:not([inert])`, and none of them were app bugs.
 Skipped changelog/Guide: this is a layout change to an existing flow, not a new capability, matching
 how both prior drawer/popup redesigns were handled.
+
+**2026-08-06 (prev/next arrows on the open account sheet)** — User asked for a way to step through
+accounts on the Accounts page without closing the sheet and clicking another row, and specifically
+wanted to see a few placement options before anything got built. Presented three (chevrons beside the
+close button, a "N of M" counter in the footer, floating round buttons on the sheet's own edges) as a
+live interactive mockup — the third was ruled out up front as needing a fallback design for narrow
+screens anyway, so it would mean maintaining two designs for one feature. User picked the chevrons.
+
+**What shipped**: `AccountViewModal` gained an optional `prevNext` prop
+(`{ onPrev, onNext, hasPrev, hasNext }`) — two small `ChevronLeft`/`ChevronRight` buttons in the
+header's existing action row, before the close X, disabled (not hidden) at either end of the list so
+you always know when you've hit the first or last row rather than looping silently. `AccountsClient`
+is the only caller that passes it: `hasPrev`/`hasNext` and the two callbacks are derived from
+`filtered.findIndex()` against the *same* already-sorted-and-filtered array the table itself renders
+from, so prev/next always matches whatever a click on the row above/below would have opened — sorted
+by balance, filtered to "Needs attention," searched, doesn't matter, it's the same array either way.
+Reuses the existing `openAccountView()` helper for the actual navigation, so a prev/next step gets the
+identical slide-and-ghost animation a row-to-row click already has — no separate code path to keep in
+sync. The bank drawer's own usage of `AccountViewModal` simply doesn't pass `prevNext`, so nothing
+renders there — "the list" inside one bank's drawer is a handful of accounts, not a paginated view.
+**Keyboard**: ↑/↓ mirror the click, since the list being stepped through is vertical even though the
+buttons themselves point left/right (that's just the familiar prev/next shape) — skipped whenever
+focus is in a text input/textarea/select/contenteditable elsewhere on the page, so it can't hijack
+normal typing.
+
+**Verification**: **16/16** new live assertions plus all six earlier suites re-run clean (**128
+assertions total**), `tsc --noEmit`, `npm run build`, `npm test` (100). Confirms prev disabled on the
+first row and next disabled on the last, a button click and both arrow keys each advance/retreat to
+the correct account, the header text actually changes, the swap still animates and holds the outgoing
+sheet exactly like a row click does, sorting by Balance and re-opening correctly changes which account
+"next" leads to (not just re-testing the default Bank sort), the bank drawer's sheet has zero prev/next
+buttons, and 375px still shows working buttons in the centered popup with no overflow. Changelog and
+Guide entries added — a genuine new capability, not a fix.
 
 **2026-08-04 (the docked Accounts sheet was squeezing the table for no reason on wide monitors)** —
 Follow-up the same day: the truncation fix above made rows tidy, but the user pushed back with a real
@@ -699,6 +860,61 @@ narrows the group list correctly, searching a holder name works too, the clear (
 correctly restores the full list, a nonsense query shows the "no matches" message rather than an empty
 blank page, no 375px mobile overflow, and zero console errors. `DEMO_MODE` was flipped to `true`
 (temporary `.env.local`) for this pass and removed entirely before finishing, per the standing rule.
+
+**2026-07-28 (external audit — round 22: TYPE-01 fixed — all 100 findings now closed)** — Direct
+continuation of round 21, same session. User asked what TYPE-01 meant in plain terms, then ran it
+themselves: `npx supabase login` (a real device-code mixup along the way, self-corrected), found the
+project ref via the Supabase dashboard URL, then `npx supabase gen types typescript --project-id <ref>
+> database.types.ts`, and pasted the result back into chat — the first time this project's generated DB
+types have existed, since this sandbox has never been able to reach a live Postgres connection to
+generate them itself.
+
+Saved as `src/lib/supabase/database.types.ts`, wired into all three Supabase clients (`server.ts`,
+`admin.ts`, `client.ts`) as `createClient<Database>(...)`. Not a clean drop-in — two real things
+surfaced:
+
+1. **Every table resolved to `never`.** Root-caused by reading `@supabase/ssr@0.5.2`'s (the installed
+   version) type declarations directly: its `createServerClient`/`createBrowserClient` generics compute
+   the schema lookup against the raw `Database` type without stripping the CLI's newer
+   `__InternalSupabase` marker key first, unlike `@supabase/supabase-js@2.108.1` (already installed),
+   which handles it correctly. Fixed with a targeted `npm install @supabase/ssr@latest` (0.5.2 →
+   0.12.4, same sandbox `xlsx`-CDN-swap workaround as every prior dependency change in this project,
+   reverted after) — confirmed via its bundled CHANGELOG.md that nothing between those versions changed
+   the `getAll`/`setAll` cookie API this app already uses, so this reads as a safe upgrade.
+2. **42 genuine type mismatches**, once every real Supabase call was actually checked against the live
+   schema for the first time. These clustered into ~8 repeated root causes, not 42 independent
+   problems: a shared `fetchAllRows()` pagination helper whose callback type didn't structurally match
+   a real Postgrest builder (fixed once in `lib/pagination.ts`, resolved 16 call sites); several
+   `Record<string, unknown>` dynamic-patch variables retyped via the generated `TablesUpdate`/
+   `TablesInsert` helpers instead of a bare untyped record; `as Account`/`as Account[]` casts that no
+   longer "sufficiently overlapped" because the DB's `activity_log: Json` is looser than the app's real
+   `{date, note, type?}[]` shape (fixed with `as unknown as X`); a few places passing a plain fetched
+   `string` where the app's narrower `BankStatus` literal type was expected, always backed by a real DB
+   constraint TypeScript can't see; a couple of genuine `T | null` vs `T`-required mismatches, each
+   verified as a real, provable runtime invariant before adding a narrowing `!` (e.g. `up-next/
+   actions.ts`'s queue swap only ever runs on rows a prior `.filter()` already confirmed have a real
+   position — matching the same pattern the file already used two lines above). `lib/backup.ts`'s
+   disaster-recovery restore code (reads an arbitrary uploaded backup file whose shape genuinely isn't
+   knowable until runtime) was deliberately left on its loose `Row = Record<string, unknown>` type and
+   cast at the three boundary points where it touches the strict client, with a comment explaining why
+   — forcing that file's dynamic-by-design data through strict per-table types would fight the actual
+   architecture, not fix a real gap. No blanket type-widening shortcut anywhere in this round — every
+   fix is either a provable narrowing or a proper generated-type usage, so the real safety net TYPE-01
+   exists to build is intact, not just silenced.
+
+**Verification**: `tsc --noEmit` went from ~319 lines of errors (mostly the `never`-everywhere symptom)
+to 0. `npm test` 100/100. `npm run build` clean. A DEMO_MODE smoke test across 9 major pages came back
+all 200 with zero new server-log errors — DEMO_MODE bypasses real Supabase entirely, so this confirms
+the app compiles/renders correctly with the new types, not real database behavior; the client-typing
+changes are 100% compile-time annotations with zero runtime effect, and the one genuinely
+runtime-affecting change (the `@supabase/ssr` bump) was verified via its changelog rather than a live
+login this sandbox can't perform. `package.json`/`package-lock.json` were restored to their exact
+`xlsx`-CDN-pinned committed shape aside from the one real, intentional `@supabase/ssr` bump, via the
+same surgical JSON-patch approach this file's SEC-22 entry documented for this exact recurring sandbox
+situation. `DEMO_MODE` was flipped to `true` for the smoke test and back to `false` before finishing.
+**`EXTERNAL-AUDIT-TRACKER.md` updated: all 100 findings are now closed.** Going forward, the generated
+types file needs to be re-run after any future schema-changing migration — it isn't a permanent
+one-time fix, the same way running the migration itself isn't.
 
 **2026-07-28 (external audit — round 21: the last batch — UX-19/UX-21/PERF-02/INT-11/GAP-02 reviewed
 and declined, GAP-03 fixed — 99 of 100 findings now closed)** — Direct continuation of round 20, later

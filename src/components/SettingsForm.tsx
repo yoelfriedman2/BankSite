@@ -692,7 +692,7 @@ export function SettingsForm({
           <Card
             title="Full backup"
             icon={<Archive className="h-4 w-4 text-slate-500" />}
-            description="Everything in one zip: a spreadsheet of your banks and accounts plus every document you've uploaded."
+            description="A spreadsheet of your banks, accounts, balance history, money moves, checks, reminders, address changes, and saved road trips, plus every document you've uploaded — all in one zip. Includes your vault salt so encrypted logins can be recovered with your master password."
           >
             <a
               href="/api/export/full"

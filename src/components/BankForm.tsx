@@ -30,6 +30,7 @@ import { AccountModal } from "@/components/AccountModal";
 import { AccountViewModal } from "@/components/AccountViewModal";
 import { CheckPrintModal } from "@/components/CheckPrintModal";
 import { DateInput } from "@/components/DateInput";
+import { AutoGrowTextarea } from "@/components/AutoGrowTextarea";
 import { todayLocalStr } from "@/lib/date";
 import {
   upsertBank,
@@ -666,8 +667,8 @@ export function BankForm({
                   )
                 ) : (
                   <>
-                    <textarea
-                      rows={3}
+                    <AutoGrowTextarea
+                      minRows={3}
                       autoFocus
                       className={inputClass}
                       value={values.notes}
@@ -970,7 +971,17 @@ export function BankForm({
                   <>
                     <div className="space-y-3">
                       <div>
-                        <label className={labelClass} htmlFor="name">Bank name <span className="text-rose-500">*</span></label>
+                        <label className={labelClass} htmlFor="name">
+                          Bank name <span className="text-rose-500">*</span>
+                          {/* Unlike everything else in this box, an edit here
+                           *  stays local to you — never propagated to other
+                           *  family members' copies (avoids one edit silently
+                           *  overwriting another's, since name is also the
+                           *  identifier used to match rows on import). */}
+                          <span className="ml-1 text-[10px] font-normal normal-case text-slate-500">
+                            (private to you — not shared, unlike the rest of this section)
+                          </span>
+                        </label>
                         <input id="name" className={inputClass} value={values.name} onChange={(e) => set("name", e.target.value)} required />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
@@ -1158,8 +1169,8 @@ export function BankForm({
                     {commentError && (
                       <p className="mb-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{commentError}</p>
                     )}
-                    <textarea
-                      rows={2}
+                    <AutoGrowTextarea
+                      minRows={2}
                       className={inputClass}
                       placeholder="Add a note for everyone…"
                       value={commentBody}
@@ -1499,8 +1510,8 @@ function CannotOpenPromptModal({
           You marked <span className="font-medium text-slate-700">{bankName}</span> as
           can&apos;t open. Choose how much to share — your optional note rides along either way.
         </p>
-        <textarea
-          rows={3}
+        <AutoGrowTextarea
+          minRows={3}
           className={`${inputClass} mt-3`}
           placeholder="Optional note for everyone (e.g. local residents only, rejected by mail)…"
           value={shareNote}

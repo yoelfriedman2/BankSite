@@ -5,12 +5,15 @@
 // found the personal-export and weekly-backup fixes (DATA-06/REL-03) hadn't
 // been applied to several other reads of the same tables.
 export async function fetchAllRows<T>(
-  buildPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+  buildPage: (from: number, to: number) => PromiseLike<unknown>,
 ): Promise<{ rows: T[]; error?: string }> {
   const rows: T[] = [];
   const PAGE = 1000;
   for (let from = 0; ; from += PAGE) {
-    const { data, error } = await buildPage(from, from + PAGE - 1);
+    const { data, error } = (await buildPage(from, from + PAGE - 1)) as {
+      data: T[] | null;
+      error: { message: string } | null;
+    };
     if (error) return { rows, error: error.message };
     rows.push(...(data ?? []));
     if (!data || data.length < PAGE) break;

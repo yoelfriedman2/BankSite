@@ -573,6 +573,7 @@ export function ImportDialog({
     accountsUpdated: number;
     accountsSkipped: number;
     notes: number;
+    rowErrors: string[];
   } | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -651,6 +652,7 @@ export function ImportDialog({
         accountsUpdated: res.accountsUpdated ?? 0,
         accountsSkipped: res.accountsSkipped ?? 0,
         notes: res.notes ?? 0,
+        rowErrors: res.rowErrors ?? [],
       });
       setStage("done");
       onImported();
@@ -904,6 +906,22 @@ export function ImportDialog({
                   : ""}
                 {result.notes > 0 ? ` · ${result.notes} note${result.notes === 1 ? "" : "s"} posted` : ""}
               </p>
+            </div>
+          )}
+
+          {stage === "done" && result && result.rowErrors.length > 0 && (
+            <div className="mt-3 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <p className="font-semibold">
+                {result.rowErrors.length} row{result.rowErrors.length === 1 ? "" : "s"} didn&apos;t import
+              </p>
+              <p className="mt-1 text-amber-700">
+                Everything else above did — these are the only ones that failed:
+              </p>
+              <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
+                {result.rowErrors.map((msg, i) => (
+                  <li key={i}>{msg}</li>
+                ))}
+              </ul>
             </div>
           )}
 

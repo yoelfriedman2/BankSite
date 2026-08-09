@@ -39,6 +39,9 @@ export async function GET() {
     { rows: reminders, error: remindersErr },
     { rows: campaigns, error: campaignsErr },
     { rows: campaignItems, error: campaignItemsErr },
+    { rows: balanceHistory, error: historyErr },
+    { rows: roadTrips, error: roadTripsErr },
+    { data: profile, error: profileErr },
   ] = await Promise.all([
     fetchAllRows<Bank>((from, to) =>
       supabase.from("banks").select("*").is("deleted_at", null).order("name", { ascending: true }).range(from, to),
@@ -60,7 +63,28 @@ export async function GET() {
       supabase.from("address_campaigns").select("*").order("created_at", { ascending: false }).range(from, to),
     ),
     fetchAllRows<Record<string, unknown>>((from, to) => supabase.from("address_campaign_items").select("*").range(from, to)),
+    fetchAllRows<Record<string, unknown>>((from, to) =>
+      supabase.from("account_balance_history").select("*").order("as_of_date", { ascending: false }).range(from, to),
+    ),
+    // road_trips' own RLS also lets a caller read OTHER users' public trips —
+    // scoped to user_id here since a personal backup should only ever contain
+    // this caller's own saved trips, not everyone else's.
+    fetchAllRows<Record<string, unknown>>((from, to) =>
+      supabase.from("road_trips").select("*").eq("user_id", user.id).range(from, to),
+    ),
+    // A single row, not paginated. Included specifically for vault_salt/
+    // vault_check — without them, ciphertext already sitting in the Accounts
+    // sheet's Username/Password columns (when vault encryption is on) can
+    // never be re-derived from this backup alone, even with the right master
+    // password, since PBKDF2 needs the exact same salt it was derived with.
+    supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
   ]);
+  // A failed table read here used to only ever reach a server log nobody
+  // downloading this file would ever see — the zip still built and downloaded
+  // looking completely normal either way. Collected instead, and written
+  // directly into the zip itself (see below) so an incomplete backup can
+  // never look identical to a complete one.
+  const readWarnings: string[] = [];
   for (const [table, err] of [
     ["banks", banksErr],
     ["accounts", acctsErr],
@@ -70,8 +94,17 @@ export async function GET() {
     ["reminders", remindersErr],
     ["address_campaigns", campaignsErr],
     ["address_campaign_items", campaignItemsErr],
+    ["account_balance_history", historyErr],
+    ["road_trips", roadTripsErr],
   ] as const) {
-    if (err) console.error(`[export/full] ${table} read failed partway through for user ${user.id}:`, err);
+    if (err) {
+      console.error(`[export/full] ${table} read failed partway through for user ${user.id}:`, err);
+      readWarnings.push(`${table}: ${err}`);
+    }
+  }
+  if (profileErr) {
+    console.error(`[export/full] profile read failed for user ${user.id}:`, profileErr);
+    readWarnings.push(`profile: ${profileErr.message}`);
   }
 
   const bankList = (banks ?? []) as Bank[];
@@ -149,6 +182,47 @@ export async function GET() {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(addressRows), "Address changes");
   }
 
+  const historyRows = (balanceHistory ?? []).map((h) => {
+    const acct = acctById.get(h.account_id as string);
+    return {
+      Bank: acct ? bankNameById.get(acct.bank_id) ?? "" : "",
+      Holder: acct?.holder ?? "",
+      "As of": h.as_of_date,
+      Balance: h.balance,
+      Change: h.change_amount ?? "",
+      Reason: h.reason ?? "",
+    };
+  });
+  if (historyRows.length) {
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(historyRows), "Balance history");
+  }
+
+  const tripRows = (roadTrips ?? []).map((t) => ({
+    Title: t.title ?? "",
+    Public: t.is_public ? "yes" : "",
+    Created: t.created_at ?? "",
+    Updated: t.updated_at ?? "",
+    "Plan (raw JSON)": JSON.stringify(t.plan ?? {}),
+  }));
+  if (tripRows.length) {
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tripRows), "Road trips");
+  }
+
+  // Only meaningful when vault encryption is actually on — but included
+  // unconditionally (a single row) so this sheet is always where someone
+  // would look for it, rather than silently missing depending on state.
+  if (profile) {
+    const profileRows = [
+      {
+        "Display name": profile.display_name ?? "",
+        "Vault encryption enabled": profile.vault_encryption_enabled ? "yes" : "no",
+        "Vault salt": profile.vault_salt ?? "",
+        "Vault check": profile.vault_check ?? "",
+      },
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(profileRows), "Profile & vault");
+  }
+
   const xlsxBuf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
 
   const date = new Date().toISOString().slice(0, 10);
@@ -156,7 +230,11 @@ export async function GET() {
   zip.file(`bank-tracker-${date}.xlsx`, xlsxBuf);
 
   // Documents — download each from storage (admin bypasses storage RLS, but we
-  // only ever iterate the current user's own document rows).
+  // only ever iterate the current user's own document rows). A failed
+  // individual download used to just `continue`, silently dropping that one
+  // file with no trace anywhere — collected into its own warning list instead,
+  // same as the table-read failures above, so the README below can name it.
+  const docWarnings: string[] = [];
   const docRows = docs ?? [];
   if (docRows.length) {
     const admin = createAdminClient();
@@ -165,8 +243,12 @@ export async function GET() {
 
     for (const d of docRows) {
       const path = d.storage_path as string;
-      const { data: blob } = await admin.storage.from(BUCKET).download(path);
-      if (!blob) continue;
+      const { data: blob, error: dlErr } = await admin.storage.from(BUCKET).download(path);
+      if (!blob) {
+        console.error(`[export/full] document download failed for user ${user.id}, path ${path}:`, dlErr);
+        docWarnings.push(`${(d.filename as string) ?? path}: ${dlErr?.message ?? "download failed"}`);
+        continue;
+      }
       const buf = Buffer.from(await blob.arrayBuffer());
 
       const acct = acctById.get(d.account_id as string);
@@ -190,6 +272,28 @@ export async function GET() {
       used.add(name);
       folder?.file(name, buf);
     }
+  }
+
+  // Named to sort first and stand out — if any table failed to fully read, or
+  // any individual document couldn't be downloaded, that has to be visible
+  // inside the zip itself, not just a server log the person downloading this
+  // can never see. A backup that silently looks complete when it isn't is
+  // worse than one that's honest about the gap. Written after the document
+  // loop above so a download failure there is covered by this same file.
+  if (readWarnings.length || docWarnings.length) {
+    const lines = [`This backup, built ${date}, is INCOMPLETE.`, ""];
+    if (readWarnings.length) {
+      lines.push("The following couldn't be fully read and may be missing rows:", ...readWarnings.map((w) => `  - ${w}`), "");
+    }
+    if (docWarnings.length) {
+      lines.push(
+        "The following document(s) couldn't be downloaded and are missing from the documents/ folder:",
+        ...docWarnings.map((w) => `  - ${w}`),
+        "",
+      );
+    }
+    lines.push("Everything else in this zip finished normally. Try downloading again —", "if the problem persists, let the app owner know.");
+    zip.file("0_INCOMPLETE_BACKUP_README.txt", lines.join("\n"));
   }
 
   const zipBuf = await zip.generateAsync({ type: "nodebuffer" });

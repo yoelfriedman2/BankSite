@@ -24,26 +24,34 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
 
 ## One-time setup pending
 
-- **Run migration `0049_borrowed_funds.sql`** — new private per-user table (`borrowed_funds`) powering
-  the "Borrowed money" section on the Money page (money borrowed from a person/outside source, tracked
-  separately from account sweeps since there's no account/balance behind it). RLS scoped to
-  `user_id = auth.uid()` only, same shape as `road_trips` (migration 0032) — no shared/admin-client
-  path. **Not optional/gracefully-degrading in one specific way**: until this runs, the "Borrowed
-  money" section will error on add/list (a real table read/write, not a nullable column) rather than
-  silently doing nothing — same tradeoff already accepted for sweep transactions (migration 0034) and
-  vault encryption (migration 0042), both real-table/RPC features that can't degrade to "does nothing."
-  The rest of the app (accounts, banks, existing sweeps) is completely unaffected either way.
+- ~~Run migration `0050_borrowed_funds.sql`~~ — **confirmed run 2026-08-09.** New private per-user
+  table (`borrowed_funds`) powering the "Borrowed money" section on the Money page (money borrowed
+  from a person/outside source, tracked separately from account sweeps since there's no account/
+  balance behind it). RLS scoped to `user_id = auth.uid()` only, same shape as `road_trips` (migration
+  0032) — no shared/admin-client path. Renumbered from this session's original `0049_borrowed_funds.sql`
+  to `0050` after merging with `main`, which had independently claimed `0049` for an unrelated migration
+  — the SQL that actually ran against the database is unchanged, only the filename in this repo moved.
 
-- **Run migration `0048_cd_term_and_auto_renew.sql`** — adds `accounts.cd_term_months` and
-  `accounts.cd_auto_renew` (both nullable, additive). Worth noting why this one needed more than the
-  usual "just leave it out of the patch" treatment: `buildPatch` always sends these two as an explicit
-  value (`null` when unset, not `undefined`), unlike most migration-gated Account fields, which are
-  read via `select("*")` and degrade for free. A write into a genuinely missing column fails the whole
-  statement, not just those two fields — so until this migration runs, saving **any** account (not just
-  CDs) would have hard-failed on every edit. Fixed with a real fallback in `upsertAccount`
-  (`isMissingCdColumnsError` + a one-time retry with the two fields stripped) so a save still succeeds
-  in full on every other field while the migration is pending — same "can't regress below what already
-  worked" shape as the `update_account_balance` RPC fallback a few lines above it in the same function.
+- ~~Run migration `0049_cd_term_and_auto_renew.sql`~~ — **confirmed run 2026-08-09.** Adds
+  `accounts.cd_term_months` and `accounts.cd_auto_renew` (both nullable, additive). Worth noting why
+  this one needed more than the usual "just leave it out of the patch" treatment: `buildPatch` always
+  sends these two as an explicit value (`null` when unset, not `undefined`), unlike most migration-gated
+  Account fields, which are read via `select("*")` and degrade for free. A write into a genuinely
+  missing column fails the whole statement, not just those two fields — so until this migration ran,
+  saving **any** account (not just CDs) would have hard-failed on every edit. Fixed with a real
+  fallback in `upsertAccount` (`isMissingCdColumnsError` + a one-time retry with the two fields
+  stripped) so a save still succeeds in full on every other field regardless of migration order — same
+  "can't regress below what already worked" shape as the `update_account_balance` RPC fallback a few
+  lines above it in the same function. Renumbered from this session's original
+  `0048_cd_term_and_auto_renew.sql` to `0049` for the same reason as the entry above.
+
+- ~~Run migration `0048_account_documents_ownership_rls.sql`~~ — **confirmed run 2026-08-09.** Tightens
+  the `account_documents` RLS policy to also require (a) the referenced `account_id` still belong to
+  the caller and (b) `storage_path` literally start with `${auth.uid()}/` — previously only checked the
+  document row's own `user_id`. Closes a document-authorization gap flagged by an independent code
+  review on 2026-08-07, then re-flagged as still-incomplete (the (b) half) on a second pass the same
+  day — see both 2026-08-07 entries in CLAUDE.md. RLS now enforces both conditions at the DB layer
+  itself, on top of the app-level checks in `accounts/documents.ts` that were already live.
 
 - ~~Run migration `0047_function_search_path_hardening.sql`~~ — **confirmed run 2026-08-05.** Closed
   12 of the "Function Search Path Mutable" warnings from the 2026-08-04 Supabase security-lint scan
