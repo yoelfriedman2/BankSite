@@ -24,6 +24,20 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
 
 ## One-time setup pending
 
+- **Run migration `0052_mailed_deposits.sql`** — new private per-user table (`mailed_deposits`)
+  tracking a check enclosed through Send money as "waiting to post" instead of crediting the
+  destination account immediately. Adds `post_mailed_deposit()` (the RPC that atomically credits +
+  logs activity + marks a deposit posted — called both by the "Mark posted" button and the daily
+  cron's auto-post loop) and `profiles.default_deposit_post_days` (nullable, additive — the per-user
+  default day count, editable in Settings → Alerts & emails).
+  **Degrades gracefully until it's run**: `recordMailing()` falls back to the old immediate-credit
+  behavior with a warning toast explaining tracking isn't set up yet; the Money page's "Waiting to
+  post" section and the cron's auto-post loop both just find no rows / a missing-table error and
+  no-op, same as every other migration-gated feature in this app.
+  `src/lib/supabase/database.types.ts` hand-patched for the new table + column + RPC — same
+  limitation as every other migration in this sandbox (no live Supabase credentials to regenerate
+  against), re-run `supabase gen types typescript` for real once this is applied.
+
 - **Run migration `0051_payment_sources.sql`** — new private per-user table (`payment_sources`)
   backing the "outside account" a check can be drawn on from the new Send money / Send a letter
   pages. Holds only what's needed to print a check (label, payer name, bank name, routing + account
@@ -173,6 +187,16 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
   (2026-07-07). `accounts.interest_rate` and `accounts.exclude_min_balance` are live.
 - ~~Run migration **0026_fdic_admin_role.sql**~~ — confirmed run (2026-07-07). The owner can now
   grant the FDIC-admin role toggle on Admin → Users.
+
+## Not yet built: warn before permanently deleting an account with a pending mailed deposit
+
+`mailed_deposits.account_id` cascades on account/bank deletion, same as `account_sweeps` — a
+permanent (Trash → delete forever) delete of an account with a "waiting to post" deposit still
+tracked against it silently loses that record, with no warning, unlike the existing INT-05 fix that
+does warn about an unreturned sweep before a permanent delete. Same shape, smaller scope (a check
+that hasn't posted yet is usually a few weeks old, vs. a sweep that can sit outstanding far longer)
+— flagged rather than built alongside the main feature so it doesn't get lost. Would mirror
+`getOutstandingSweepWarningForAccounts()` in `money/actions.ts` almost exactly.
 
 ## Live: manual backup + single-user restore (2026-07-07, dry-run confirmed 2026-07-12)
 

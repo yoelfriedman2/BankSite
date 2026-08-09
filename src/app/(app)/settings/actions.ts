@@ -13,6 +13,7 @@ import {
 import type { Account, Bank } from "@/lib/types";
 import { friendlyDbError } from "@/lib/friendlyError";
 import { fetchAllRows } from "@/lib/pagination";
+import { clampPostDays } from "@/lib/mailedDeposits";
 
 export async function updateSettings(values: {
   display_name: string;
@@ -26,6 +27,7 @@ export async function updateSettings(values: {
   alert_low_balance: boolean;
   alert_cd_maturity: boolean;
   min_balance: string;
+  default_deposit_post_days: string;
 }): Promise<{ error?: string }> {
   const months = parseInt(values.default_dormancy_months, 10);
   if (!Number.isFinite(months) || months < 1) {
@@ -35,6 +37,7 @@ export async function updateSettings(values: {
   if (!Number.isFinite(minBalance) || minBalance < 0) {
     return { error: "Minimum balance must be zero or more." };
   }
+  const depositPostDays = clampPostDays(parseInt(values.default_deposit_post_days, 10));
   const displayName = values.display_name.trim() || null;
   const holders = Array.from(
     new Set((values.holders ?? []).map((h) => h.trim()).filter(Boolean)),
@@ -56,6 +59,7 @@ export async function updateSettings(values: {
       alert_low_balance: values.alert_low_balance,
       alert_cd_maturity: values.alert_cd_maturity,
       min_balance: minBalance,
+      default_deposit_post_days: depositPostDays,
     });
     revalidatePath("/settings");
     revalidatePath("/banks");

@@ -28,7 +28,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Pre-written letters for the usual reasons: deposit enclosed, change of address, request a statement, keep the account active, close the account, or a blank page to write your own. Every one is editable before it prints.",
       "The address is positioned for a window envelope, so there's nothing to address by hand.",
       "Enclose a check and it prints with the letter, along with a deposit ticket — carrying its own machine-readable MICR line for the receiving account — telling the bank exactly which account it goes into. The check can be drawn on one of your own accounts — which deducts the balance and logs it in the check register — or on an outside personal account you save once and reuse.",
-      "Printing logs the activity on the account it's about, which is what keeps the dormancy clock from running out.",
+      "A mailed check doesn't credit the destination account the moment it's printed — it's tracked as \"waiting to post\" instead, with your choice of posting automatically after a set number of days (adjustable per mailing, with a default you set in Settings) or only when you mark it posted yourself. Either way it shows up on Money → Waiting to post, where you can mark it posted or cancel it at any time.",
     ],
   },
   {

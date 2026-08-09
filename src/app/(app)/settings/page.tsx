@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { SettingsForm } from "@/components/SettingsForm";
 import { DEMO_MODE, DEMO_USER, getDemoProfile } from "@/lib/demo";
 import { isOwnerEmail } from "@/lib/isOwner";
+import { DEFAULT_DEPOSIT_POST_DAYS } from "@/lib/mailedDeposits";
 
 export default async function SettingsPage() {
   if (DEMO_MODE) {
@@ -21,6 +22,7 @@ export default async function SettingsPage() {
         alertLowBalance={p.alert_low_balance ?? true}
         alertCdMaturity={p.alert_cd_maturity ?? true}
         minBalance={p.min_balance ?? 100}
+        defaultDepositPostDays={p.default_deposit_post_days ?? DEFAULT_DEPOSIT_POST_DAYS}
         lastSignInAt={null}
         isOwner={isOwnerEmail(DEMO_USER.email)}
         vaultEnabled={!!p.vault_encryption_enabled}
@@ -57,6 +59,11 @@ export default async function SettingsPage() {
       alertLowBalance={profile?.alert_low_balance ?? true}
       alertCdMaturity={profile?.alert_cd_maturity ?? true}
       minBalance={profile?.min_balance != null ? Number(profile.min_balance) : 100}
+      defaultDepositPostDays={
+        profile?.default_deposit_post_days != null
+          ? Number(profile.default_deposit_post_days)
+          : DEFAULT_DEPOSIT_POST_DAYS
+      }
       lastSignInAt={user?.last_sign_in_at ?? null}
       isOwner={isOwnerEmail(user.email)}
       vaultEnabled={!!profile?.vault_encryption_enabled}

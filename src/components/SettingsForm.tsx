@@ -21,6 +21,7 @@ import {
   ShieldAlert,
   Wallet,
   CalendarClock,
+  Mail,
   CircleAlert,
 } from "lucide-react";
 import {
@@ -122,6 +123,7 @@ export function SettingsForm({
   alertLowBalance,
   alertCdMaturity,
   minBalance,
+  defaultDepositPostDays,
   lastSignInAt,
   isOwner = false,
   vaultEnabled = false,
@@ -138,6 +140,7 @@ export function SettingsForm({
   alertLowBalance: boolean;
   alertCdMaturity: boolean;
   minBalance: number;
+  defaultDepositPostDays: number;
   lastSignInAt: string | null;
   isOwner?: boolean;
   vaultEnabled?: boolean;
@@ -174,6 +177,7 @@ export function SettingsForm({
   const [lowBalanceAlert, setLowBalanceAlert] = useState(alertLowBalance);
   const [cdAlert, setCdAlert] = useState(alertCdMaturity);
   const [minBal, setMinBal] = useState(String(minBalance));
+  const [depositDays, setDepositDays] = useState(String(defaultDepositPostDays));
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -197,6 +201,7 @@ export function SettingsForm({
     lowBalanceAlert: alertLowBalance,
     cdAlert: alertCdMaturity,
     minBal: String(minBalance),
+    depositDays: String(defaultDepositPostDays),
   });
   const [dirty, setDirty] = useState(false);
   useUnsavedChanges(dirty);
@@ -213,7 +218,8 @@ export function SettingsForm({
         noActivityAlert !== s.noActivityAlert ||
         lowBalanceAlert !== s.lowBalanceAlert ||
         cdAlert !== s.cdAlert ||
-        minBal !== s.minBal,
+        minBal !== s.minBal ||
+        depositDays !== s.depositDays,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -228,6 +234,7 @@ export function SettingsForm({
     lowBalanceAlert,
     cdAlert,
     minBal,
+    depositDays,
   ]);
 
   // Delete-account flow
@@ -353,6 +360,7 @@ export function SettingsForm({
         alert_low_balance: lowBalanceAlert,
         alert_cd_maturity: cdAlert,
         min_balance: minBal,
+        default_deposit_post_days: depositDays,
       });
       if (result.error) {
         setError(result.error);
@@ -371,6 +379,7 @@ export function SettingsForm({
         lowBalanceAlert,
         cdAlert,
         minBal,
+        depositDays,
       };
       setDirty(false);
       setSaved(true);
@@ -588,6 +597,31 @@ export function SettingsForm({
                 title="CDs maturing soon"
                 description="Flag CDs that mature within the next 30 days (or already matured)."
               />
+
+              <div className="flex items-start gap-3 rounded-lg border border-slate-100 p-3">
+                <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-slate-800">Mailed deposits — days until posting</p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    A check you mail in through Send money is tracked as waiting to post, not credited
+                    right away. This is the default number of days before it posts on its own — you can
+                    change it for any single mailing, and mark one posted (or cancel it) at any time from
+                    Money → Waiting to post.
+                  </p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      max="30"
+                      step="1"
+                      className="w-20 rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                      value={depositDays}
+                      onChange={(e) => setDepositDays(e.target.value)}
+                    />
+                    <span className="text-xs text-slate-500">days</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </Card>
 

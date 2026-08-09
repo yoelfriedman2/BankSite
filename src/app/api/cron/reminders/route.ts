@@ -11,6 +11,7 @@ import { buildBackupZip, saveBackupToStorage } from "@/lib/backup";
 import { isMonthlyFeeDue } from "@/lib/monthlyFee";
 import { isInterestAccrualDue, monthlyInterestAmount } from "@/lib/interestAccrual";
 import { monthsSince } from "@/lib/dormancy";
+import { isDepositDue } from "@/lib/mailedDeposits";
 
 // This route runs unattended (no signed-in user, no toast to show) — a
 // swallowed failure here previously only ever reached this app's own request
@@ -448,6 +449,43 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ── Mailed deposits — auto-post ──
+  // Send money/Send a letter tracks a mailed check as "waiting to post"
+  // rather than crediting it immediately (migration 0052) — this is what
+  // resolves the ones the user asked to post automatically once their
+  // chosen day count has passed. The "Mark posted" button in the Money page
+  // can still resolve any of them by hand at any time, auto_post or not.
+  let depositsPosted = 0;
+  const { data: dueDeposits, error: depositsErr } = await admin
+    .from("mailed_deposits")
+    .select("id, post_after")
+    .eq("status", "pending")
+    .eq("auto_post", true)
+    .lte("post_after", today.toISOString().slice(0, 10));
+
+  if (depositsErr) {
+    logCronError("mailed deposits query failed (migration 0052 not run yet?):", depositsErr.message);
+  } else {
+    const todayStr = today.toISOString().slice(0, 10);
+    for (const d of dueDeposits ?? []) {
+      try {
+        if (!isDepositDue(d.post_after as string, today)) continue; // belt-and-suspenders past the SQL filter
+        const { data: newBalance, error: rpcErr } = await admin.rpc("post_mailed_deposit", {
+          p_deposit_id: d.id as string,
+          p_posted_on: todayStr,
+        });
+        if (rpcErr) {
+          logCronError(`post_mailed_deposit failed for deposit ${d.id}:`, rpcErr.message);
+          continue;
+        }
+        if (newBalance == null) continue; // already resolved by something else (e.g. a manual click)
+        depositsPosted++;
+      } catch (err) {
+        logCronError(`unexpected error posting mailed deposit ${d.id}:`, err);
+      }
+    }
+  }
+
   // ── Weekly full backup (Mondays, or on demand with ?backup=1) ──
   // Rides this daily cron because Vercel's free plan caps the project at two
   // cron jobs, both already used. Every Monday the whole database is zipped
@@ -476,5 +514,13 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, reminded: sent, remindersEmailed, feesCharged, interestCredited, backup });
+  return NextResponse.json({
+    ok: true,
+    reminded: sent,
+    remindersEmailed,
+    feesCharged,
+    interestCredited,
+    depositsPosted,
+    backup,
+  });
 }

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { DEMO_MODE, getDemoBranches } from "@/lib/demo";
 import { friendlyDbError } from "@/lib/friendlyError";
 import { todayLocalStr } from "@/lib/date";
+import { addDaysToDateStr, clampPostDays } from "@/lib/mailedDeposits";
 import type { ActivityType } from "@/lib/types";
 
 /** One office of a bank, as a place to address an envelope to. */
@@ -176,17 +177,32 @@ export type MailingCheck = {
   deductSource: boolean;
 };
 
+/** How a check's destination-side credit should be tracked. A mailed check
+ *  hasn't actually posted the moment it's printed, so this is never applied
+ *  immediately — it always lands as a pending row on Money → Waiting to
+ *  post; `autoPost` only decides whether the daily cron is also allowed to
+ *  resolve it on its own once `postAfterDays` have passed. Either way, the
+ *  "Mark posted" button in that list works at any time, sooner or later. */
+export interface DepositSchedule {
+  autoPost: boolean;
+  postAfterDays: number;
+}
+
 export interface MailingInput {
   /** The account being mailed to, when it's one of ours. Null for a letter to
    *  a bank you hold nothing at. */
   destinationAccountId: string | null;
-  /** Add the check amount to the destination account's balance. */
-  creditDestination: boolean;
-  /** Stamp activity on the destination account (this is what resets dormancy). */
+  /** Stamp activity on the destination account (this is what resets
+   *  dormancy). Only used for a letter with no check — when a check is
+   *  enclosed, activity is logged automatically once the deposit posts
+   *  (see `deposit`), not at mail time. */
   logActivity: boolean;
   /** Recorded on the activity entry — check_sent when money is enclosed. */
   activityType: ActivityType;
   check: MailingCheck | null;
+  /** Required whenever check + destinationAccountId are both set; ignored
+   *  otherwise (a letter with no check has nothing to post). */
+  deposit: DepositSchedule | null;
 }
 
 export interface MailingResult {
@@ -197,6 +213,10 @@ export interface MailingResult {
   warnings?: string[];
   /** The check number actually claimed, when it differs from the one printed. */
   claimedCheckNumber?: number;
+  /** True once a deposit was tracked as pending — lets the client show a
+   *  distinct "tracked, waiting to post" confirmation instead of a plain
+   *  "done" toast. */
+  depositTracked?: boolean;
 }
 
 /** Moves a balance atomically (migration 0043's RPC), falling back to the
@@ -343,51 +363,82 @@ export async function recordMailing(input: MailingInput): Promise<MailingResult>
     }
   }
 
+  let depositTracked = false;
+
   if (input.destinationAccountId) {
     const destId = input.destinationAccountId;
     const { data: owned } = await supabase.from("accounts").select("id").eq("id", destId).maybeSingle();
     if (!owned) {
       warnings.push("The destination account wasn't found, so nothing was logged against it.");
-    } else {
-      if (check && input.creditDestination) {
+    } else if (check && input.deposit) {
+      // The check hasn't actually posted yet — track it as pending instead of
+      // crediting/logging immediately, so the balance and the dormancy clock
+      // both reflect reality (the account it's about, not the day it was
+      // mailed). Falls back to the old immediate behavior only if the
+      // migration that adds this tracking hasn't been run yet.
+      const today = todayLocalStr();
+      const days = clampPostDays(input.deposit.postAfterDays);
+      const { error: insertErr } = await supabase.from("mailed_deposits").insert({
+        user_id: user.id,
+        account_id: destId,
+        amount: check.amount,
+        mailed_on: today,
+        post_after: addDaysToDateStr(today, days),
+        auto_post: input.deposit.autoPost,
+        activity_type: input.logActivity ? input.activityType : null,
+      });
+      if (!insertErr) {
+        depositTracked = true;
+      } else if (isMissingTable(insertErr.message)) {
+        warnings.push(
+          "Waiting-to-post tracking needs migration 0052 — credited immediately for now instead.",
+        );
         const w = await applyBalanceChange(
           supabase, user.id, destId, check.amount, "deposit mailed in", "receiving",
         );
         if (w) warnings.push(w);
-      }
-
-      if (input.logActivity) {
-        const today = todayLocalStr();
-        const { error: rpcErr } = await supabase.rpc("append_activity_log", {
-          p_account_id: destId,
-          p_date: today,
-          p_note: (check ? "Mailed a deposit" : "Mailed a letter") as unknown as string,
-          p_type: input.activityType as unknown as string,
-        });
-        if (rpcErr) {
-          console.warn(
-            `[recordMailing] append_activity_log RPC unavailable (migration 0044 not run yet?), falling back for account ${destId}:`,
-            rpcErr.message,
-          );
-          const { data: acc } = await supabase
-            .from("accounts")
-            .select("activity_log")
-            .eq("id", destId)
-            .maybeSingle();
-          const existing =
-            (acc?.activity_log as { date: string; note: string | null; type?: ActivityType | null }[]) ?? [];
-          const { error: updErr } = await supabase
-            .from("accounts")
-            .update({
-              last_activity_date: today,
-              activity_log: [
-                ...existing,
-                { date: today, note: check ? "Mailed a deposit" : "Mailed a letter", type: input.activityType },
-              ],
-            })
-            .eq("id", destId);
-          if (updErr) warnings.push("The activity couldn't be logged on the destination account.");
+        if (input.logActivity) {
+          const { error: rpcErr } = await supabase.rpc("append_activity_log", {
+            p_account_id: destId,
+            p_date: today,
+            p_note: "Mailed a deposit" as unknown as string,
+            p_type: input.activityType as unknown as string,
+          });
+          if (rpcErr) warnings.push("The activity couldn't be logged on the destination account.");
         }
+      } else {
+        warnings.push(`Couldn't track this as a pending deposit: ${friendlyDbError(insertErr.message)}`);
+      }
+    } else if (input.logActivity) {
+      // No check — a plain letter's own activity has no financial outcome to
+      // wait on, so it logs immediately, same as before.
+      const today = todayLocalStr();
+      const { error: rpcErr } = await supabase.rpc("append_activity_log", {
+        p_account_id: destId,
+        p_date: today,
+        p_note: "Mailed a letter" as unknown as string,
+        p_type: input.activityType as unknown as string,
+      });
+      if (rpcErr) {
+        console.warn(
+          `[recordMailing] append_activity_log RPC unavailable (migration 0044 not run yet?), falling back for account ${destId}:`,
+          rpcErr.message,
+        );
+        const { data: acc } = await supabase
+          .from("accounts")
+          .select("activity_log")
+          .eq("id", destId)
+          .maybeSingle();
+        const existing =
+          (acc?.activity_log as { date: string; note: string | null; type?: ActivityType | null }[]) ?? [];
+        const { error: updErr } = await supabase
+          .from("accounts")
+          .update({
+            last_activity_date: today,
+            activity_log: [...existing, { date: today, note: "Mailed a letter", type: input.activityType }],
+          })
+          .eq("id", destId);
+        if (updErr) warnings.push("The activity couldn't be logged on the destination account.");
       }
     }
   }
@@ -395,6 +446,11 @@ export async function recordMailing(input: MailingInput): Promise<MailingResult>
   revalidatePath("/send");
   revalidatePath("/accounts");
   revalidatePath("/checks");
+  revalidatePath("/money");
   revalidatePath("/");
-  return { warnings: warnings.length ? warnings : undefined, claimedCheckNumber };
+  return {
+    warnings: warnings.length ? warnings : undefined,
+    claimedCheckNumber,
+    depositTracked,
+  };
 }

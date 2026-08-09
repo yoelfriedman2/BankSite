@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { DEMO_MODE, getDemoAccounts, getDemoBanks } from "@/lib/demo";
 import { friendlyDbError } from "@/lib/friendlyError";
 import { formatCurrency } from "@/lib/format";
+import { todayLocalStr } from "@/lib/date";
 
 export type OutstandingSweep = {
   id: string;
@@ -445,4 +446,98 @@ export async function getBalanceAsOf(date: string): Promise<BalanceAsOfRow[]> {
       balanceAsOf: asOf.has(a.id) ? (asOf.get(a.id) as number) : null,
     }))
     .sort((x, y) => x.bankName.localeCompare(y.bankName));
+}
+
+// ── Mailed deposits waiting to post ──────────────────────────────────────
+// A check enclosed in a Send money mailing doesn't credit the destination
+// account or log activity the moment it's printed — see send/actions.ts's
+// recordMailing(). It lands here instead, until the daily cron auto-posts it
+// (if enabled) or it's marked posted/canceled by hand. Real-Supabase-only,
+// same accepted limitation as sweeps/borrowed funds above (DEMO_MODE has no
+// fake data store for this).
+
+export type PendingMailedDeposit = {
+  id: string;
+  accountId: string;
+  holder: string | null;
+  bankName: string;
+  amount: number;
+  mailedOn: string;
+  postAfter: string;
+  autoPost: boolean;
+};
+
+/** Every deposit still waiting to post, soonest-due first. */
+export async function getPendingMailedDeposits(): Promise<PendingMailedDeposit[]> {
+  if (DEMO_MODE) return [];
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data } = await supabase
+    .from("mailed_deposits")
+    .select("id, account_id, amount, mailed_on, post_after, auto_post, account:accounts(holder, bank:banks(name))")
+    .eq("status", "pending")
+    .order("post_after", { ascending: true });
+
+  return (data ?? []).map((r) => {
+    const acct = (Array.isArray(r.account) ? r.account[0] : r.account) as AcctJoin | null;
+    return {
+      id: r.id as string,
+      accountId: r.account_id as string,
+      holder: acct?.holder ?? null,
+      bankName: acct?.bank?.name ?? "—",
+      amount: Number(r.amount),
+      mailedOn: r.mailed_on as string,
+      postAfter: r.post_after as string,
+      autoPost: r.auto_post as boolean,
+    };
+  });
+}
+
+/** Applies a pending deposit right now — credits the balance, logs activity
+ *  if the mailing asked for it, and marks it posted. Same atomic RPC
+ *  (migration 0052) the daily cron calls once post_after arrives; this just
+ *  lets the user trigger it early (or late) by hand. */
+export async function markMailedDepositPosted(id: string): Promise<{ error?: string }> {
+  if (DEMO_MODE) return {};
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { data, error } = await supabase.rpc("post_mailed_deposit", {
+    p_deposit_id: id,
+    p_posted_on: todayLocalStr(),
+  });
+  if (error) return { error: friendlyDbError(error.message) };
+  // null means the row wasn't found, wasn't this caller's, or was already
+  // resolved by something else (e.g. the cron beat this click) — not a
+  // real error, just nothing left to do.
+  if (data == null) return {};
+
+  revalidatePath("/money");
+  revalidatePath("/accounts");
+  revalidatePath("/");
+  return {};
+}
+
+/** Drops a pending deposit without ever crediting it — the check was voided,
+ *  lost, or never actually sent. No balance was ever touched, so there's
+ *  nothing to reverse. */
+export async function cancelMailedDeposit(id: string): Promise<{ error?: string }> {
+  if (DEMO_MODE) return {};
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("mailed_deposits")
+    .update({ status: "canceled" })
+    .eq("id", id)
+    .eq("status", "pending");
+  if (error) return { error: friendlyDbError(error.message) };
+
+  revalidatePath("/money");
+  return {};
 }

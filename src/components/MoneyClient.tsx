@@ -9,6 +9,7 @@ import {
   X,
   ArrowDownToLine,
   HandCoins,
+  Mail,
 } from "lucide-react";
 import { DateInput } from "@/components/DateInput";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -22,9 +23,12 @@ import {
   returnSweepBatch,
   addBorrowedFund,
   returnBorrowedFund,
+  markMailedDepositPosted,
+  cancelMailedDeposit,
   type OutstandingSweep,
   type SweepAccountOption,
   type OutstandingBorrowedFund,
+  type PendingMailedDeposit,
 } from "@/app/(app)/money/actions";
 
 const inputClass =
@@ -36,10 +40,12 @@ export function MoneyClient({
   sweeps,
   accounts,
   borrowed,
+  pendingDeposits,
 }: {
   sweeps: OutstandingSweep[];
   accounts: SweepAccountOption[];
   borrowed: OutstandingBorrowedFund[];
+  pendingDeposits: PendingMailedDeposit[];
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -96,6 +102,35 @@ export function MoneyClient({
     startTransition(async () => {
       const res = await returnBorrowedFund(id);
       setReturningId(null);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  const [resolvingDepositId, setResolvingDepositId] = useState<string | null>(null);
+
+  function handleMarkPosted(id: string) {
+    setResolvingDepositId(id);
+    startTransition(async () => {
+      const res = await markMailedDepositPosted(id);
+      setResolvingDepositId(null);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  function handleCancelDeposit(id: string) {
+    if (!window.confirm("Cancel this — the check never arrived, was voided, or wasn't actually sent? Nothing was ever credited, so there's nothing to reverse.")) return;
+    setResolvingDepositId(id);
+    startTransition(async () => {
+      const res = await cancelMailedDeposit(id);
+      setResolvingDepositId(null);
       if (res.error) {
         toast.error(res.error);
         return;
@@ -263,6 +298,72 @@ export function MoneyClient({
                   )}
                   Repaid
                 </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="mb-3 mt-8 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-slate-700">Waiting to post</h2>
+        {pendingDeposits.length > 0 && (
+          <span className="text-sm font-semibold tabular-nums text-slate-900">
+            {formatCurrency(pendingDeposits.reduce((s, d) => s + d.amount, 0))}
+          </span>
+        )}
+      </div>
+
+      {pendingDeposits.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center">
+          <Mail className="mx-auto mb-3 h-7 w-7 text-slate-300" />
+          <p className="font-medium text-slate-700">Nothing waiting to post</p>
+          <p className="mt-1 text-sm text-slate-600">
+            A check enclosed through Send money shows up here until it posts — it isn&apos;t credited to
+            the balance right away, since a mailed check hasn&apos;t actually arrived yet.
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          <ul>
+            {pendingDeposits.map((d) => (
+              <li
+                key={d.id}
+                className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-4 py-3 last:border-0"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm text-slate-800">
+                    {d.bankName} <span className="text-slate-400">·</span> {d.holder || "no holder"}
+                  </div>
+                  <div className="text-xs text-slate-600">
+                    Mailed {formatDate(d.mailedOn)}
+                    {" · "}
+                    {d.autoPost ? `posts automatically ${formatDate(d.postAfter)}` : "posted by hand only"}
+                  </div>
+                </div>
+                <div className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">
+                  {formatCurrency(d.amount)}
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    onClick={() => handleCancelDeposit(d.id)}
+                    disabled={resolvingDepositId === d.id}
+                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleMarkPosted(d.id)}
+                    disabled={resolvingDepositId === d.id}
+                    className="flex items-center gap-1.5 rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                  >
+                    {resolvingDepositId === d.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Check className="h-3.5 w-3.5" />
+                    )}
+                    Mark posted
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

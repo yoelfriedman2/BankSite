@@ -174,6 +174,84 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-08-09 (later — mailed deposits post automatically after N days, not on a manual click)** —
+Direct follow-up to the Send money entry below, same day: after live use, the user pushed back on
+the "credit immediately" checkbox that shipped first, and specifically on the alternative I'd
+proposed (a manual "Mark posted" click for every single mailing) — "the whole idea of this app is
+that it should be minimal interaction... you shouldn't have to do things so much manual." The ask:
+auto-post after a configurable number of days by default, with the manual button always available
+as a fallback, never a requirement.
+
+- **New `mailed_deposits` table** (migration **0052_mailed_deposits.sql** — *not yet run, see
+  TODO.md*), private per-user, RLS scoped to `user_id = auth.uid()`. Every check enclosed through
+  Send money now lands here as `status = 'pending'` instead of ever touching the destination
+  account's balance or activity log directly — `recordMailing()`'s old `creditDestination` checkbox
+  is gone entirely, replaced by a `deposit: { autoPost, postAfterDays } | null` field on
+  `MailingInput`. The paying side is unchanged: a check drawn on a tracked account still deducts
+  that account's balance immediately (that's a real checkbook-register commitment — see the earlier
+  entry's reasoning), only the *receiving* side is deferred.
+- **One atomic function, two callers.** `post_mailed_deposit(p_deposit_id, p_posted_on)` credits the
+  balance, writes the balance-history row, logs activity (if the mailing asked for it), and marks
+  the deposit posted — all in one transaction, same DATA-02 reasoning as `update_account_balance`.
+  It's `security invoker` with **no explicit `auth.uid()` filter**, deliberately: RLS on
+  `mailed_deposits` (owner-only) already scopes the row lookup for the user-facing "Mark posted"
+  button (`money/actions.ts#markMailedDepositPosted`, called through the normal RLS-scoped client —
+  a foreign or missing id just returns `null`, same shape as `update_account_balance`'s own "not
+  found, or not this caller's" case); the daily cron calls the exact same function per due row
+  through the service-role client, which legitimately bypasses RLS to process every user's due
+  deposits in one run. **Standing lesson for the next dual-caller RPC**: security invoker + RLS is
+  the whole enforcement mechanism here — don't add a redundant `auth.uid()` check, it would silently
+  break the cron path (auth.uid() is null under a service-role JWT) for no real gain in safety.
+- **`src/lib/mailedDeposits.ts`** (new, pure): `addDaysToDateStr` (Y/M/D arithmetic via `Date.UTC`,
+  never round-trips through a local timezone — same reasoning as the road-trip calendar-month fix),
+  `isDepositDue` (calendar-date comparison, not time-of-day), `clampPostDays` (1–30, floors/ceilings/
+  rounds/falls-back-to-default on bad input), and the shared `DEFAULT_DEPOSIT_POST_DAYS = 4`
+  constant. Used identically by the Send page's client-side stepper, the server action that creates
+  the pending row, and the cron's due-scan — one implementation, not three copies that could drift.
+- **Why 4 days by default**: long enough for the letter to actually travel and the bank to process
+  it, short enough that money doesn't look "stuck" for a meaningful stretch. Adjustable per mailing
+  (an up/down stepper right on the Send money page, 1–30 range) and per user (Settings → Alerts &
+  emails → new `profiles.default_deposit_post_days`, nullable/additive, same "falls back to the
+  constant until set" pattern as every other alert preference in that tab).
+- **"I'll mark it myself" is a real first-class choice, not a lesser option** — `auto_post = false`
+  on the row means the cron's due-scan (`eq("auto_post", true)`) skips it forever; the only way it
+  ever resolves is the Money page's "Mark posted" button. Both modes land on the exact same
+  **Money → Waiting to post** list, with the same "Mark posted" / "Cancel" actions available
+  regardless of which mode a mailing was created under — auto-post is a convenience default that
+  never locks out the manual path, and the manual path was never the only path either.
+- **Section 4 of the Send builder reworked**: when a check has a destination account picked, it now
+  shows the auto/manual choice, the day stepper (with a live "around <date>" readout via
+  `addDaysToDateStr`), and an activity-logging checkbox — all describing what happens *at posting
+  time*, not at print time. When there's no check (a plain letter) or no destination account, the
+  original single "log this as activity" checkbox is unchanged, since a letter with no money enclosed
+  has no financial state to wait on.
+- **Degrades gracefully, same shape as every other migration-gated write in this app**: if the
+  `mailed_deposits` insert fails because the table doesn't exist yet, `recordMailing()` falls back to
+  the *original* immediate-credit-and-log behavior with a warning toast explaining tracking isn't set
+  up yet — so shipping this code doesn't require the migration to run first, and nothing regresses
+  below what already worked.
+- **Not built this round, flagged in TODO.md**: a permanent-delete warning for an account with a
+  still-pending mailed deposit (the same INT-05 shape already built for unreturned sweeps) — the
+  table cascades on account/bank deletion with no warning today, smaller blast radius than the sweep
+  case (a pending deposit is usually only a few weeks old) but the same real gap.
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (**148 passed**, +14 new in
+`mailedDeposits.test.ts` covering month/year/leap-day rollovers in the pure date math, day-count
+clamping at both ends and on bad input, and calendar-date-not-time-of-day due-checking). Live
+DEMO_MODE CDP pass, **15/15**: the Settings field round-trips through a real save (confirmed via
+`setDemoProfile`'s in-memory store actually carrying the new value into a fresh page load, not just
+re-reading local component state); the day stepper's up/down arrows increment and decrement
+correctly and clamp at the boundaries; the auto/manual toggle correctly shows/hides the stepper;
+the Money page renders the new "Waiting to post" section without error; no 375px overflow on Send
+money, Money, or Settings. **What DEMO_MODE cannot verify, same accepted limitation as every other
+money-tracking action in this app** (`getOutstandingSweeps`/`addBorrowedFund` etc. are documented
+pure no-ops in demo mode): `recordMailing()`'s DEMO_MODE branch returns `{}` immediately, so
+`depositTracked` is always falsy there — the actual pending-row insert, the cron's auto-post loop,
+and the "Mark posted"/"Cancel" buttons' real database effects are all real-Supabase-only, verified
+instead by reading each path against the already-proven `update_account_balance`/
+`charge_monthly_fee_with_history` patterns it's built on. `DEMO_MODE` was flipped to `true` via a
+temporary `.env.local` (none existed in this fresh environment) and removed before finishing.
+
 **2026-08-09 (Send money / Send a letter — the mail-a-deposit chore, built)** — Came out of a
 brainstorm about the once-a-year keep-it-alive transaction: mailing a bank a letter, often with a
 check to deposit. The user's ask, narrowed over three turns of chat: pre-written letter types you
@@ -245,7 +323,10 @@ a personal outside account the app doesn't track.
 - **Crediting the destination happens immediately, by explicit user decision** ("should automatically
   deduct and give the money as well"), even though a mailed check hasn't actually posted yet. It's a
   tickable checkbox with copy saying so. A real sent-vs-posted lifecycle was raised in the brainstorm
-  and deliberately not built.
+  and deliberately not built. **Superseded the same day** — see the entry above this one: after live
+  use the immediate-credit checkbox was replaced with deferred, mostly-automatic posting
+  (`mailed_deposits`/`post_mailed_deposit`). Left this paragraph as-is rather than editing it, since
+  it accurately records what shipped first and why, and the entry above it explains the change.
 
 **Verification**: `tsc --noEmit`, `npm run build`, `npm test` (**134 passed**, +31 new across
 `letterTemplates.test.ts` and `mailPrint.test.ts` — including a guard that no template can ship a

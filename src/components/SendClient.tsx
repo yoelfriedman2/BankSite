@@ -5,6 +5,8 @@ import Link from "next/link";
 import {
   Building2,
   Check,
+  ChevronDown,
+  ChevronUp,
   CreditCard,
   Landmark,
   Mail,
@@ -16,10 +18,16 @@ import {
 } from "lucide-react";
 import { SearchInput } from "@/components/SearchInput";
 import { useToast } from "@/components/Toast";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
 import { todayLocalStr } from "@/lib/date";
 import { amountWords, type PrintMode } from "@/lib/checkPrint";
 import { buildMailingHTML } from "@/lib/mailPrint";
+import {
+  addDaysToDateStr,
+  clampPostDays,
+  MAX_DEPOSIT_POST_DAYS,
+  MIN_DEPOSIT_POST_DAYS,
+} from "@/lib/mailedDeposits";
 import {
   LETTER_TEMPLATES,
   getLetterTemplate,
@@ -113,11 +121,15 @@ export function SendClient({
   banks,
   paymentSources: initialSources,
   sourcesMigrationNeeded,
+  defaultDepositPostDays,
 }: {
   mode: SendMode;
   banks: SendBank[];
   paymentSources: PaymentSource[];
   sourcesMigrationNeeded?: boolean;
+  /** The user's own Settings → Alerts & emails preference (or the app-wide
+   *  default) for how many days a mailed deposit waits before it auto-posts. */
+  defaultDepositPostDays: number;
 }) {
   const toast = useToast();
   const isMoney = mode === "money";
@@ -276,8 +288,16 @@ export function SendClient({
   }, [sourceKind, sourceAccount, source]);
 
   const [deductSource, setDeductSource] = useState(true);
-  const [creditDestination, setCreditDestination] = useState(true);
   const [logActivity, setLogActivity] = useState(true);
+
+  // When a check is enclosed, its destination-side credit is never applied
+  // immediately (a mailed check hasn't actually posted) — it's tracked on
+  // Money → Waiting to post instead. autoPost decides whether the daily cron
+  // is also allowed to resolve it on its own once postDays have passed; the
+  // "Mark posted" button in that list always works regardless, sooner or
+  // later than that.
+  const [autoPost, setAutoPost] = useState(true);
+  const [postDays, setPostDays] = useState(String(clampPostDays(defaultDepositPostDays)));
 
   // Print settings are printer/stock-specific and shared with the Print Checks
   // modal on purpose — one alignment you tune once, wherever a check prints.
@@ -545,7 +565,6 @@ export function SendClient({
     const num = parseInt(checkNum, 10);
     const res = await recordMailing({
       destinationAccountId: destAccountId,
-      creditDestination: creditDestination && includeCheck,
       logActivity,
       activityType: includeCheck ? "check_sent" : "letter_sent",
       check: includeCheck
@@ -562,6 +581,10 @@ export function SendClient({
             deductSource,
           }
         : null,
+      deposit:
+        includeCheck && destAccountId
+          ? { autoPost, postAfterDays: clampPostDays(parseInt(postDays, 10) || defaultDepositPostDays) }
+          : null,
     });
     printing.current = false;
 
@@ -572,7 +595,13 @@ export function SendClient({
     for (const w of res.warnings ?? []) toast.error(w);
     if (!isNaN(num) && num > 0) setCheckNum(String((res.claimedCheckNumber ?? num) + 1));
     if (!res.warnings?.length) {
-      toast.success(includeCheck ? "Printed and recorded." : "Letter printed.");
+      toast.success(
+        res.depositTracked
+          ? `Printed. Tracked as waiting to post — see it on Money.`
+          : includeCheck
+            ? "Printed and recorded."
+            : "Letter printed.",
+      );
     }
     if (includeCheck) {
       setSources((prev) =>
@@ -1167,7 +1196,99 @@ export function SendClient({
 
       {/* 4 — what to record */}
       <Section step={4} title="What to record">
-        <div className="space-y-2">
+        {includeCheck && destAccountId ? (
+          <div className="space-y-3">
+            <p className="text-xs text-slate-500">
+              A mailed check hasn&apos;t actually posted the moment it&apos;s printed, so it&apos;s tracked as
+              waiting to post rather than credited right away — either way it shows up on{" "}
+              <Link href="/money" className="font-medium text-amber-700 hover:underline">
+                Money → Waiting to post
+              </Link>
+              , where you can mark it posted (or cancel it) yourself at any time.
+            </p>
+
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setAutoPost(true)}
+                className={`rounded-lg border px-3 py-2 text-left text-sm font-semibold ${
+                  autoPost
+                    ? "border-amber-400 bg-amber-50 text-amber-900"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                Post automatically
+              </button>
+              <button
+                type="button"
+                onClick={() => setAutoPost(false)}
+                className={`rounded-lg border px-3 py-2 text-left text-sm font-semibold ${
+                  !autoPost
+                    ? "border-amber-400 bg-amber-50 text-amber-900"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                I&apos;ll mark it myself
+              </button>
+            </div>
+
+            {autoPost ? (
+              <div className="flex items-center gap-3 rounded-lg border border-slate-200 p-3">
+                <span className="text-sm text-slate-700">Post in</span>
+                <div className="flex items-center rounded-lg border border-slate-300">
+                  <input
+                    type="number"
+                    min={MIN_DEPOSIT_POST_DAYS}
+                    max={MAX_DEPOSIT_POST_DAYS}
+                    value={postDays}
+                    onChange={(e) => setPostDays(e.target.value)}
+                    onBlur={() => setPostDays(String(clampPostDays(parseInt(postDays, 10) || defaultDepositPostDays)))}
+                    className="w-14 rounded-l-lg border-0 px-2 py-1.5 text-center text-sm text-slate-900 outline-none focus:ring-2 focus:ring-amber-100"
+                  />
+                  <div className="flex flex-col border-l border-slate-300">
+                    <button
+                      type="button"
+                      aria-label="One more day"
+                      onClick={() => setPostDays((d) => String(clampPostDays((parseInt(d, 10) || 0) + 1)))}
+                      className="flex h-3.5 w-6 items-center justify-center text-slate-500 hover:bg-slate-100"
+                    >
+                      <ChevronUp className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="One fewer day"
+                      onClick={() => setPostDays((d) => String(clampPostDays((parseInt(d, 10) || 0) - 1)))}
+                      className="flex h-3.5 w-6 items-center justify-center text-slate-500 hover:bg-slate-100"
+                    >
+                      <ChevronDown className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+                <span className="text-sm text-slate-700">
+                  days — around {formatDate(addDaysToDateStr(todayLocalStr(), clampPostDays(parseInt(postDays, 10) || defaultDepositPostDays)))}
+                </span>
+              </div>
+            ) : (
+              <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                Nothing happens on its own — it'll sit on the waiting-to-post list until you mark it
+                posted.
+              </p>
+            )}
+
+            <label className="flex items-start gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={logActivity}
+                onChange={(e) => setLogActivity(e.target.checked)}
+                className="mt-0.5 accent-amber-600"
+              />
+              <span>
+                Log activity on the account once it posts
+                <span className="block text-xs text-slate-500">This is what resets the dormancy clock.</span>
+              </span>
+            </label>
+          </div>
+        ) : (
           <label className="flex items-start gap-2 text-sm text-slate-700">
             <input
               type="checkbox"
@@ -1185,22 +1306,7 @@ export function SendClient({
               </span>
             </span>
           </label>
-          <label className="flex items-start gap-2 text-sm text-slate-700">
-            <input
-              type="checkbox"
-              checked={creditDestination}
-              onChange={(e) => setCreditDestination(e.target.checked)}
-              className="mt-0.5 accent-amber-600"
-              disabled={!destAccountId || !includeCheck}
-            />
-            <span className={destAccountId && includeCheck ? "" : "text-slate-400"}>
-              Add the check amount to that account&apos;s balance
-              <span className="block text-xs text-slate-500">
-                Assumes the bank deposits it. Untick if you&apos;d rather wait and confirm first.
-              </span>
-            </span>
-          </label>
-        </div>
+        )}
       </Section>
 
       <div className="sticky bottom-0 -mx-4 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-xl sm:border">

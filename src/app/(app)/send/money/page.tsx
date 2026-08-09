@@ -4,7 +4,7 @@ import { getSendPageData } from "@/app/(app)/send/data";
 export const dynamic = "force-dynamic";
 
 export default async function SendMoneyPage() {
-  const { banks, paymentSources, sourcesMigrationNeeded } = await getSendPageData();
+  const { banks, paymentSources, sourcesMigrationNeeded, defaultDepositPostDays } = await getSendPageData();
 
   return (
     <div>
@@ -19,6 +19,7 @@ export default async function SendMoneyPage() {
         banks={banks}
         paymentSources={paymentSources}
         sourcesMigrationNeeded={sourcesMigrationNeeded}
+        defaultDepositPostDays={defaultDepositPostDays}
       />
     </div>
   );

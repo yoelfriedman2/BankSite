@@ -1,9 +1,10 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
-import { DEMO_MODE, getDemoAccounts, getDemoBanks } from "@/lib/demo";
+import { DEMO_MODE, getDemoAccounts, getDemoBanks, getDemoProfile } from "@/lib/demo";
 import { fetchAllRows } from "@/lib/pagination";
 import { getPaymentSources } from "@/app/(app)/send/actions";
+import { DEFAULT_DEPOSIT_POST_DAYS } from "@/lib/mailedDeposits";
 import type { SendBank } from "@/components/SendClient";
 
 type BankRow = {
@@ -34,6 +35,7 @@ export async function getSendPageData(): Promise<{
   banks: SendBank[];
   paymentSources: Awaited<ReturnType<typeof getPaymentSources>>["sources"];
   sourcesMigrationNeeded?: boolean;
+  defaultDepositPostDays: number;
 }> {
   if (DEMO_MODE) {
     const accounts = getDemoAccounts();
@@ -58,14 +60,22 @@ export async function getSendPageData(): Promise<{
           })),
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
-    return { banks, paymentSources: [] };
+    const demoProfile = getDemoProfile();
+    return {
+      banks,
+      paymentSources: [],
+      defaultDepositPostDays: demoProfile.default_deposit_post_days ?? DEFAULT_DEPOSIT_POST_DAYS,
+    };
   }
 
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   // Paginated past PostgREST's default 1000-row cap (DATA-18) — a seeded bank
   // list is ~426 rows today and grows.
-  const [{ rows: bankRows }, { rows: accountRows }, sourceRes] = await Promise.all([
+  const [{ rows: bankRows }, { rows: accountRows }, sourceRes, profileRes] = await Promise.all([
     fetchAllRows<BankRow>((from, to) =>
       supabase
         .from("banks")
@@ -83,6 +93,11 @@ export async function getSendPageData(): Promise<{
         .range(from, to),
     ),
     getPaymentSources(),
+    // A separate call, not folded into the queries above — a missing
+    // migration on this one column can't break the bank/account lists.
+    user
+      ? supabase.from("profiles").select("default_deposit_post_days").eq("id", user.id).maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
 
   const byBank = new Map<string, AccountRow[]>();
@@ -110,9 +125,13 @@ export async function getSendPageData(): Promise<{
     })),
   }));
 
+  const profileDays = (profileRes.data as { default_deposit_post_days: number | null } | null)
+    ?.default_deposit_post_days;
+
   return {
     banks,
     paymentSources: sourceRes.sources,
     sourcesMigrationNeeded: sourceRes.migrationNeeded,
+    defaultDepositPostDays: profileDays ?? DEFAULT_DEPOSIT_POST_DAYS,
   };
 }

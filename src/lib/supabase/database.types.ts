@@ -728,6 +728,56 @@ export type Database = {
           },
         ]
       }
+      mailed_deposits: {
+        Row: {
+          account_id: string
+          activity_type: string | null
+          amount: number
+          auto_post: boolean
+          created_at: string
+          id: string
+          mailed_on: string
+          post_after: string
+          posted_at: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          activity_type?: string | null
+          amount: number
+          auto_post?: boolean
+          created_at?: string
+          id?: string
+          mailed_on: string
+          post_after: string
+          posted_at?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          activity_type?: string | null
+          amount?: number
+          auto_post?: boolean
+          created_at?: string
+          id?: string
+          mailed_on?: string
+          post_after?: string
+          posted_at?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mailed_deposits_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           access_requested_at: string | null
@@ -738,6 +788,7 @@ export type Database = {
           alert_no_activity: boolean
           banks_seeded: boolean
           created_at: string
+          default_deposit_post_days: number | null
           default_dormancy_months: number
           display_name: string | null
           holders: string[]
@@ -763,6 +814,7 @@ export type Database = {
           alert_no_activity?: boolean
           banks_seeded?: boolean
           created_at?: string
+          default_deposit_post_days?: number | null
           default_dormancy_months?: number
           display_name?: string | null
           holders?: string[]
@@ -788,6 +840,7 @@ export type Database = {
           alert_no_activity?: boolean
           banks_seeded?: boolean
           created_at?: string
+          default_deposit_post_days?: number | null
           default_dormancy_months?: number
           display_name?: string | null
           holders?: string[]
@@ -938,6 +991,13 @@ export type Database = {
           amount: number
           left_behind: number
         }[]
+      }
+      post_mailed_deposit: {
+        Args: {
+          p_deposit_id: string
+          p_posted_on: string
+        }
+        Returns: number
       }
       update_account_balance: {
         Args: {
