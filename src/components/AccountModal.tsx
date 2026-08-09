@@ -10,10 +10,10 @@ import {
   type AccountFormValues,
 } from "@/app/(app)/accounts/actions";
 import { shareRoutingNumberToBank } from "@/app/(app)/banks/actions";
-import { getBalanceHistory, type BalancePoint } from "@/app/(app)/money/actions";
 import { AccountDocuments } from "@/components/AccountDocuments";
 import { useUnsavedChanges, confirmDiscard } from "@/components/useUnsavedChanges";
 import { Box, BoxHeader } from "@/components/DetailBox";
+import { BalanceHistoryBox } from "@/components/BalanceHistoryBox";
 import { getActivityLevel, daysUntil } from "@/lib/dormancy";
 import { ActivityDot } from "@/components/badges";
 import { todayLocalStr } from "@/lib/date";
@@ -129,7 +129,6 @@ export function AccountModal({
   // Purely a UI toggle — the "add an entry" row is hidden until asked for so
   // an account with no logged activity yet doesn't show a permanent input row.
   const [activityAdding, setActivityAdding] = useState(false);
-  const [balanceHistory, setBalanceHistory] = useState<BalancePoint[]>([]);
   const [dirty, setDirty] = useState(false);
 
   // Routing number: the account's own value always wins; the bank's shared one
@@ -236,12 +235,6 @@ export function AccountModal({
     return () => document.removeEventListener("mousedown", onOutside, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docked, dirty]);
-
-  useEffect(() => {
-    if (initial?.id) {
-      getBalanceHistory(initial.id).then(setBalanceHistory).catch(() => {});
-    }
-  }, [initial?.id]);
 
   // Once the vault is unlocked, reveal this account's real login details —
   // any of the three fields might still be ciphertext from before.
@@ -920,33 +913,7 @@ export function AccountModal({
             )}
           </Box>
 
-          {balanceHistory.length > 0 && (
-            <Box>
-              <BoxHeader title="Balance history" />
-              <ul className="space-y-1.5">
-                {balanceHistory.map((p, i) => (
-                  <li
-                    key={i}
-                    className="flex items-center gap-2 rounded-md bg-slate-50 px-2 py-1.5 text-sm"
-                  >
-                    <span className="w-16 shrink-0 text-xs text-slate-500">{formatDate(p.as_of_date)}</span>
-                    <span className="flex-1 truncate text-xs text-slate-600">{p.reason ?? ""}</span>
-                    {p.change_amount != null && (
-                      <span
-                        className={`shrink-0 text-xs tabular-nums ${p.change_amount < 0 ? "text-rose-500" : "text-emerald-700"}`}
-                      >
-                        {p.change_amount < 0 ? "−" : "+"}
-                        {formatCurrency(Math.abs(p.change_amount))}
-                      </span>
-                    )}
-                    <span className="w-24 shrink-0 text-right font-medium tabular-nums text-slate-800">
-                      {formatCurrency(p.balance)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </Box>
-          )}
+          {initial?.id && <BalanceHistoryBox accountId={initial.id} />}
 
           {initial?.id && (
             <Box>

@@ -174,6 +174,86 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-08-09 (balance changes become transactions, not "retype the total")** — User feedback: editing an
+account's balance was "set it to a new number," with `account_balance_history` only ever a side-effect
+log of that. They wanted the primitive flipped — enter a deposit/withdrawal directly and let the balance
+follow, matching how sweeps/fees/interest already work internally under the hood. Talked through the
+design at length before writing code (kept `accounts.balance` as a cached value rather than a derived
+`SUM()`, since dozens of pages read it directly; decided corrections stay editable-in-place rather than
+requiring an offsetting reversing entry; decided only the single most-recent transaction is editable, to
+avoid needing to cascade-recompute every later row's stored balance snapshot).
+
+- **Migration `0051_transaction_ledger.sql`** (not yet run — see TODO.md) — additive `account_balance_
+  history.type` column (nullable, check-constrained to `deposit | withdrawal | correction | monthly_fee
+  | interest | sweep_out | sweep_in | opening_balance | import | other`) plus a one-time backfill of
+  existing rows guessed from their free-text `reason`. Adds a new UPDATE RLS policy (history was
+  insert/delete-only before this). Two new functions, `security invoker` + `set search_path = ''`,
+  following `update_account_balance`'s (0043) row-locking pattern exactly: **`record_account_
+  transaction`** — the new primary entry point, takes a *signed* delta and computes `new_balance =
+  current + amount` against the locked row, never trusted from the client; **`edit_last_account_
+  transaction`** — fixes a fat-fingered entry, but only if it's genuinely still the account's most
+  recent row (re-checked inside the same locked call, not just before) *and* its type is
+  deposit/withdrawal/correction — never monthly_fee/interest/sweep_out/sweep_in/opening_balance, which
+  are system-generated and would desync from `monthly_fee_last_charged_on`/`account_sweeps`/
+  `interest_last_accrued_on` if hand-edited. The five existing balance-writing functions
+  (`charge_monthly_fee_with_history`, `credit_monthly_interest_with_history`, `update_account_balance`,
+  `sweep_accounts`, `return_sweep`) got `create or replace`d to tag their own inserts with a literal
+  `type` — no other behavior change, and since none of the new bodies include a `SET` clause, migration
+  0047's `search_path = ''` hardening on all five is preserved automatically (documented Postgres
+  behavior: `CREATE OR REPLACE FUNCTION` keeps a function's existing config settings unless the new
+  definition overrides them).
+- **A real concurrency win, not just UX**: the old "set balance to $X" flow is overwrite-based — if a
+  monthly-fee cron fires between opening the editor and saving, a stale "$X" silently clobbers the fee
+  deduction with no record. "+$100" can't have that race, since it's computed server-side against
+  whatever the account actually holds at commit time, not a replace.
+- **New shared `src/components/BalanceHistoryBox.tsx`**, replacing byte-identical duplicated "Balance
+  history" box markup that previously lived separately in `AccountViewModal.tsx` and `AccountModal.tsx`.
+  Self-contained: fetches its own history via `getBalanceHistory` (now `select("*")`, mapping `type ??
+  inferTransactionType(reason)` so a pre-migration or pre-backfill row still renders with a best-guess
+  label instead of erroring), owns its own "+ Add transaction" and latest-row "Edit" inline forms, and
+  calls `router.refresh()` on success so the parent's `account`/`initial` prop picks up the new balance.
+  The existing "Balance (USD)" field in the account editor is untouched — it's now explicitly the
+  `correction` path (tagged in `update_account_balance`'s own insert), rendered amber in the list (new
+  `src/lib/transactionType.ts` — `TRANSACTION_TYPE_LABELS`/`STYLES`/`EDITABLE_TRANSACTION_TYPES`/
+  `inferTransactionType`, same `Record<Type, string>` convention as `badges.tsx`'s `STATUS_STYLES`) since
+  it's an admission of an unexplained gap, not a labeled event, and it's the one type alongside
+  deposit/withdrawal that stays editable.
+- **New server actions** `recordAccountTransaction`/`editLastAccountTransaction` in `money/actions.ts`
+  (next to `getBalanceHistory`/the sweep actions, which already own this table). DEMO_MODE gained real
+  backing for the first time here rather than following the sweep actions' existing no-op-in-demo
+  precedent — `lib/demo.ts`'s `DemoStore.balanceHistory` plus `addDemoTransaction`/
+  `editLastDemoTransaction` mirror the real RPCs' logic exactly (including both eligibility guards), so
+  this is genuinely click-testable rather than asserted from a read-through. Seeded demo data: John's
+  checking (the account most sessions in this file happen to demo against) now carries a small, coherent
+  4-row history (opening balance → deposit → monthly fee → a correction) ending at its existing seeded
+  balance ($2,450.75), so the amber correction styling and the type labels are visible without any manual
+  setup.
+- **`database.types.ts` hand-patched** (same standing limitation as every schema change in this sandbox —
+  no live Postgres connection to regenerate from) — added `type` to the `account_balance_history` table
+  entry and both new functions to the generated `Functions` union, alphabetically placed to match the
+  file's existing ordering.
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (103 passed, no regressions) all clean
+(temp `xlsx` CDN→npm swap for the sandbox install, restored after — confirmed via `git diff` showing
+nothing). A standalone Node script (same money-math-verification pattern this project already uses, e.g. the
+DATA-12 interest-compounding fix) mirrored both new RPCs' exact logic —
+sequential entries, editing immediately after adding, edit correctly rejected once a newer transaction
+exists, edit correctly rejected on every system-generated type, a correction remaining editable, and
+fractional-cent rounding across several entries — all passed before trusting the real SQL. Live DEMO_MODE
+CDP pass (`scratchpad/verify-ledger-ui.mjs`, new — reuses the existing `scratchpad/cdp.mjs` driver):
+confirmed the seeded correction row renders amber with a "Correction" label; a deposit and a withdrawal
+both applied correctly to the real balance ($2,450.75 → $2,550.75 → $2,500.00); editing the just-added
+withdrawal recomputed the balance correctly ($2,525.75); exactly one row (the newest) ever shows an Edit
+affordance, before and after editing it; the same box renders correctly inside the account editor too,
+not just the read-only view; zero console errors; no 375px overflow. One real test-harness trap hit
+along the way, not an app bug: the CDP driver's `clickText` does a *substring* match, so `clickText(
+"button", "Add")` matched the "+ Add transaction" header toggle (which also contains the word "Add")
+before it ever reached the form's own "Add" submit button — silently toggling the form closed instead of
+submitting it. Fixed with an exact-text-match click helper in the new script; not a bug in the shipped
+component. `DEMO_MODE` was flipped to `true` via a temporary `.env.local` (none existed in this fresh
+environment) and removed before finishing, per the standing rule. Changelog and Guide entries added
+(genuinely new, user-visible capability). **Migration 0051 not yet run — see TODO.md.**
+
 **2026-08-09 (borrowed money tracking + CD term/auto-renew, plus a real reminder-cron bug fix)** — Came
 out of a "what would make this app better" conversation. Three small, independent pieces:
 
