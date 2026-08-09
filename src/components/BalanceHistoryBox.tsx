@@ -204,7 +204,11 @@ function TransactionForm({
           Withdrawal
         </button>
       </div>
-      <div className="flex gap-2">
+      {/* flex-wrap, matching the Activity history add-row's own established
+       *  pattern in AccountModal — the narrow (28rem) docked bank-drawer lane
+       *  doesn't have room for three unwrapped fields side by side, and
+       *  neither fixed-width field here shrinks below its own w-28/w-32. */}
+      <div className="flex flex-wrap gap-2">
         <div className="w-28 shrink-0">
           <input
             type="number"
@@ -224,7 +228,7 @@ function TransactionForm({
           placeholder="Reason (optional)"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          className="min-w-[6rem] flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+          className="min-w-[7rem] flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
         />
       </div>
       {error && <p className="text-xs text-rose-600">{error}</p>}
