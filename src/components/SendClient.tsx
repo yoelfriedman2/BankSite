@@ -248,6 +248,33 @@ export function SendClient({
     [payableAccounts, sourceAccountId],
   );
 
+  // What the deposit ticket's MICR line encodes: the account being deposited
+  // INTO, resolved the same way every other routing number in the app is
+  // (account's own number wins, bank's shared one fills the gap).
+  const depositRouting = useMemo(
+    () => effectiveRoutingNumber(destAccount?.routing_number, bank?.routing_number) ?? "",
+    [destAccount, bank],
+  );
+  const slipCanEncode = !!depositRouting && !!destAccount?.account_number;
+
+  // What the CHECK's MICR line needs. Only a problem on blank paper — on
+  // pre-printed stock the MICR is already on the sheet and we print nothing
+  // into that band, so a missing number there changes nothing.
+  const checkMicrFields = useMemo(() => {
+    if (sourceKind === "account") {
+      if (!sourceAccount) return null;
+      return {
+        routing: effectiveRoutingNumber(
+          sourceAccount.account.routing_number,
+          sourceAccount.bank.routing_number,
+        ) ?? "",
+        accountNumber: sourceAccount.account.account_number ?? "",
+      };
+    }
+    if (!source) return null;
+    return { routing: source.routing_number ?? "", accountNumber: source.account_number ?? "" };
+  }, [sourceKind, sourceAccount, source]);
+
   const [deductSource, setDeductSource] = useState(true);
   const [creditDestination, setCreditDestination] = useState(true);
   const [logActivity, setLogActivity] = useState(true);
@@ -257,6 +284,11 @@ export function SendClient({
   const [printMode, setPrintMode] = useState<PrintMode>("blank");
   const [dx, setDx] = useState("0");
   const [dy, setDy] = useState("0");
+
+  // Declared after printMode on purpose — it reads it. A missing routing or
+  // account number only breaks a check drawn on blank paper.
+  const checkMicrMissing =
+    printMode === "blank" && !!checkMicrFields && (!checkMicrFields.routing || !checkMicrFields.accountNumber);
   useEffect(() => {
     try {
       const m = localStorage.getItem("bt_check_mode");
@@ -267,6 +299,29 @@ export function SendClient({
       /* storage blocked */
     }
   }, []);
+  // Written back under the same keys the Print Checks modal reads, so the two
+  // can't drift into separate alignments for the same printer.
+  useEffect(() => {
+    try {
+      localStorage.setItem("bt_check_mode", printMode);
+    } catch {
+      /* storage blocked */
+    }
+  }, [printMode]);
+  useEffect(() => {
+    try {
+      localStorage.setItem("bt_check_dx", dx);
+    } catch {
+      /* storage blocked */
+    }
+  }, [dx]);
+  useEffect(() => {
+    try {
+      localStorage.setItem("bt_check_dy", dy);
+    } catch {
+      /* storage blocked */
+    }
+  }, [dy]);
 
   // Default the check number from whichever source is selected.
   useEffect(() => {
@@ -444,6 +499,9 @@ export function SendClient({
               bankName: bank.name,
               holder: destAccount?.holder ?? "",
               accountNumber: destAccount?.account_number ?? "",
+              // The receiving bank's number — the ticket encodes where the
+              // money is going, not where the check is drawn on.
+              routing: depositRouting,
               amount,
               date: checkDate,
             }
@@ -708,7 +766,16 @@ export function SendClient({
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
               />
-              <p className="mt-1 text-[11px] text-slate-500">Saved on this device for next time.</p>
+              {from.trim() ? (
+                <p className="mt-1 text-[11px] text-slate-500">Saved on this device for next time.</p>
+              ) : (
+                // Several templates say "write to me at the address above" — with
+                // this empty, that sentence points at nothing.
+                <p className="mt-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  Add this — the letters refer to your address, and the bank needs somewhere to write
+                  back. It&apos;s saved on this device, so you only type it once.
+                </p>
+              )}
             </div>
 
             {templateId === "address_change" && (
@@ -810,6 +877,14 @@ export function SendClient({
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Drawn on
               </p>
+              {checkMicrMissing && (
+                <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  This account is missing its{" "}
+                  {!checkMicrFields?.routing ? "routing number" : "account number"}, so the check will
+                  print without a complete MICR line at the bottom — a bank won&apos;t be able to process
+                  it. Add the number, or switch to pre-printed check stock, which already has it.
+                </p>
+              )}
               <div className="mb-3 grid grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -1010,17 +1085,31 @@ export function SendClient({
               )}
             </div>
 
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                checked={includeSlip}
-                onChange={(e) => setIncludeSlip(e.target.checked)}
-                className="accent-amber-600"
-              />
-              Print a deposit ticket too
-            </label>
+            <div>
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={includeSlip}
+                  onChange={(e) => setIncludeSlip(e.target.checked)}
+                  className="accent-amber-600"
+                />
+                Print a deposit ticket too
+              </label>
+              {includeSlip && !slipCanEncode && (
+                <p className="mt-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  The ticket will print without its MICR line —{" "}
+                  {!destAccount
+                    ? "pick which account this is about in step 1."
+                    : !destAccount.account_number
+                      ? "that account has no account number saved."
+                      : "this bank has no routing number on file yet."}
+                </p>
+              )}
+            </div>
 
-            {/* Print settings — same saved values as the Print Checks page. */}
+            {/* Print settings — the same three saved values the Print Checks
+                modal uses, under the same localStorage keys, so tuning your
+                printer once works everywhere a check comes out. */}
             <div className="space-y-2 rounded-lg border border-slate-200 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Check paper</p>
               <div className="flex flex-col gap-2 sm:flex-row sm:gap-5">
@@ -1045,8 +1134,31 @@ export function SendClient({
                   Pre-printed check stock
                 </label>
               </div>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-1.5 text-xs text-slate-500">
+                  Nudge right (in)
+                  <input
+                    type="number"
+                    step="0.05"
+                    value={dx}
+                    onChange={(e) => setDx(e.target.value)}
+                    className="w-16 rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-900"
+                  />
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-slate-500">
+                  Nudge down (in)
+                  <input
+                    type="number"
+                    step="0.05"
+                    value={dy}
+                    onChange={(e) => setDy(e.target.value)}
+                    className="w-16 rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-900"
+                  />
+                </label>
+              </div>
               <p className="text-[11px] text-slate-500">
-                Alignment nudges are shared with the Print Checks page. Print at 100% / &quot;Actual size.&quot;
+                Shared with the Print Checks page — set it once, it applies wherever a check prints.
+                Print at 100% / &quot;Actual size.&quot;
               </p>
             </div>
           </div>

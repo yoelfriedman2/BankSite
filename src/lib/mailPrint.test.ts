@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { amountWords, fmtAmount, micrParts, esc, buildCheckHTML } from "./checkPrint";
-import { buildMailingHTML } from "./mailPrint";
+import { buildMailingHTML, depositMicrLine } from "./mailPrint";
 
 /** These cover the check-printing internals that were lifted out of
  *  CheckPrintModal.tsx so the Send pages could share them — the behaviour has
@@ -80,6 +80,7 @@ const SLIP = {
   bankName: "Union County Savings Bank",
   holder: "Jane Smith",
   accountNumber: "55512345",
+  routing: "211170282",
   amount: "25",
   date: "08/09/2026",
 };
@@ -133,11 +134,42 @@ describe("buildMailingHTML", () => {
     expect(packet).toContain(body.trim());
   });
 
+  it("encodes the deposit ticket's MICR with the RECEIVING account", () => {
+    const html = buildMailingHTML({ slip: SLIP, check: CHECK })!;
+    // The ticket must encode where the money is going (211170282 / 55512345),
+    // never the account the check is drawn on (CHECK's 0123456789).
+    expect(html).toContain("A211170282A");
+    expect(html).toContain("55512345C");
+    expect(html).toContain("ds-micr");
+  });
+
   it("lays the deposit ticket out with the account it's for", () => {
     const html = buildMailingHTML({ slip: SLIP })!;
     expect(html).toContain("Deposit Ticket");
     expect(html).toContain("55512345");
     expect(html).toContain("$25.00");
     expect(html).toContain("For deposit only");
+  });
+});
+
+describe("depositMicrLine", () => {
+  it("uses transit + on-us order, with no auxiliary check-number field", () => {
+    // A deposit ticket has no serial number to encode — nothing is being drawn
+    // on it — so unlike a check there is no leading C…C field.
+    const line = depositMicrLine("211170282", "55512345");
+    expect(line).toBe("A211170282A&nbsp;&nbsp;&nbsp;55512345C");
+    expect(line).not.toMatch(/^C/);
+  });
+
+  it("omits the line entirely when either field is missing", () => {
+    // A half-encoded MICR line is worse than none: a reader will still try to
+    // parse it and mis-route the deposit.
+    expect(depositMicrLine("", "55512345")).toBe("");
+    expect(depositMicrLine("211170282", "")).toBe("");
+    expect(depositMicrLine("", "")).toBe("");
+  });
+
+  it("escapes its inputs", () => {
+    expect(depositMicrLine('2<1', 'a"b')).not.toContain("<");
   });
 });

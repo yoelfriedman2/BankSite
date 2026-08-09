@@ -211,10 +211,21 @@ a personal outside account the app doesn't track.
 - **The recipient block is absolutely positioned for a #10 double-window envelope** (`lt-to` at
   1.05in/2.05in in `mailPrint.ts`) — that's why the letter page is absolute-positioned rather than
   normal flow. **Measure a real envelope before changing those numbers.**
-- **The deposit ticket is deliberately NOT MICR-encoded.** Deposit tickets use a different MICR
-  format from checks and getting it wrong produces paper a bank's reader mishandles; this prints a
-  clean human-readable ticket (bank, holder, account number, amount, "for deposit only") whose job is
-  telling the teller exactly which account the enclosed check goes into.
+- **The deposit ticket carries a real MICR line** (`depositMicrLine()` in `mailPrint.ts`), added in a
+  follow-up round after first shipping without one. Three things about it that are easy to get wrong:
+  it encodes the **receiving** account (destination bank's routing + destination account number) —
+  never the account the check is drawn on, which is what the check's own MICR encodes, and there is a
+  test asserting the two differ; it has **no auxiliary check-number field** (nothing is being drawn
+  on a deposit ticket, so there's no serial to encode) — the order is transit then on-us only; and it
+  is **omitted entirely** when either field is missing, because a half-encoded line is worse than
+  none (a reader will still try to parse it). The ticket is 4in tall specifically so the bottom 5/8in
+  stays a clear band — the signature line sits at 0.85in from the bottom to stay out of it. Measured
+  live: MICR occupies 0.21–0.408in from the ticket's bottom edge.
+- **A check drawn on an account with no routing number prints an incomplete MICR line**, which a bank
+  can't process. That's warned about in the UI, but **only in blank-paper mode** — on pre-printed
+  stock the MICR is already on the sheet and nothing is printed into that band, so a missing number
+  there genuinely doesn't matter. The demo's Passumpsic CD deliberately has no routing number (its
+  bank has none either), which is what makes this path click-testable.
 - **Money side effects, all in one `recordMailing()` server action** rather than several client round
   trips (a mailing is one real-world event; a half-applied one is worse than a reported failure):
   claims the check number atomically (0044's `claim_check_number`), writes the `printed_checks` row,
@@ -236,18 +247,26 @@ a personal outside account the app doesn't track.
   tickable checkbox with copy saying so. A real sent-vs-posted lifecycle was raised in the brainstorm
   and deliberately not built.
 
-**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (**130 passed**, +27 new across
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (**134 passed**, +31 new across
 `letterTemplates.test.ts` and `mailPrint.test.ts` — including a guard that no template can ship a
-token `renderLetter` doesn't know, and that a packet-printed check matches a standalone one exactly).
-Live DEMO_MODE CDP pass, **37/37**, with `window.open` stubbed to capture the print HTML: letter-only
+token `renderLetter` doesn't know, that a packet-printed check matches a standalone one exactly, and
+that the ticket's MICR never equals the check's).
+Live DEMO_MODE CDP pass, **43/43**, with `window.open` stubbed to capture the print HTML: letter-only
 prints exactly one sheet with no check or ticket; the full packet has all three with two page breaks,
 a real MICR line, and the amount in words; the letter picks up holder/account/bank/amount with zero
 unsubstituted tokens; template switching, hand-editing, and reset all behave; the balance preview
 reads `$250.00 → $225.00` for a $25 check (asserted numerically, not eyeballed); the check number
 pre-fills and advances 1001 → 1002 after printing; exactly one nav item highlights on each of the two
 routes; no 375px overflow on either page, including with a bank selected; zero console errors.
-Desktop and mobile screenshots reviewed — which is what caught a duplicated page subtitle (the client
-repeated what the page header already said), since no assertion would have.
+The deposit ticket's MICR is asserted separately: present, no leading aux field, ending in the on-us
+account field, and **different from the check's** (the test deliberately picks a paying account that
+isn't the destination, or the assertion proves nothing). The rendered packet was also opened as a
+standalone page and **measured**, not eyeballed — MICR band 0.21–0.408in from the ticket's bottom,
+signature clear of it at 0.86in, no overlap.
+Desktop, mobile, and printed-packet screenshots reviewed — which is what caught a duplicated page
+subtitle (the client repeated what the page header already said) and a letter that says "write to me
+at the address above" with an empty return-address block (now warned about), since no assertion
+would have.
 
 **Three harness traps, all test-only, worth not repeating** (the driver at
 `scratchpad/cdp.mjs` now handles each): (1) **a page-level hydration probe is not enough** — the nav
