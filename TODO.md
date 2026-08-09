@@ -24,16 +24,13 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
 
 ## One-time setup pending
 
-- **Run migration `0048_account_documents_ownership_rls.sql`** — not yet confirmed run. Tightens the
-  `account_documents` RLS policy to also require (a) the referenced `account_id` still belong to the
-  caller and (b) `storage_path` literally start with `${auth.uid()}/` — previously only checked the
+- ~~Run migration `0048_account_documents_ownership_rls.sql`~~ — **confirmed run 2026-08-09.** Tightens
+  the `account_documents` RLS policy to also require (a) the referenced `account_id` still belong to
+  the caller and (b) `storage_path` literally start with `${auth.uid()}/` — previously only checked the
   document row's own `user_id`. Closes a document-authorization gap flagged by an independent code
   review on 2026-08-07, then re-flagged as still-incomplete (the (b) half) on a second pass the same
-  day — see both 2026-08-07 entries in CLAUDE.md. The app-level half of this fix (`getDocumentUrl` and
-  `deleteDocument`'s prefix + ownership checks in `accounts/documents.ts`) is already deployed and
-  effective without the migration — this is defense-in-depth at the DB layer, not the only thing
-  standing between a user and someone else's document today, but it should still be run so RLS itself
-  enforces it independently of the app code.
+  day — see both 2026-08-07 entries in CLAUDE.md. RLS now enforces both conditions at the DB layer
+  itself, on top of the app-level checks in `accounts/documents.ts` that were already live.
 
 - ~~Run migration `0047_function_search_path_hardening.sql`~~ — **confirmed run 2026-08-05.** Closed
   12 of the "Function Search Path Mutable" warnings from the 2026-08-04 Supabase security-lint scan
