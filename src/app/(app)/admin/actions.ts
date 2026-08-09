@@ -3,7 +3,7 @@
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendAccessApprovedEmail, sendProductUpdateEmail } from "@/lib/email";
+import { sendAccessApprovedEmail, sendProductUpdateEmail, renderProductUpdateEmailHtml } from "@/lib/email";
 import {
   buildBackupZip,
   saveBackupToStorage,
@@ -394,4 +394,28 @@ export async function sendProductUpdateBroadcast(): Promise<{ sent?: number; fai
   );
   const failed = results.filter((r) => "error" in r && r.error).length;
   return { sent: recipients.length - failed, failed };
+}
+
+/** The exact HTML the broadcast would send, greeted as the owner would see
+ *  it — rendered, never mailed. This is what closes the "I can't see it
+ *  before it goes out" gap: the admin panel shows this in an iframe before
+ *  the send button is even reachable. */
+export async function getProductUpdateEmailPreview(): Promise<{ html?: string; error?: string }> {
+  const owner = await requireOwner();
+  if (!owner) return { error: "Not authorized." };
+  return { html: renderProductUpdateEmailHtml(owner.user_metadata?.full_name ?? "") };
+}
+
+/** Sends the digest to the owner's own address only — a real send through
+ *  the real provider, landing in a real inbox, before anyone commits to the
+ *  full broadcast. */
+export async function sendProductUpdateTestEmail(): Promise<{ error?: string }> {
+  const owner = await requireOwner();
+  if (!owner || !owner.email) return { error: "Not authorized." };
+  const res = await sendProductUpdateEmail(owner.email, owner.user_metadata?.full_name ?? "");
+  if ("error" in res && res.error) return { error: res.error };
+  if ("skipped" in res && res.skipped) {
+    return { error: "Email isn't configured on this deployment (RESEND_API_KEY unset) — nothing was sent." };
+  }
+  return {};
 }

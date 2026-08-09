@@ -516,15 +516,18 @@ function productUpdateItemHtml(item: { title: string; lines: string[] }, isLast:
  *  product-update emails on. Triggered by hand from Admin → Users, never on
  *  a schedule — see sendProductUpdateBroadcast() in admin/actions.ts for the
  *  recipient filtering (notify_email, notify_product_updates, approved only). */
-export async function sendProductUpdateEmail(to: string, name: string) {
-  if (!to) return {};
+/** Builds the digest's HTML — split out from sendProductUpdateEmail so the
+ *  exact same markup that would be mailed can also be rendered for an
+ *  in-app preview (getProductUpdateEmailPreview in admin/actions.ts) before
+ *  anyone commits to sending it. Never sends anything itself. */
+export function renderProductUpdateEmailHtml(name: string): string {
   const first = name ? name.split(" ")[0] : "";
   const greeting = first ? `Hi ${escapeHtml(first)},` : "Hi there,";
   const itemsHtml = PRODUCT_UPDATE_ITEMS.map((item, i) =>
     productUpdateItemHtml(item, i === PRODUCT_UPDATE_ITEMS.length - 1),
   ).join("");
 
-  const html = `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
@@ -569,6 +572,9 @@ ${itemsHtml}
 </table>
 </body>
 </html>`;
+}
 
-  return sendEmail(to, PRODUCT_UPDATE_SUBJECT, html);
+export async function sendProductUpdateEmail(to: string, name: string) {
+  if (!to) return {};
+  return sendEmail(to, PRODUCT_UPDATE_SUBJECT, renderProductUpdateEmailHtml(name));
 }

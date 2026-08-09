@@ -225,6 +225,39 @@ re-rendered from the real shipped function and republished as a second Artifact 
 side-by-side against the originally-approved version. Skipped changelog/Guide — owner-only admin
 tooling, per the standing exclusion.
 
+**Same-day follow-up — the panel shipped a real gap: no way to see the email before committing to
+send it.** User pushback, correctly: clicking "Send to N people" fired blind — no preview, no way
+to change anything, just a recipient count. Fixed by pulling the panel's one job apart into two:
+
+- **`renderProductUpdateEmailHtml(name)`** split out of `sendProductUpdateEmail()` in `lib/email.ts`
+  — same HTML, just callable without also sending anything. `sendProductUpdateEmail` now just calls
+  it and hands the result to `sendEmail`, so there's exactly one place the markup is built, not two
+  copies that could drift.
+- **`getProductUpdateEmailPreview()`** (new, `admin/actions.ts`, owner-gated) returns that HTML for
+  display only. The panel renders it in an `<iframe srcDoc={html}>` — same isolation technique as
+  the chat-side `data:` URI artifacts, just without the base64 step, since `srcDoc` is the more
+  direct way to hand a same-origin iframe a raw HTML string. **The preview is not optional or
+  collapsed** — it loads before either send button is even meaningfully clickable (both stay
+  disabled while it loads), so there's no path to sending without having seen it first.
+- **`sendProductUpdateTestEmail()`** (new) sends the real thing to just the owner's own address —
+  a genuine round-trip through Resend into a real inbox, one rung below committing to the full
+  broadcast. The panel's "Send a test to myself" button sits next to "Send to N people," not behind
+  it, so it's available before anyone's ready to go wide.
+- Still no in-app copy editor — the honest limit of "you can't change it" from here is real. Seeing
+  it now closes the *approve-before-sending* gap; changing wording still means asking for a code
+  edit, same as this file's answer for every other email template in this app.
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (148) clean. The refactor was checked
+for behavior drift by re-rendering `renderProductUpdateEmailHtml` standalone before and after
+splitting it out of `sendProductUpdateEmail` — byte-length identical (8619 chars), confirming the
+split didn't change output. The `<iframe srcDoc>` mechanism itself doesn't depend on a real
+Supabase session (pure browser DOM), so unlike the rest of this admin panel it *was* click-tested
+live: rendered the exact same content through a harness replicating the panel's real markup,
+confirmed via CDP that the iframe's own document contains the greeting and all four feature titles,
+zero console errors, and no 375px overflow. The parts that genuinely can't be exercised here (the
+owner-gated server actions themselves, an actual Resend send) remain real-Supabase/real-Resend-only,
+same accepted limitation as the rest of this feature.
+
 **2026-08-09 (later — mailed deposits post automatically after N days, not on a manual click)** —
 Direct follow-up to the Send money entry below, same day: after live use, the user pushed back on
 the "credit immediately" checkbox that shipped first, and specifically on the alternative I'd
