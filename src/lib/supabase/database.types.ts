@@ -23,6 +23,7 @@ export type Database = {
           created_at: string
           id: string
           reason: string | null
+          type: string | null
           user_id: string
         }
         Insert: {
@@ -33,6 +34,7 @@ export type Database = {
           created_at?: string
           id?: string
           reason?: string | null
+          type?: string | null
           user_id: string
         }
         Update: {
@@ -43,6 +45,7 @@ export type Database = {
           created_at?: string
           id?: string
           reason?: string | null
+          type?: string | null
           user_id?: string
         }
         Relationships: [
@@ -967,7 +970,26 @@ export type Database = {
         Args: { p_account_id: string; p_amount: number; p_credited_on: string }
         Returns: number
       }
+      edit_last_account_transaction: {
+        Args: {
+          p_new_amount: number
+          p_new_as_of_date: string
+          p_new_reason: string | null
+          p_transaction_id: string
+        }
+        Returns: number
+      }
       is_approved: { Args: never; Returns: boolean }
+      record_account_transaction: {
+        Args: {
+          p_account_id: string
+          p_amount: number
+          p_as_of_date: string
+          p_reason: string
+          p_type: string
+        }
+        Returns: number
+      }
       refresh_bank_branches: {
         Args: { p_certs: number[]; p_rows: Json }
         Returns: number

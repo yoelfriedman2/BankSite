@@ -2,10 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { DEMO_MODE, getDemoAccounts, getDemoBanks } from "@/lib/demo";
+import {
+  DEMO_MODE,
+  getDemoAccounts,
+  getDemoBanks,
+  getDemoBalanceHistory,
+  addDemoTransaction,
+  editLastDemoTransaction,
+} from "@/lib/demo";
 import { friendlyDbError } from "@/lib/friendlyError";
 import { formatCurrency } from "@/lib/format";
 import { todayLocalStr } from "@/lib/date";
+import { inferTransactionType, type TransactionType } from "@/lib/transactionType";
 
 export type OutstandingSweep = {
   id: string;
@@ -365,15 +373,30 @@ export async function returnSweepBatch(ids: string[]): Promise<{ error?: string 
 }
 
 export type BalancePoint = {
+  id: string;
   as_of_date: string;
   balance: number;
   change_amount: number | null;
   reason: string | null;
+  type: TransactionType;
 };
 
-/** The dated balance points for one account (newest first), for its history view. */
+/** The dated balance points for one account (newest first), for its history view.
+ *  Reads `select("*")` rather than an explicit column list so a pre-migration-0051
+ *  database (no `type` column yet) doesn't error the whole query — `type` just
+ *  comes back `undefined` and inferTransactionType() fills in a best guess from
+ *  the free-text `reason`, same patterns migration 0051's own backfill uses. */
 export async function getBalanceHistory(accountId: string): Promise<BalancePoint[]> {
-  if (DEMO_MODE) return [];
+  if (DEMO_MODE) {
+    return getDemoBalanceHistory(accountId).map((h) => ({
+      id: h.id,
+      as_of_date: h.as_of_date,
+      balance: h.balance,
+      change_amount: h.change_amount,
+      reason: h.reason,
+      type: h.type ?? inferTransactionType(h.reason),
+    }));
+  }
   const supabase = await createClient();
   const {
     data: { user },
@@ -381,17 +404,111 @@ export async function getBalanceHistory(accountId: string): Promise<BalancePoint
   if (!user) return [];
   const { data } = await supabase
     .from("account_balance_history")
-    .select("as_of_date, balance, change_amount, reason")
+    .select("*")
     .eq("account_id", accountId)
     .order("as_of_date", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(60);
-  return (data ?? []).map((h) => ({
-    as_of_date: h.as_of_date as string,
-    balance: Number(h.balance),
-    change_amount: h.change_amount != null ? Number(h.change_amount) : null,
-    reason: (h.reason as string | null) ?? null,
-  }));
+  return (data ?? []).map((h) => {
+    const reason = (h.reason as string | null) ?? null;
+    return {
+      id: h.id as string,
+      as_of_date: h.as_of_date as string,
+      balance: Number(h.balance),
+      change_amount: h.change_amount != null ? Number(h.change_amount) : null,
+      reason,
+      type: ((h as { type?: TransactionType | null }).type ?? null) ?? inferTransactionType(reason),
+    };
+  });
+}
+
+/** Record a deposit/withdrawal directly, instead of retyping the account's
+ *  new total — the new balance is always computed server-side (`current +
+ *  amount`, via record_account_transaction, migration 0051) against
+ *  whatever the account actually holds at commit time, never trusted from
+ *  the client. */
+export async function recordAccountTransaction(
+  accountId: string,
+  amount: number,
+  type: "deposit" | "withdrawal",
+  reason: string,
+  asOfDate: string,
+): Promise<{ error?: string }> {
+  if (!(amount > 0)) return { error: "Enter an amount greater than $0." };
+  const signedAmount = type === "withdrawal" ? -amount : amount;
+  const trimmedReason = reason.trim() || (type === "deposit" ? "Deposit" : "Withdrawal");
+
+  if (DEMO_MODE) {
+    const result = addDemoTransaction(accountId, signedAmount, type, trimmedReason, asOfDate);
+    if (result == null) return { error: "That account couldn't be found." };
+    revalidate();
+    return {};
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { data, error } = await supabase.rpc("record_account_transaction", {
+    p_account_id: accountId,
+    p_amount: signedAmount,
+    p_type: type,
+    p_reason: trimmedReason,
+    p_as_of_date: asOfDate,
+  });
+  if (error) return { error: friendlyDbError(error.message) };
+  if (data == null) return { error: "That account couldn't be found." };
+
+  revalidate();
+  return {};
+}
+
+/** Fix a fat-fingered entry. Only the account's single most-recent
+ *  transaction is editable, and only if it's a user-entered type — enforced
+ *  server-side (edit_last_account_transaction, migration 0051), re-checked
+ *  inside the same locked call rather than trusted from what the UI last
+ *  loaded, so a transaction that stopped being "the latest" between opening
+ *  the edit form and submitting it is correctly rejected. `amount` is the
+ *  new signed delta (matching how it's stored), not an absolute total. */
+export async function editLastAccountTransaction(
+  transactionId: string,
+  amount: number,
+  reason: string,
+  asOfDate: string,
+): Promise<{ error?: string }> {
+  if (!amount) return { error: "Enter a nonzero amount." };
+  const trimmedReason = reason.trim() || null;
+
+  if (DEMO_MODE) {
+    const result = editLastDemoTransaction(transactionId, amount, trimmedReason, asOfDate);
+    if (result == null) {
+      return { error: "A newer transaction was added — this can no longer be edited." };
+    }
+    revalidate();
+    return {};
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { data, error } = await supabase.rpc("edit_last_account_transaction", {
+    p_transaction_id: transactionId,
+    p_new_amount: amount,
+    p_new_reason: trimmedReason,
+    p_new_as_of_date: asOfDate,
+  });
+  if (error) return { error: friendlyDbError(error.message) };
+  if (data == null) {
+    return { error: "A newer transaction was added — this can no longer be edited." };
+  }
+
+  revalidate();
+  return {};
 }
 
 /** Each account's balance as of the given date (latest recorded point on or before it). */

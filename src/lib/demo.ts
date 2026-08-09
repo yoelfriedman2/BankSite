@@ -12,6 +12,7 @@
 import { AUTO_OPEN_FROM_STATUSES, type Account, type Bank, type BankComment, type HoldingCompany, type Profile } from "./types";
 import { BANKS_SEED } from "./banks-seed";
 import type { RoadTripPlan } from "@/app/(app)/road-trip/actions";
+import { EDITABLE_TRANSACTION_TYPES, type TransactionType } from "./transactionType";
 
 // Demo mode bypasses auth entirely, so it must never be active on any
 // production-style run — even if DEMO_MODE=true is left set there by
@@ -244,6 +245,18 @@ export type DemoTrip = {
   updated_at: string;
 };
 
+export type DemoBalancePoint = {
+  id: string;
+  account_id: string;
+  user_id: string;
+  as_of_date: string;
+  balance: number;
+  change_amount: number | null;
+  reason: string | null;
+  type: TransactionType | null;
+  created_at: string;
+};
+
 type DemoStore = {
   profile: Profile;
   banks: Bank[];
@@ -252,6 +265,7 @@ type DemoStore = {
   commentReads: Record<number, string>;
   roadTrips: DemoTrip[];
   holdingCompanies: HoldingCompany[];
+  balanceHistory: DemoBalancePoint[];
 };
 
 function createInitialStore(): DemoStore {
@@ -377,6 +391,58 @@ function createInitialStore(): DemoStore {
         ]
       : [];
 
+  // A small, coherent transaction history on John's checking (accounts[0])
+  // so the "+ Add transaction" / edit-latest UI and the correction (amber)
+  // styling are all visible without any manual setup. Ends at the account's
+  // own seeded balance (2450.75) so the ledger reads as believable, not just
+  // decorative — each row's own `balance` is the running total after it.
+  const balanceHistory: DemoBalancePoint[] = [
+    {
+      id: crypto.randomUUID(),
+      account_id: accounts[0].id,
+      user_id: DEMO_USER.id,
+      as_of_date: yearsAgo(3),
+      balance: 2000,
+      change_amount: null,
+      reason: "opening balance",
+      type: "opening_balance",
+      created_at: new Date(yearsAgo(3)).toISOString(),
+    },
+    {
+      id: crypto.randomUUID(),
+      account_id: accounts[0].id,
+      user_id: DEMO_USER.id,
+      as_of_date: monthsAgo(7),
+      balance: 2500,
+      change_amount: 500,
+      reason: "Deposit",
+      type: "deposit",
+      created_at: new Date(monthsAgo(7)).toISOString(),
+    },
+    {
+      id: crypto.randomUUID(),
+      account_id: accounts[0].id,
+      user_id: DEMO_USER.id,
+      as_of_date: monthsAgo(2),
+      balance: 2487.5,
+      change_amount: -12.5,
+      reason: "monthly fee",
+      type: "monthly_fee",
+      created_at: new Date(monthsAgo(2)).toISOString(),
+    },
+    {
+      id: crypto.randomUUID(),
+      account_id: accounts[0].id,
+      user_id: DEMO_USER.id,
+      as_of_date: monthsAgo(1),
+      balance: 2450.75,
+      change_amount: -36.75,
+      reason: "Reconciled against the online statement",
+      type: "correction",
+      created_at: new Date(monthsAgo(1)).toISOString(),
+    },
+  ];
+
   return {
     profile,
     banks,
@@ -385,6 +451,7 @@ function createInitialStore(): DemoStore {
     commentReads: {},
     roadTrips: [],
     holdingCompanies: [sampleHoldingCompany],
+    balanceHistory,
   };
 }
 
@@ -544,6 +611,74 @@ export function restoreDemoAccount(id: string): void {
   store().accounts = store().accounts.map((a) =>
     a.id === id ? { ...a, deleted_at: null } : a,
   );
+}
+
+// ---- Balance history / transactions ----
+export function getDemoBalanceHistory(accountId: string): DemoBalancePoint[] {
+  return store()
+    .balanceHistory.filter((h) => h.account_id === accountId)
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
+}
+
+/** Mirrors record_account_transaction (migration 0051): applies a signed
+ *  delta to the account's cached balance and appends one ledger row. Returns
+ *  the new balance, or null if the account doesn't exist. */
+export function addDemoTransaction(
+  accountId: string,
+  amount: number,
+  type: "deposit" | "withdrawal",
+  reason: string | null,
+  asOfDate: string,
+): number | null {
+  const account = store().accounts.find((a) => a.id === accountId);
+  if (!account) return null;
+  const newBalance = Math.round(((account.balance ?? 0) + amount) * 100) / 100;
+  updateDemoAccount(accountId, { balance: newBalance });
+  store().balanceHistory = [
+    ...store().balanceHistory,
+    {
+      id: crypto.randomUUID(),
+      account_id: accountId,
+      user_id: DEMO_USER.id,
+      as_of_date: asOfDate,
+      balance: newBalance,
+      change_amount: amount,
+      reason,
+      type,
+      created_at: new Date().toISOString(),
+    },
+  ];
+  return newBalance;
+}
+
+/** Mirrors edit_last_account_transaction (migration 0051): only the single
+ *  most-recent transaction for the account is editable, and only if it's a
+ *  user-entered type — same two guards as the real RPC. Returns null (not
+ *  editable) rather than throwing, matching the RPC's "null means try
+ *  again" contract. */
+export function editLastDemoTransaction(
+  transactionId: string,
+  amount: number,
+  reason: string | null,
+  asOfDate: string,
+): number | null {
+  const row = store().balanceHistory.find((h) => h.id === transactionId);
+  if (!row || !row.type || !EDITABLE_TRANSACTION_TYPES.has(row.type)) return null;
+
+  const latest = getDemoBalanceHistory(row.account_id)[0];
+  if (!latest || latest.id !== transactionId) return null;
+
+  const account = store().accounts.find((a) => a.id === row.account_id);
+  if (!account) return null;
+
+  const newBalance = Math.round(((account.balance ?? 0) - (row.change_amount ?? 0) + amount) * 100) / 100;
+  updateDemoAccount(row.account_id, { balance: newBalance });
+  store().balanceHistory = store().balanceHistory.map((h) =>
+    h.id === transactionId
+      ? { ...h, change_amount: amount, balance: newBalance, reason, as_of_date: asOfDate }
+      : h,
+  );
+  return newBalance;
 }
 export function permanentlyDeleteDemoAccount(id: string): void {
   store().accounts = store().accounts.filter((a) => a.id !== id);

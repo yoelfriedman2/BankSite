@@ -23,6 +23,7 @@ import {
   CalendarClock,
   Mail,
   CircleAlert,
+  Eye,
 } from "lucide-react";
 import {
   updateSettings,
@@ -723,6 +724,22 @@ export function SettingsForm({
           tabIndex={0}
           className="space-y-5"
         >
+          {!isOwner && (
+            <Card
+              title="Who can see your data"
+              icon={<Eye className="h-4 w-4 text-slate-500" />}
+              description="Other family members on this app can never see your balances, notes, or saved logins — that's enforced by the database itself, not just hidden in the interface."
+            >
+              <p className="text-sm text-slate-700">
+                The one exception is whoever administers this app: they hold the database
+                credentials, so they can technically access anything in it — the same as the
+                owner of any app you don&apos;t host yourself. That access is only ever used to
+                run the app (backups, fixes, syncing shared bank info), never to browse what
+                you&apos;ve entered.
+              </p>
+            </Card>
+          )}
+
           <Card
             title="Full backup"
             icon={<Archive className="h-4 w-4 text-slate-500" />}

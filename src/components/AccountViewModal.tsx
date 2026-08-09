@@ -7,10 +7,10 @@ import { ACCOUNT_TYPE_LABELS, type Account } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { effectiveRoutingNumber } from "@/lib/routingNumber";
 import { Box, BoxHeader, Frow } from "@/components/DetailBox";
+import { useTransactionEntry, AddTransactionButton, TransactionHistoryBox } from "@/components/BalanceHistoryBox";
 import { getActivityLevel, daysUntil } from "@/lib/dormancy";
 import { ActivityDot } from "@/components/badges";
 import { useFocusTrap } from "@/lib/useFocusTrap";
-import { getBalanceHistory, type BalancePoint } from "@/app/(app)/money/actions";
 
 /** Where a docked sheet parks.
  *  - `drawer` — beside the bank drawer, which is `max-w-3xl` (48rem) pinned
@@ -161,10 +161,7 @@ export function AccountViewModal({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [prevNext, frozen]);
 
-  const [balanceHistory, setBalanceHistory] = useState<BalancePoint[]>([]);
-  useEffect(() => {
-    getBalanceHistory(account.id).then(setBalanceHistory).catch(() => {});
-  }, [account.id]);
+  const tx = useTransactionEntry(account.id);
 
   const showSheet = entered && !leaving;
   const accountLabel = `${account.holder || "—"}${
@@ -314,6 +311,7 @@ export function AccountViewModal({
               label="Interest rate"
               value={account.interest_rate != null ? `${account.interest_rate}% APY` : null}
             />
+            <AddTransactionButton tx={tx} />
           </Box>
 
           <Box>
@@ -363,33 +361,7 @@ export function AccountViewModal({
             </Box>
           )}
 
-          {balanceHistory.length > 0 && (
-            <Box>
-              <BoxHeader title="Balance history" />
-              <ul className="space-y-1.5">
-                {balanceHistory.map((p, i) => (
-                  <li
-                    key={i}
-                    className="flex items-center gap-2 rounded-md bg-slate-50 px-2 py-1.5 text-sm"
-                  >
-                    <span className="w-16 shrink-0 text-xs text-slate-500">{formatDate(p.as_of_date)}</span>
-                    <span className="flex-1 truncate text-xs text-slate-600">{p.reason ?? ""}</span>
-                    {p.change_amount != null && (
-                      <span
-                        className={`shrink-0 text-xs tabular-nums ${p.change_amount < 0 ? "text-rose-500" : "text-emerald-700"}`}
-                      >
-                        {p.change_amount < 0 ? "−" : "+"}
-                        {formatCurrency(Math.abs(p.change_amount))}
-                      </span>
-                    )}
-                    <span className="w-24 shrink-0 text-right font-medium tabular-nums text-slate-800">
-                      {formatCurrency(p.balance)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </Box>
-          )}
+          <TransactionHistoryBox tx={tx} />
         </div>
 
         <div
