@@ -13,7 +13,7 @@ import { shareRoutingNumberToBank } from "@/app/(app)/banks/actions";
 import { AccountDocuments } from "@/components/AccountDocuments";
 import { useUnsavedChanges, confirmDiscard } from "@/components/useUnsavedChanges";
 import { Box, BoxHeader } from "@/components/DetailBox";
-import { BalanceHistoryBox } from "@/components/BalanceHistoryBox";
+import { useTransactionEntry, AddTransactionButton, TransactionHistoryBox } from "@/components/BalanceHistoryBox";
 import { getActivityLevel, daysUntil } from "@/lib/dormancy";
 import { ActivityDot } from "@/components/badges";
 import { todayLocalStr } from "@/lib/date";
@@ -129,6 +129,7 @@ export function AccountModal({
   // Purely a UI toggle — the "add an entry" row is hidden until asked for so
   // an account with no logged activity yet doesn't show a permanent input row.
   const [activityAdding, setActivityAdding] = useState(false);
+  const tx = useTransactionEntry(initial?.id ?? null);
   const [dirty, setDirty] = useState(false);
 
   // Routing number: the account's own value always wins; the bank's shared one
@@ -573,6 +574,7 @@ export function AccountModal({
                     Don&apos;t flag this account for the minimum-balance alert
                   </span>
                 </label>
+                {initial?.id && <AddTransactionButton tx={tx} />}
               </div>
               <div>
                 <span className={labelCls}>Monthly fee (optional)</span>
@@ -913,7 +915,7 @@ export function AccountModal({
             )}
           </Box>
 
-          {initial?.id && <BalanceHistoryBox accountId={initial.id} />}
+          {initial?.id && <TransactionHistoryBox tx={tx} />}
 
           {initial?.id && (
             <Box>

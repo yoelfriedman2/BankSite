@@ -49,7 +49,7 @@ try {
   // this is the specific thing under question: does the amount/date/reason
   // row fit or wrap cleanly in the narrow (28rem) docked lane, instead of
   // silently overflowing past the visible edge.
-  await clickExact("button", "+ Add transaction");
+  await clickExact("button", "Add transaction");
   await new Promise((r) => setTimeout(r, 400));
 
   const geometry = await b.eval(`
@@ -92,7 +92,7 @@ try {
   const editorOpen = await b.eval(`return document.body.textContent.includes('Balance history');`);
   check("docked editor opened with Balance history box", editorOpen);
 
-  await clickExact("button", "+ Add transaction");
+  await clickExact("button", "Add transaction");
   await new Promise((r) => setTimeout(r, 400));
   const editorGeometry = await b.eval(`
     const amountInput = document.querySelector('input[placeholder="Amount"]');

@@ -24,23 +24,16 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
 
 ## One-time setup pending
 
-- **Run migration `0051_transaction_ledger.sql`.** Adds `account_balance_history.type` (nullable,
-  additive) plus a new UPDATE RLS policy on that table (it was insert/delete-only before), and two new
-  functions: `record_account_transaction` (the new "+ Add transaction" deposit/withdrawal entry point)
-  and `edit_last_account_transaction` (fixes the single most-recent user-entered transaction, only
-  when its type is deposit/withdrawal/correction — never a system-generated row). Also `create or
+- ~~Run migration `0051_transaction_ledger.sql`~~ — **confirmed run 2026-08-09.** Adds
+  `account_balance_history.type` (nullable, additive) plus a new UPDATE RLS policy on that table (it
+  was insert/delete-only before), and two new functions: `record_account_transaction` (the "Add
+  transaction" deposit/withdrawal entry point, now in the account's Balance box) and
+  `edit_last_account_transaction` (fixes the single most-recent user-entered transaction, only when
+  its type is deposit/withdrawal/correction — never a system-generated row). Also `create or
   replace`s the existing `charge_monthly_fee_with_history`/`credit_monthly_interest_with_history`/
   `update_account_balance`/`sweep_accounts`/`return_sweep` to tag their inserts with a `type` — pure
   literal-string additions, no other behavior change, and their `search_path = ''` hardening from
-  migration 0047 is preserved automatically (no `SET` clause in the new bodies).
-  **Degrades gracefully except for the two brand-new actions**: every existing balance-changing path
-  (manual balance edit, monthly fee, interest, sweeps) keeps working exactly as it does today whether
-  or not this has run — `getBalanceHistory` reads via `select("*")` and falls back to guessing a
-  row's type from its `reason` text if the column doesn't exist yet. The two new actions
-  (`recordAccountTransaction`/`editLastAccountTransaction`, wired to "+ Add transaction" and the
-  latest-row edit button in `BalanceHistoryBox`) are the one exception — they call the new RPCs
-  directly and return a friendly error ("function not found") until this runs, same as this project's
-  other money-critical migrations (e.g. sweep transactions, 0034).
+  migration 0047 was preserved automatically (no `SET` clause in the new bodies).
 
 - ~~Run migration `0050_borrowed_funds.sql`~~ — **confirmed run 2026-08-09.** New private per-user
   table (`borrowed_funds`) powering the "Borrowed money" section on the Money page (money borrowed

@@ -252,7 +252,43 @@ before it ever reached the form's own "Add" submit button — silently toggling 
 submitting it. Fixed with an exact-text-match click helper in the new script; not a bug in the shipped
 component. `DEMO_MODE` was flipped to `true` via a temporary `.env.local` (none existed in this fresh
 environment) and removed before finishing, per the standing rule. Changelog and Guide entries added
-(genuinely new, user-visible capability). **Migration 0051 not yet run — see TODO.md.**
+(genuinely new, user-visible capability). **Migration 0051 confirmed run by the user same-day.**
+
+**Same-day follow-up — the trigger moved, and changed color, from live feedback.** Two rounds of
+real user feedback after the feature was live: (1) the "+ Add transaction" control was hard to find,
+tucked into the "Balance history" `BoxHeader`'s corner-link slot (small, `text-slate-600`, only
+signals "clickable" on hover — exactly the same shape of issue UX-11 already flagged elsewhere in
+this app); the user wanted it moved up into the "Balance" box itself, next to the number it acts on.
+(2) Once shown a mockup, asked whether it should be green instead of the app's default amber.
+
+Presented both as a real before/after comparison (an Artifact, this app's established pattern for
+exactly this kind of decision) before writing any code — placement options (a full-width button vs.
+an inline pill beside the balance figure) and, once "full-width" was picked, a second round comparing
+amber vs. green with the button's actual **mid-withdrawal** state mocked out too, not just its
+resting color, since the same button covers both directions. Landed on green: `bg-emerald-700` is
+already this app's established "confirm this specific action" button color (Approve a user, Apply
+FDIC changes, Mark address notified) — a closer semantic match than amber's "edit the whole record"
+role, and a deposit's `+$100` already renders in this exact green in the history list below it.
+
+- **`BalanceHistoryBox.tsx` split into three pieces**: a `useTransactionEntry(accountId: string |
+  null)` hook (owns history/adding/editingId state — `null` for a not-yet-saved account, so the hook
+  can still be called unconditionally, since hooks can't be conditional, while the two pieces below
+  render nothing), `<AddTransactionButton>` (the new full-width green trigger + inline form, now
+  rendered by each caller inside their own "Balance"/"Balance & fees" box, right after the balance
+  Frows/inputs), and `<TransactionHistoryBox>` (unchanged "Balance history" list, just without its
+  own header button now — genuinely one trigger, not a duplicate). `TransactionForm`'s submit button
+  and border also moved from amber to emerald, so the whole control (trigger → open form → submit)
+  reads as one green action rather than half-and-half.
+- **Verification**: `tsc --noEmit`/`npm run build`/`npm test` (103/103) clean. Both existing DEMO_MODE
+  CDP scripts updated and re-run clean on fresh servers — new assertions added confirming the button
+  now sits inside the "Balance" box specifically (not "Balance history"), is full-width, and the
+  "Balance history" header has zero buttons left in it. One false-positive along the way, not a bug:
+  a computed-style check expecting `rgb(4, 120, 87)` failed because Tailwind v4 renders color tokens
+  as `oklch()` — `oklch(0.508 0.118 165.612)` is emerald-700's real value, just a different string
+  format; fixed the assertion to accept either. Also grabbed real screenshots (closed and open state)
+  via `Page.captureScreenshot` to eyeball the result directly, not just trust DOM assertions, since
+  this round was specifically about how it *looks*. `DEMO_MODE` flipped on/off the same as every
+  other round.
 
 **2026-08-09 (borrowed money tracking + CD term/auto-renew, plus a real reminder-cron bug fix)** — Came
 out of a "what would make this app better" conversation. Three small, independent pieces:

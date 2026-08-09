@@ -24,7 +24,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-08-09",
     title: "Log a deposit or withdrawal directly, instead of retyping the balance",
     items: [
-      "An account's Balance history now has a \"+ Add transaction\" button — enter a deposit or withdrawal amount and a reason, and the balance updates for you, instead of doing the math yourself and typing in the new total.",
+      "An account's Balance section now has a real \"Add transaction\" button — enter a deposit or withdrawal amount and a reason, and the balance updates for you, instead of doing the math yourself and typing in the new total.",
       "Every entry is labeled (deposit, withdrawal, monthly fee, interest, money moved, etc.) so the history reads as a real list of what happened, not just a series of numbers.",
       "Made a typo on the one you just entered? The most recent entry has its own \"edit\" button to fix it in place.",
       "The old \"Balance (USD)\" field in the account editor still works exactly as before, for when you just need to correct the number to match what the bank shows online.",

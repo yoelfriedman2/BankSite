@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil } from "lucide-react";
+import { Plus, Pencil } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { DateInput } from "@/components/DateInput";
 import { Box, BoxHeader } from "@/components/DetailBox";
@@ -21,19 +21,23 @@ import {
 
 type Direction = "deposit" | "withdrawal";
 
-/** A dated transaction ledger for one account — replaces the account's old
- *  "retype the new total" balance field as the primary way to log a change:
- *  "+ Add transaction" records a signed amount directly (the balance is
- *  recomputed server-side, never trusted from this form), and the single
- *  most-recent user-entered row can be fixed in place if it was a typo.
- *  Shared by AccountViewModal and AccountModal, which previously had
- *  byte-identical read-only copies of this box. */
-export function BalanceHistoryBox({ accountId }: { accountId: string }) {
+/** Shared state/logic behind the transaction ledger, split from its two
+ *  render locations: the "+ Add transaction" trigger lives in the Balance
+ *  box (next to the number it acts on), while the dated list of past
+ *  entries stays in its own "Balance history" box below. `accountId` is
+ *  `null` for an account that doesn't exist yet (the "Add account" form) —
+ *  the hook no-ops rather than fetching/mutating anything in that case, so
+ *  it's safe to call unconditionally (a hook can't be called conditionally)
+ *  and let the caller decide whether to render its two pieces at all. */
+export function useTransactionEntry(accountId: string | null) {
   const router = useRouter();
   const [history, setHistory] = useState<BalancePoint[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   function refresh() {
+    if (!accountId) return;
     getBalanceHistory(accountId)
       .then((h) => {
         setHistory(h);
@@ -47,9 +51,6 @@ export function BalanceHistoryBox({ accountId }: { accountId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId]);
 
-  const [adding, setAdding] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-
   const latest = history[0] ?? null;
   const latestEditable = !!latest && EDITABLE_TRANSACTION_TYPES.has(latest.type);
 
@@ -58,59 +59,103 @@ export function BalanceHistoryBox({ accountId }: { accountId: string }) {
     setEditingId(null);
   }
 
+  function openAdd() {
+    setEditingId(null);
+    setAdding((v) => !v);
+  }
+
+  function openEdit(id: string) {
+    setAdding(false);
+    setEditingId(id);
+  }
+
+  async function submitAdd(amount: number, direction: Direction, reason: string, date: string) {
+    if (!accountId) return "That account isn't saved yet.";
+    const res = await recordAccountTransaction(accountId, amount, direction, reason, date);
+    if (res.error) return res.error;
+    closeForms();
+    refresh();
+    router.refresh();
+    return null;
+  }
+
+  async function submitEdit(amount: number, direction: Direction, reason: string, date: string) {
+    if (!latest) return "Nothing to edit.";
+    const signed = direction === "withdrawal" ? -amount : amount;
+    const res = await editLastAccountTransaction(latest.id, signed, reason, date);
+    if (res.error) return res.error;
+    closeForms();
+    refresh();
+    router.refresh();
+    return null;
+  }
+
+  return {
+    history,
+    loaded,
+    adding,
+    editingId,
+    latest,
+    latestEditable,
+    openAdd,
+    openEdit,
+    closeForms,
+    submitAdd,
+    submitEdit,
+  };
+}
+
+export type TransactionEntryState = ReturnType<typeof useTransactionEntry>;
+
+/** The primary "record what happened" action — a full-width green button
+ *  right under the balance it acts on, so it reads as a real, obvious
+ *  control rather than a small corner link. Renders nothing for a
+ *  not-yet-saved account (accountId was null going into the hook). Belongs
+ *  inside the caller's own "Balance" box, right after the balance/fee rows. */
+export function AddTransactionButton({ tx }: { tx: TransactionEntryState }) {
+  if (tx.adding) {
+    return <TransactionForm submitLabel="Add" onCancel={tx.closeForms} onSubmit={tx.submitAdd} />;
+  }
+  return (
+    <button
+      type="button"
+      onClick={tx.openAdd}
+      className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
+    >
+      <Plus className="h-4 w-4" />
+      Add transaction
+    </button>
+  );
+}
+
+/** The dated list of past transactions. Type-labeled and color-coded
+ *  (a `correction` reads amber — it's an admission of an unexplained gap,
+ *  not a labeled event); the single most-recent user-entered row can be
+ *  fixed in place via its own inline edit form. */
+export function TransactionHistoryBox({ tx }: { tx: TransactionEntryState }) {
   return (
     <Box>
-      <BoxHeader
-        title="Balance history"
-        onEdit={() => {
-          setEditingId(null);
-          setAdding((v) => !v);
-        }}
-        editLabel="+ Add transaction"
-      />
+      <BoxHeader title="Balance history" />
 
-      {adding && (
-        <TransactionForm
-          submitLabel="Add"
-          onCancel={closeForms}
-          onSubmit={async (amount, direction, reason, date) => {
-            const res = await recordAccountTransaction(accountId, amount, direction, reason, date);
-            if (res.error) return res.error;
-            closeForms();
-            refresh();
-            router.refresh();
-            return null;
-          }}
-        />
-      )}
-
-      {editingId && latest && (
+      {tx.editingId && tx.latest && (
         <TransactionForm
           submitLabel="Save"
-          onCancel={closeForms}
-          initialAmount={Math.abs(latest.change_amount ?? 0)}
-          initialDirection={(latest.change_amount ?? 0) < 0 ? "withdrawal" : "deposit"}
-          initialReason={latest.reason ?? ""}
-          initialDate={latest.as_of_date}
-          onSubmit={async (amount, direction, reason, date) => {
-            const signed = direction === "withdrawal" ? -amount : amount;
-            const res = await editLastAccountTransaction(latest.id, signed, reason, date);
-            if (res.error) return res.error;
-            closeForms();
-            refresh();
-            router.refresh();
-            return null;
-          }}
+          onCancel={tx.closeForms}
+          initialAmount={Math.abs(tx.latest.change_amount ?? 0)}
+          initialDirection={(tx.latest.change_amount ?? 0) < 0 ? "withdrawal" : "deposit"}
+          initialReason={tx.latest.reason ?? ""}
+          initialDate={tx.latest.as_of_date}
+          onSubmit={tx.submitEdit}
         />
       )}
 
-      {loaded && history.length === 0 && !adding && (
+      {tx.loaded && tx.history.length === 0 && (
         <p className="text-xs text-slate-600">No transactions yet.</p>
       )}
 
-      {history.length > 0 && (
+      {tx.history.length > 0 && (
         <ul className="space-y-1.5">
-          {history.map((p, i) => (
+          {tx.history.map((p, i) => (
             <li
               key={p.id}
               className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${TRANSACTION_TYPE_STYLES[p.type]}`}
@@ -131,13 +176,13 @@ export function BalanceHistoryBox({ accountId }: { accountId: string }) {
               <span className="w-24 shrink-0 text-right font-medium tabular-nums text-slate-800">
                 {formatCurrency(p.balance)}
               </span>
-              {i === 0 && latestEditable && !editingId && !adding && (
+              {i === 0 && tx.latestEditable && !tx.editingId && !tx.adding && (
                 <button
                   type="button"
-                  onClick={() => setEditingId(p.id)}
+                  onClick={() => tx.openEdit(p.id)}
                   aria-label="Edit this transaction"
                   title="Edit this transaction"
-                  className="shrink-0 text-slate-400 hover:text-amber-700"
+                  className="shrink-0 text-slate-400 hover:text-emerald-700"
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
@@ -179,7 +224,7 @@ function TransactionForm({
   const canSubmit = amount.trim() !== "" && parsed > 0 && !pending;
 
   return (
-    <div className="mb-2 space-y-2 rounded-lg border border-amber-200 bg-white p-2.5">
+    <div className="mt-2 space-y-2 rounded-lg border border-emerald-200 bg-white p-2.5">
       <div className="flex gap-2">
         <button
           type="button"
@@ -218,7 +263,7 @@ function TransactionForm({
             placeholder="Amount"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+            className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
           />
         </div>
         <div className="w-32 shrink-0">
@@ -228,7 +273,7 @@ function TransactionForm({
           placeholder="Reason (optional)"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          className="min-w-[7rem] flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+          className="min-w-[7rem] flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
         />
       </div>
       {error && <p className="text-xs text-rose-600">{error}</p>}
@@ -250,7 +295,7 @@ function TransactionForm({
             setPending(false);
             if (err) setError(err);
           }}
-          className="rounded-lg bg-amber-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-800 disabled:opacity-50"
+          className="rounded-lg bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
         >
           {pending ? "Saving…" : submitLabel}
         </button>

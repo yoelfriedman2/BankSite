@@ -7,7 +7,7 @@ import { ACCOUNT_TYPE_LABELS, type Account } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { effectiveRoutingNumber } from "@/lib/routingNumber";
 import { Box, BoxHeader, Frow } from "@/components/DetailBox";
-import { BalanceHistoryBox } from "@/components/BalanceHistoryBox";
+import { useTransactionEntry, AddTransactionButton, TransactionHistoryBox } from "@/components/BalanceHistoryBox";
 import { getActivityLevel, daysUntil } from "@/lib/dormancy";
 import { ActivityDot } from "@/components/badges";
 import { useFocusTrap } from "@/lib/useFocusTrap";
@@ -161,6 +161,8 @@ export function AccountViewModal({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [prevNext, frozen]);
 
+  const tx = useTransactionEntry(account.id);
+
   const showSheet = entered && !leaving;
   const accountLabel = `${account.holder || "—"}${
     account.account_type ? ` · ${ACCOUNT_TYPE_LABELS[account.account_type]}` : ""
@@ -309,6 +311,7 @@ export function AccountViewModal({
               label="Interest rate"
               value={account.interest_rate != null ? `${account.interest_rate}% APY` : null}
             />
+            <AddTransactionButton tx={tx} />
           </Box>
 
           <Box>
@@ -358,7 +361,7 @@ export function AccountViewModal({
             </Box>
           )}
 
-          <BalanceHistoryBox accountId={account.id} />
+          <TransactionHistoryBox tx={tx} />
         </div>
 
         <div

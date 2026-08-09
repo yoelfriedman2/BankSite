@@ -9,10 +9,9 @@ function check(label, cond) {
 
 const b = await launch();
 
-// cdp.mjs's clickText matches on textContent *substring* — "+ Add transaction"
-// (the box-header toggle) also contains the word "Add", so a substring match
-// for "Add" hits that toggle first instead of the form's own "Add" submit
-// button. This helper requires an EXACT trimmed match instead.
+// cdp.mjs's clickText matches on textContent *substring* — exact match avoids
+// any ambiguity between similarly-worded buttons (e.g. "Add" the submit vs.
+// any other button containing that word).
 async function clickExact(sel, text) {
   const idx = await b.eval(`
     const els = [...document.querySelectorAll(${JSON.stringify(sel)})];
@@ -51,8 +50,44 @@ try {
   `);
   check("seeded balance $2,450.75 visible before any action", balanceBefore);
 
+  // --- The button now lives in the Balance box, not Balance history ---
+  const placement = await b.eval(`
+    const btn = [...document.querySelectorAll('button')].find(e => (e.textContent||'').trim() === 'Add transaction');
+    if (!btn) return null;
+    const box = btn.closest('div');
+    // Walk up to find the nearest ancestor whose h4 title we can read.
+    let el = btn;
+    let boxTitle = null;
+    while (el && !boxTitle) {
+      el = el.parentElement;
+      const h4 = el?.querySelector?.(':scope > h4, :scope > div > h4');
+      if (h4) boxTitle = h4.textContent.trim();
+    }
+    const styles = getComputedStyle(btn);
+    return { boxTitle, bg: styles.backgroundColor, fullWidth: btn.getBoundingClientRect().width > 300 };
+  `);
+  console.log("button placement/style:", JSON.stringify(placement));
+  check("'Add transaction' button exists", !!placement);
+  check("button sits inside the 'Balance' box, not 'Balance history'", placement?.boxTitle === "Balance");
+  // Tailwind v4 renders color tokens as oklch(), not rgb() — emerald-700's
+  // real value is oklch(0.508 0.118 165.612); accept either notation rather
+  // than assuming a legacy rgb() string.
+  check(
+    "button is a real filled button (emerald-700, not transparent/amber)",
+    placement?.bg === "rgb(4, 120, 87)" || placement?.bg === "oklch(0.508 0.118 165.612)",
+  );
+  check("button spans the full box width (not a tiny corner link)", placement?.fullWidth === true);
+
+  const historyHeaderHasNoButton = await b.eval(`
+    const h4 = [...document.querySelectorAll('h4')].find(e => e.textContent.trim() === 'Balance history');
+    if (!h4) return null;
+    const header = h4.parentElement;
+    return header.querySelector('button') === null;
+  `);
+  check("'Balance history' header no longer has its own button", historyHeaderHasNoButton === true);
+
   // --- Add a deposit ---
-  await clickExact("button", "+ Add transaction");
+  await clickExact("button", "Add transaction");
   await new Promise((r) => setTimeout(r, 200));
   await clickExact("button", "Deposit");
   await b.setInput('input[placeholder="Amount"]', "100");
@@ -66,7 +101,7 @@ try {
   check("new Deposit row appears in history", depositRowVisible);
 
   // --- Add a withdrawal ---
-  await clickExact("button", "+ Add transaction");
+  await clickExact("button", "Add transaction");
   await new Promise((r) => setTimeout(r, 200));
   await clickExact("button", "Withdrawal");
   await b.setInput('input[placeholder="Amount"]', "50.75");
