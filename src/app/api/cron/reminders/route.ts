@@ -451,7 +451,7 @@ export async function GET(req: NextRequest) {
 
   // ── Mailed deposits — auto-post ──
   // Send money/Send a letter tracks a mailed check as "waiting to post"
-  // rather than crediting it immediately (migration 0052) — this is what
+  // rather than crediting it immediately (migration 0054) — this is what
   // resolves the ones the user asked to post automatically once their
   // chosen day count has passed. The "Mark posted" button in the Money page
   // can still resolve any of them by hand at any time, auto_post or not.
@@ -464,7 +464,7 @@ export async function GET(req: NextRequest) {
     .lte("post_after", today.toISOString().slice(0, 10));
 
   if (depositsErr) {
-    logCronError("mailed deposits query failed (migration 0052 not run yet?):", depositsErr.message);
+    logCronError("mailed deposits query failed (migration 0054 not run yet?):", depositsErr.message);
   } else {
     const todayStr = today.toISOString().slice(0, 10);
     for (const d of dueDeposits ?? []) {

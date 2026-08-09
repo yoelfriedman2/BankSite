@@ -29,7 +29,7 @@ export interface PaymentSource {
   last_check_number: number | null;
 }
 
-/** True when migration 0051 hasn't been run yet — the saved-outside-account
+/** True when migration 0053 hasn't been run yet — the saved-outside-account
  *  feature hides itself rather than erroring, and one-off check details can
  *  still be typed in by hand. */
 function isMissingTable(message: string | undefined): boolean {
@@ -137,7 +137,7 @@ export async function savePaymentSource(input: {
 
   if (error) {
     if (isMissingTable(error.message)) {
-      return { error: "Saving outside accounts needs migration 0051 — until it's run, fill the details in by hand each time." };
+      return { error: "Saving outside accounts needs migration 0053 — until it's run, fill the details in by hand each time." };
     }
     return { error: friendlyDbError(error.message) };
   }
@@ -391,7 +391,7 @@ export async function recordMailing(input: MailingInput): Promise<MailingResult>
         depositTracked = true;
       } else if (isMissingTable(insertErr.message)) {
         warnings.push(
-          "Waiting-to-post tracking needs migration 0052 — credited immediately for now instead.",
+          "Waiting-to-post tracking needs migration 0054 — credited immediately for now instead.",
         );
         const w = await applyBalanceChange(
           supabase, user.id, destId, check.amount, "deposit mailed in", "receiving",

@@ -983,7 +983,7 @@ export function SendClient({
                 </div>
               ) : sourcesMigrationNeeded ? (
                 <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                  Saving outside accounts needs migration 0051. Until it&apos;s run you can still print from
+                  Saving outside accounts needs migration 0053. Until it&apos;s run you can still print from
                   one of your own accounts.
                 </p>
               ) : (

@@ -184,8 +184,10 @@ that it should be minimal interaction... you shouldn't have to do things so much
 auto-post after a configurable number of days by default, with the manual button always available
 as a fallback, never a requirement.
 
-- **New `mailed_deposits` table** (migration **0052_mailed_deposits.sql** — *not yet run, see
-  TODO.md*), private per-user, RLS scoped to `user_id = auth.uid()`. Every check enclosed through
+- **New `mailed_deposits` table** (migration **0054_mailed_deposits.sql**, renumbered from this
+  session's original `0052` after merging with `main` — see the note at the end of this entry —
+  *confirmed run 2026-08-09*), private per-user, RLS scoped to `user_id = auth.uid()`. Every check
+  enclosed through
   Send money now lands here as `status = 'pending'` instead of ever touching the destination
   account's balance or activity log directly — `recordMailing()`'s old `creditDestination` checkbox
   is gone entirely, replaced by a `deposit: { autoPost, postAfterDays } | null` field on
@@ -236,6 +238,18 @@ as a fallback, never a requirement.
   still-pending mailed deposit (the same INT-05 shape already built for unreturned sweeps) — the
   table cascades on account/bank deletion with no warning today, smaller blast radius than the sweep
   case (a pending deposit is usually only a few weeks old) but the same real gap.
+- **A real migration-numbering collision, caught while merging to `main`, not before.** Both
+  migrations from this round were originally numbered `0051_payment_sources.sql`/
+  `0052_mailed_deposits.sql`, given to the user directly in chat (per this same session's earlier
+  standing-rule change — paste the SQL, don't just point at the file) and confirmed run against
+  production before this branch was merged. Merging into `main` found it had independently claimed
+  `0051` in the meantime for an unrelated feature (`0051_transaction_ledger.sql`). Renumbered this
+  branch's two files to `0053`/`0054` (file contents unchanged — the SQL the user already ran is
+  identical either way, only the filename in this repo moved) and updated every in-code comment/error
+  message referencing the old numbers (`send/actions.ts`, `money/actions.ts`,
+  `api/cron/reminders/route.ts`, `SendClient.tsx`, `lib/types.ts`). **Same standing lesson as the
+  `borrowed_funds`/0050 collision earlier this session: check the next free migration number against
+  `origin/main` right before merging, not just against the branch point.**
 
 **Verification**: `tsc --noEmit`, `npm run build`, `npm test` (**148 passed**, +14 new in
 `mailedDeposits.test.ts` covering month/year/leap-day rollovers in the pure date math, day-count
@@ -318,10 +332,12 @@ a personal outside account the app doesn't track.
   is NOT NULL and FKs to `accounts`, and logging it against the *destination* would corrupt the
   register's meaning ("checks printed FROM this account"). Only the check number carries forward, via
   `payment_sources.last_check_number`. The UI says so plainly rather than pretending otherwise.
-- **Migration `0051_payment_sources.sql` — NOT yet run, see TODO.md.** Degrades gracefully: the
-  saved-outside-account UI swaps itself for a short notice, everything else works unchanged.
-  `database.types.ts` hand-patched for the new table (same limitation as the 0050 merge — no live
-  Supabase credentials here to regenerate against).
+- **Migration `0053_payment_sources.sql`** (renumbered from this session's original `0051` when
+  merging to `main` claimed that number first — see the renumbering note in the follow-up entry
+  above — *confirmed run 2026-08-09*). Degrades gracefully if it hasn't run: the saved-outside-account
+  UI swaps itself for a short notice, everything else works unchanged. `database.types.ts`
+  hand-patched for the new table (same limitation as the 0050 merge — no live Supabase credentials
+  here to regenerate against).
 - **Crediting the destination happens immediately, by explicit user decision** ("should automatically
   deduct and give the money as well"), even though a mailed check hasn't actually posted yet. It's a
   tickable checkbox with copy saying so. A real sent-vs-posted lifecycle was raised in the brainstorm

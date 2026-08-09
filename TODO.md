@@ -24,32 +24,24 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
 
 ## One-time setup pending
 
-- **Run migration `0052_mailed_deposits.sql`** — new private per-user table (`mailed_deposits`)
-  tracking a check enclosed through Send money as "waiting to post" instead of crediting the
-  destination account immediately. Adds `post_mailed_deposit()` (the RPC that atomically credits +
-  logs activity + marks a deposit posted — called both by the "Mark posted" button and the daily
-  cron's auto-post loop) and `profiles.default_deposit_post_days` (nullable, additive — the per-user
-  default day count, editable in Settings → Alerts & emails).
-  **Degrades gracefully until it's run**: `recordMailing()` falls back to the old immediate-credit
-  behavior with a warning toast explaining tracking isn't set up yet; the Money page's "Waiting to
-  post" section and the cron's auto-post loop both just find no rows / a missing-table error and
-  no-op, same as every other migration-gated feature in this app.
-  `src/lib/supabase/database.types.ts` hand-patched for the new table + column + RPC — same
-  limitation as every other migration in this sandbox (no live Supabase credentials to regenerate
-  against), re-run `supabase gen types typescript` for real once this is applied.
+- ~~Run migration `0054_mailed_deposits.sql`~~ — **confirmed run 2026-08-09.** New private per-user
+  table (`mailed_deposits`) tracking a check enclosed through Send money as "waiting to post" instead
+  of crediting the destination account immediately. Adds `post_mailed_deposit()` (the RPC that
+  atomically credits + logs activity + marks a deposit posted — called both by the "Mark posted"
+  button and the daily cron's auto-post loop) and `profiles.default_deposit_post_days` (nullable,
+  additive — the per-user default day count, editable in Settings → Alerts & emails). Renumbered from
+  this session's original `0052_mailed_deposits.sql` to `0054` after merging with `main`, which had
+  independently claimed `0051` for an unrelated migration (`0051_transaction_ledger.sql`) — the SQL
+  that actually ran against the database is unchanged, only the filename in this repo moved.
 
-- **Run migration `0051_payment_sources.sql`** — new private per-user table (`payment_sources`)
-  backing the "outside account" a check can be drawn on from the new Send money / Send a letter
-  pages. Holds only what's needed to print a check (label, payer name, bank name, routing + account
-  number, last check number used) — deliberately **no balance**, since the app doesn't own that
-  account and couldn't keep one honest. RLS scoped to `user_id = auth.uid()`, same shape as
-  `road_trips` (0032) / `borrowed_funds` (0050); no shared or admin-client path.
-  **Degrades gracefully until it's run** — the saved-outside-account UI replaces itself with a short
-  "needs migration 0051" note, and everything else on both pages (letters, deposit tickets, and a
-  check drawn on one of your *own* tracked accounts) works exactly as it will afterwards.
-  `src/lib/supabase/database.types.ts` was hand-patched to add this table — it can only be properly
-  regenerated (`supabase gen types typescript`) from a machine with live Supabase credentials, so
-  re-run that after applying the migration if convenient.
+- ~~Run migration `0053_payment_sources.sql`~~ — **confirmed run 2026-08-09.** New private per-user
+  table (`payment_sources`) backing the "outside account" a check can be drawn on from the Send
+  money / Send a letter pages. Holds only what's needed to print a check (label, payer name, bank
+  name, routing + account number, last check number used) — deliberately **no balance**, since the
+  app doesn't own that account and couldn't keep one honest. RLS scoped to `user_id = auth.uid()`,
+  same shape as `road_trips` (0032) / `borrowed_funds` (0050); no shared or admin-client path.
+  Renumbered from this session's original `0051_payment_sources.sql` to `0053` for the same reason as
+  the entry above.
 
 - ~~Run migration `0050_borrowed_funds.sql`~~ — **confirmed run 2026-08-09.** New private per-user
   table (`borrowed_funds`) powering the "Borrowed money" section on the Money page (money borrowed

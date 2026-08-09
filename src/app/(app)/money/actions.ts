@@ -499,7 +499,7 @@ export async function getPendingMailedDeposits(): Promise<PendingMailedDeposit[]
 
 /** Applies a pending deposit right now — credits the balance, logs activity
  *  if the mailing asked for it, and marks it posted. Same atomic RPC
- *  (migration 0052) the daily cron calls once post_after arrives; this just
+ *  (migration 0054) the daily cron calls once post_after arrives; this just
  *  lets the user trigger it early (or late) by hand. */
 export async function markMailedDepositPosted(id: string): Promise<{ error?: string }> {
   if (DEMO_MODE) return {};

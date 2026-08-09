@@ -226,7 +226,7 @@ export interface Profile {
   alert_cd_maturity: boolean;
   min_balance: number;
   // Default number of days a mailed deposit waits before auto-posting
-  // (migration 0052) — null means "no preference set," app code falls back
+  // (migration 0054) — null means "no preference set," app code falls back
   // to lib/mailedDeposits.ts's DEFAULT_DEPOSIT_POST_DAYS.
   default_deposit_post_days: number | null;
   // Scoped role: allowed to apply (not just check) FDIC sync changes.
