@@ -176,6 +176,55 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-08-09 (later still — owner-triggered "what's new" digest email, hand-approved copy)** — User
+wanted a product-update email about the Send money feature, iterated on it via a live HTML preview
+(rendered as an Artifact — an iframe against a `data:` URI so the actual email markup, table layout
+and all, renders exactly as it would in a client, not just inlined into the preview page's own CSS),
+then asked for a multi-feature digest instead of a single-feature announcement, picked which of the
+recent changelog entries to include (cut two, kept two, added a fourth), and asked for one title
+reworded ("Log a deposit..." → "Every deposit and withdrawal is now a recorded transaction," to read
+as "we record real transactions now" rather than "the balance updates itself"). Once approved, asked
+how to actually send it — nothing in the app could.
+
+- **`sendProductUpdateEmail()`** (new, `lib/email.ts`) — same visual system as every other
+  transactional email here (`sendWelcomeEmail`'s navy/amber header block, copied verbatim), content
+  as a small `PRODUCT_UPDATE_ITEMS` array (title + up to two lines) rendered into the same
+  bullet-with-divider layout the approved preview used. **No in-app editor for the copy, on
+  purpose** — every other email template in this file is hardcoded content edited in code and
+  redeployed, not a CMS; this follows the same shape rather than building a one-off content-editing
+  UI for something that gets sent by hand, rarely.
+- **`sendProductUpdateBroadcast()`** (new, `admin/actions.ts`) — owner-gated via the existing
+  `requireOwner()`. Recipient filtering copies `addBankComment`'s community-note broadcast exactly:
+  `notify_email` AND `notify_product_updates` both on, AND `access_status = 'approved'` queried as a
+  *separate* call (same INT-02 reasoning — a pending/denied signup defaults both notify flags `true`,
+  so skipping the access check would email someone not actually let into the app yet). Unlike the
+  community-note broadcast, this does **not** exclude the sender — the owner should get their own
+  copy too, to confirm it actually went out.
+- **New `AdminProductUpdatePanel.tsx`**, added to Admin → Users next to the existing Backups panel,
+  same visual shape. Loads a live recipient count on mount (`getProductUpdateRecipientCount()`) so
+  the button reads "Send to N people," not a blind trigger, and gates the actual send behind a
+  `window.confirm()` naming the count — matching this app's existing destructive-action confirm
+  pattern, since a broadcast email can't be unsent.
+- **No migration** — this only reads `profiles` columns that already exist in production
+  (`notify_email`, `notify_product_updates`, `access_status`); nothing new to run.
+- **Deliberately real-Supabase/real-Resend-only, not click-tested in DEMO_MODE** — `/admin` itself
+  already redirects away entirely in DEMO_MODE (`if (DEMO_MODE) redirect("/")`), same as the rest of
+  this page, so there's no demo path to exercise here at all. Verified instead by extracting the
+  actual `sendProductUpdateEmail()` template logic into a standalone script (stripped only the
+  `"use server"`/`server-only` boundary, none of the template logic itself) and rendering its real
+  output — confirmed byte-for-byte the same copy the user approved in the live preview, not just a
+  read-through.
+- **I did not click "Send"** — this is a real, irreversible, visible-to-everyone action; the button
+  is built and ready, but firing it is the owner's call, not mine to make on their behalf.
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (148, unchanged — no new pure-logic
+module here) all clean. The actual rendered HTML was diffed against the approved preview's content
+(title/bullet text matched; the only difference was literal Unicode em-dash/curly-quote characters
+in the `.ts` source vs. HTML entities in the original mockup, which render identically) and then
+re-rendered from the real shipped function and republished as a second Artifact for a direct
+side-by-side against the originally-approved version. Skipped changelog/Guide — owner-only admin
+tooling, per the standing exclusion.
+
 **2026-08-09 (later — mailed deposits post automatically after N days, not on a manual click)** —
 Direct follow-up to the Send money entry below, same day: after live use, the user pushed back on
 the "credit immediately" checkbox that shipped first, and specifically on the alternative I'd

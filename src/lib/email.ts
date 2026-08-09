@@ -450,3 +450,125 @@ export async function sendFeedbackEmail(
 </div>`;
   return sendEmail(adminEmail, `Bank Tracker feedback from ${fromName || fromEmail || "a user"}`, html);
 }
+
+/* ── Hand-triggered "what's new" digest, broadcast from Admin ──
+   Content is hardcoded per send, same as every other template in this file —
+   there's no CMS. To send a different roundup next time, edit the `items`
+   array below (title + up to two short lines each) and redeploy. */
+const PRODUCT_UPDATE_ITEMS: { title: string; lines: string[] }[] = [
+  {
+    title: "Send money and letters to a bank — no writing by hand",
+    lines: [
+      "Pick a bank and a ready-made letter — deposit enclosed, address change, and more — and the address, holder name, and account number fill themselves in.",
+      "Enclose a check and it prints with a deposit slip carrying its own machine-readable line; it posts to the balance on its own after a few days, or only when you say so.",
+    ],
+  },
+  {
+    title: "Every deposit and withdrawal is now a recorded transaction",
+    lines: [
+      "A real “Add transaction” button on every account — enter the amount and a reason, and it’s logged as a real deposit or withdrawal instead of just a new total typed in.",
+      "Every entry is labeled (deposit, withdrawal, fee, interest, and more), so an account’s history reads as a real record of what happened, not just a series of numbers.",
+    ],
+  },
+  {
+    title: "Track money borrowed from outside your accounts",
+    lines: [
+      "A new section on Money moved for cash borrowed from a person or anywhere outside your tracked accounts — who it’s from, how much, and a “Repaid” check-off once it’s back.",
+      "It doesn’t touch any account balance — it’s purely a reminder of what’s owed and to whom.",
+    ],
+  },
+  {
+    title: "Automatic monthly interest",
+    lines: [
+      "Set an interest rate (APY) on any account — checking, savings, or money market, not just CDs.",
+      "Once set, interest credits itself to the balance every month and logs in that account’s history — nothing to calculate or enter by hand.",
+    ],
+  },
+];
+
+const PRODUCT_UPDATE_SUBJECT = "What's new in Bank Tracker — 4 recent updates";
+
+function productUpdateItemHtml(item: { title: string; lines: string[] }, isLast: boolean): string {
+  const lineRows = item.lines
+    .map(
+      (line, i) => `
+          <tr><td valign="top" style="padding-right:7px;padding-top:1px;color:#cbd5e1;font-size:12px;">&ndash;</td><td style="font-size:12.5px;color:#64748b;line-height:1.55;${i < item.lines.length - 1 ? "padding-bottom:4px;" : ""}">${line}</td></tr>`,
+    )
+    .join("");
+  return `
+<tr><td bgcolor="#ffffff" style="padding:0 48px${isLast ? " 34px" : ""};">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="border-top:1px solid #e2e8f0;padding-top:22px;${isLast ? "" : "padding-bottom:22px;"}">
+    <tr>
+      <td width="10" valign="top" style="padding-top:5px;">
+        <table cellpadding="0" cellspacing="0" role="presentation"><tr><td width="7" height="7" bgcolor="#F59E0B" style="border-radius:2px;font-size:0;line-height:0;">&nbsp;</td></tr></table>
+      </td>
+      <td style="padding-left:12px;">
+        <div style="font-size:14.5px;font-weight:700;color:#0f172a;margin-bottom:6px;line-height:1.4;">${escapeHtml(item.title)}</div>
+        <table cellpadding="0" cellspacing="0" role="presentation">${lineRows}
+        </table>
+      </td>
+    </tr>
+  </table>
+</td></tr>`;
+}
+
+/** The multi-feature "what's new" roundup, broadcast to everyone with
+ *  product-update emails on. Triggered by hand from Admin → Users, never on
+ *  a schedule — see sendProductUpdateBroadcast() in admin/actions.ts for the
+ *  recipient filtering (notify_email, notify_product_updates, approved only). */
+export async function sendProductUpdateEmail(to: string, name: string) {
+  if (!to) return {};
+  const first = name ? name.split(" ")[0] : "";
+  const greeting = first ? `Hi ${escapeHtml(first)},` : "Hi there,";
+  const itemsHtml = PRODUCT_UPDATE_ITEMS.map((item, i) =>
+    productUpdateItemHtml(item, i === PRODUCT_UPDATE_ITEMS.length - 1),
+  ).join("");
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f1f5f9;">
+<tr><td align="center" style="padding:40px 16px;">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:560px;">
+
+<tr><td bgcolor="#0f172a" style="border-radius:16px 16px 0 0;padding:38px 48px 34px;text-align:center;">
+  <table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 auto 22px;">
+    <tr><td width="40" height="8" bgcolor="#F59E0B" style="border-radius:4px;font-size:0;line-height:0;">&nbsp;</td></tr>
+    <tr><td height="5" style="font-size:0;line-height:0;">&nbsp;</td></tr>
+    <tr><td width="22" height="8" bgcolor="#b8c5d6" style="border-radius:4px;font-size:0;line-height:0;">&nbsp;</td></tr>
+    <tr><td height="5" style="font-size:0;line-height:0;">&nbsp;</td></tr>
+    <tr><td width="9" height="8" bgcolor="#5a6a7e" style="border-radius:4px;font-size:0;line-height:0;">&nbsp;</td></tr>
+  </table>
+  <div style="font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.4px;margin-bottom:6px;">Bank Tracker</div>
+  <div style="font-size:10px;font-weight:600;color:#F59E0B;letter-spacing:0.24em;text-transform:uppercase;">What&rsquo;s New</div>
+</td></tr>
+
+<tr><td bgcolor="#ffffff" style="padding:38px 48px 8px;">
+  <p style="margin:0 0 7px;font-size:19px;font-weight:700;color:#0f172a;">${greeting}</p>
+  <p style="margin:0 0 30px;font-size:14px;color:#475569;line-height:1.65;">
+    A quick roundup of what&rsquo;s shipped in Bank Tracker over the last month.
+  </p>
+</td></tr>
+${itemsHtml}
+
+<tr><td bgcolor="#ffffff" style="padding:0 48px 36px;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+    <tr><td align="center">
+      <a href="${APP_URL}/updates" style="display:inline-block;background:#F59E0B;color:#000000;font-size:14px;font-weight:700;text-decoration:none;padding:13px 34px;border-radius:10px;letter-spacing:0.01em;">See everything new &rarr;</a>
+    </td></tr>
+  </table>
+</td></tr>
+
+<tr><td bgcolor="#f8fafc" style="border-radius:0 0 16px 16px;padding:18px 48px;border-top:1px solid #e2e8f0;text-align:center;">
+  <p style="margin:0;font-size:11px;color:#94a3b8;line-height:1.7;">Bank Tracker &middot; <a href="${APP_URL}/settings" style="color:#94a3b8;">Manage notifications</a><br>You&rsquo;re receiving this because product-update emails are on for your account.</p>
+</td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+
+  return sendEmail(to, PRODUCT_UPDATE_SUBJECT, html);
+}
