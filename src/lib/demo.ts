@@ -681,10 +681,13 @@ export function editLastDemoTransaction(
   return newBalance;
 }
 
-/** Mirrors delete_account_transaction (migration 0055): removes any ledger
- *  row (not just the latest), and optionally reverses its effect on the
- *  account's current balance — logging that reversal as its own `correction`
- *  entry, same as the real RPC. Returns null only if the row can't be found. */
+/** Mirrors delete_account_transaction (migration 0055/0056): removes any
+ *  ledger row (not just the latest), and optionally reverses its effect on
+ *  the account's current balance — a plain balance update, with no new
+ *  ledger row logged (a synthetic "reversal" row read confusingly, since a
+ *  reversed deposit renders red like a withdrawal and a reversed withdrawal
+ *  renders green like a deposit — see migration 0056). Returns null only if
+ *  the row can't be found. */
 export function deleteDemoTransaction(transactionId: string, adjustBalance: boolean): number | null {
   const row = store().balanceHistory.find((h) => h.id === transactionId);
   if (!row) return null;
@@ -700,20 +703,6 @@ export function deleteDemoTransaction(transactionId: string, adjustBalance: bool
 
   const newBalance = Math.round(((account.balance ?? 0) - row.change_amount) * 100) / 100;
   updateDemoAccount(row.account_id, { balance: newBalance });
-  store().balanceHistory = [
-    ...store().balanceHistory,
-    {
-      id: crypto.randomUUID(),
-      account_id: row.account_id,
-      user_id: DEMO_USER.id,
-      as_of_date: new Date().toISOString().slice(0, 10),
-      balance: newBalance,
-      change_amount: Math.round(-row.change_amount * 100) / 100,
-      reason: `Removed transaction: ${row.reason ?? "no reason given"}`,
-      type: "correction",
-      created_at: new Date().toISOString(),
-    },
-  ];
   return newBalance;
 }
 export function permanentlyDeleteDemoAccount(id: string): void {

@@ -217,6 +217,32 @@ temporary `.env.local` (none existed in this fresh environment) and removed befo
 Changelog entry added for the delete capability (genuinely new); the deposit-default fix is a bug fix,
 skipped per the standing features-only policy.
 
+**Same-day follow-up — the reversal entry itself was the bug.** Live user report right after 0055
+shipped: "when I delete it... it makes it into a withdrawal... it makes it a deposit... it doesn't
+undo it." Root cause: the reversal row I inserted on `p_adjust_balance = true` had the OPPOSITE sign
+of the deleted row by design (that's how a reversal works) — but visually, a deposit's reversal
+(negative `change_amount`) renders red with a "−", identical to an ordinary withdrawal, and a
+withdrawal's reversal renders green "+", identical to an ordinary deposit. The balance math was
+correct the whole time; the row I added to log it read exactly like "deleting a deposit turned it into
+a withdrawal," which is what was reported. **Fixed by removing the reversal row entirely** — migration
+**0056_delete_transaction_no_reversal_log.sql** (`confirmed run 2026-08-11`) replaces
+`delete_account_transaction` so `p_adjust_balance = true` now only updates `accounts.balance` directly;
+no new `account_balance_history` row is written. `deleteDemoTransaction` (`lib/demo.ts`) updated to
+match. Nothing in `BalanceHistoryBox.tsx` needed to change — its confirm-dialog copy ("correct the
+balance") was already accurate either way. **Standing lesson**: an "audit trail" entry for a delete-
+reversal needs to visually read as a correction, not reuse the same +/− deposit/withdrawal color
+convention as a real transaction — or, simpler and what shipped here, don't log one at all when the
+event is "this never should have existed," as opposed to "here's what actually happened" (which is
+what the `correction` type exists for elsewhere, e.g. the Balance field edit).
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (148, unchanged) all clean. Live DEMO_MODE
+CDP pass confirmed deleting-with-adjust now leaves **zero** rows behind (not a same-count swap) for
+both a deposit and a withdrawal, and the account's live balance reflects the reversal. One real test-
+harness trap hit while chasing this, not an app bug: firing the delete click too soon (~1.4s) after the
+preceding Add's own `router.refresh()` intermittently made the delete's server-action promise never
+resolve in Next dev mode — increasing the buffer to ~3.5s made it resolve reliably every time; a real
+user's natural click pacing (reading two `window.confirm()` prompts) is well past that.
+
 **2026-08-09 (later still — owner-triggered "what's new" digest email, hand-approved copy)** — User
 wanted a product-update email about the Send money feature, iterated on it via a live HTML preview
 (rendered as an Artifact — an iframe against a `data:` URI so the actual email markup, table layout

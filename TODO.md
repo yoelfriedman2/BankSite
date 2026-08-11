@@ -24,12 +24,17 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
 
 ## One-time setup pending
 
-- ~~Run migration `0055_delete_account_transaction.sql`~~ — **confirmed run 2026-08-11.** New
-  `delete_account_transaction(p_transaction_id, p_adjust_balance)` function, letting a user delete ANY
-  row from an account's balance history (not just the single most-recent one
-  `edit_last_account_transaction` is restricted to). `p_adjust_balance` controls whether the account's
-  current balance is also corrected to undo that row's dollar effect (logged as a new `correction`-type
-  reversal entry) or left as-is.
+- **Run migration `0056_delete_transaction_no_reversal_log.sql`** — replaces `delete_account_transaction`
+  (0055) so adjusting the balance on delete no longer logs a new "Removed transaction" row. That row
+  read confusingly: reversing a deposit inserted a red "−" row and reversing a withdrawal inserted a
+  green "+" row, which looked like "deleting a deposit turned it into a withdrawal" rather than "it's
+  gone." Now it just corrects `accounts.balance` directly, no new row. SQL given directly in chat when
+  this was built (2026-08-11) — see the migration file for the exact text.
+
+- ~~Run migration `0055_delete_account_transaction.sql`~~ — **confirmed run 2026-08-11**, superseded
+  same-day by 0056 above. New `delete_account_transaction(p_transaction_id, p_adjust_balance)` function,
+  letting a user delete ANY row from an account's balance history (not just the single most-recent one
+  `edit_last_account_transaction` is restricted to).
 
 - ~~Run migration `0054_mailed_deposits.sql`~~ — **confirmed run 2026-08-09.** New private per-user
   table (`mailed_deposits`) tracking a check enclosed through Send money as "waiting to post" instead
