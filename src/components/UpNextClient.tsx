@@ -40,7 +40,7 @@ function ContactLinks({ bank }: { bank: QueueBank }) {
           href={withScheme(bank.website)}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-700 hover:underline"
+          className="flex shrink-0 items-center gap-1 text-xs font-medium text-teal-700 hover:underline"
         >
           <Globe className="h-3.5 w-3.5" />
           Site
@@ -108,7 +108,7 @@ export function UpNextClient({ data }: { data: UpNextData }) {
                   <Link
                     href={`/banks?cert=${bank.cert}`}
                     title="Open bank details"
-                    className="shrink-0 text-slate-400 hover:text-amber-600"
+                    className="shrink-0 text-slate-400 hover:text-teal-600"
                   >
                     <ExternalLink className="h-4 w-4" />
                   </Link>
@@ -173,7 +173,7 @@ export function UpNextClient({ data }: { data: UpNextData }) {
                   <Link
                     href={`/banks?cert=${bank.cert}`}
                     title="Open bank details"
-                    className="shrink-0 text-slate-400 hover:text-amber-600"
+                    className="shrink-0 text-slate-400 hover:text-teal-600"
                   >
                     <ExternalLink className="h-4 w-4" />
                   </Link>
@@ -223,7 +223,7 @@ export function UpNextClient({ data }: { data: UpNextData }) {
                     <Link
                       href={`/banks?cert=${bank.cert}`}
                       title="Open bank details"
-                      className="shrink-0 text-slate-400 hover:text-amber-600"
+                      className="shrink-0 text-slate-400 hover:text-teal-600"
                     >
                       <ExternalLink className="h-4 w-4" />
                     </Link>
@@ -232,7 +232,7 @@ export function UpNextClient({ data }: { data: UpNextData }) {
                     type="button"
                     disabled={pending === bank.id}
                     onClick={() => run(bank.id, () => addToQueue(bank.id))}
-                    className="flex shrink-0 items-center gap-1 rounded-lg bg-amber-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
+                    className="flex shrink-0 items-center gap-1 rounded-lg bg-teal-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Queue
@@ -244,7 +244,7 @@ export function UpNextClient({ data }: { data: UpNextData }) {
               <div className="border-t border-slate-100 px-5 py-3 text-center">
                 <Link
                   href="/up-next?all=1"
-                  className="text-sm font-medium text-amber-700 hover:underline"
+                  className="text-sm font-medium text-teal-700 hover:underline"
                 >
                   Show all {data.suggestedTotal} banks
                 </Link>

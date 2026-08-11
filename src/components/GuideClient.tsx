@@ -506,11 +506,11 @@ export function GuideClient() {
               onClick={() => select(t.id)}
               className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${
                 on
-                  ? "border-amber-500 bg-amber-50 text-amber-800"
+                  ? "border-teal-500 bg-teal-50 text-teal-800"
                   : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
               }`}
             >
-              <TI className={`h-4 w-4 shrink-0 ${on ? "text-amber-600" : "text-slate-400"}`} />
+              <TI className={`h-4 w-4 shrink-0 ${on ? "text-teal-600" : "text-slate-400"}`} />
               <span className="truncate">{t.title}</span>
             </button>
           );
@@ -549,7 +549,7 @@ export function GuideClient() {
             <button
               type="button"
               onClick={() => setShowTips((v) => !v)}
-              className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 hover:text-amber-800"
+              className="flex items-center gap-1.5 text-xs font-semibold text-teal-700 hover:text-teal-800"
             >
               <Lightbulb className="h-3.5 w-3.5" />
               Good to know

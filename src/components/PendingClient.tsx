@@ -82,7 +82,7 @@ export function PendingClient({
             type="button"
             onClick={handleRequest}
             disabled={pending}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-800 disabled:opacity-60"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-800 disabled:opacity-60"
           >
             {pending && <Loader2 className="h-4 w-4 animate-spin" />}
             Request access
@@ -95,7 +95,7 @@ export function PendingClient({
 
         <div className="mt-6 flex items-center justify-center gap-4 text-xs text-slate-600">
           {!denied && requested && (
-            <a href="/" className="font-medium text-amber-700 hover:text-amber-800">
+            <a href="/" className="font-medium text-teal-700 hover:text-teal-800">
               I&apos;ve been approved →
             </a>
           )}

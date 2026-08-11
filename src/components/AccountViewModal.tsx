@@ -373,7 +373,7 @@ export function AccountViewModal({
               this sheet. On the Accounts page it's the whole point of the link. */}
           <Link
             href={bankCert != null ? `/banks?cert=${bankCert}` : "/banks"}
-            className={`flex items-center gap-1.5 text-sm font-medium text-amber-700 hover:text-amber-800${
+            className={`flex items-center gap-1.5 text-sm font-medium text-teal-700 hover:text-teal-800${
               docked === "drawer" ? " xl:hidden" : ""
             }`}
           >
@@ -385,7 +385,7 @@ export function AccountViewModal({
             <button
               type="button"
               onClick={onEdit}
-              className="flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
+              className="flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800"
             >
               <Pencil className="h-4 w-4" />
               Edit

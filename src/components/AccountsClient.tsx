@@ -142,7 +142,7 @@ function FilterMenu({
         }}
         title={`Filter by ${label}`}
         aria-label={`Filter by ${label}`}
-        className={`rounded p-0.5 ${active ? "text-amber-600" : "text-slate-300 hover:text-slate-500"}`}
+        className={`rounded p-0.5 ${active ? "text-teal-600" : "text-slate-300 hover:text-slate-500"}`}
       >
         <FilterIcon className="h-3.5 w-3.5" />
       </button>
@@ -181,7 +181,7 @@ function TypeFilterOptions({
           type="button"
           onClick={() => onChange(o.key)}
           className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50 ${
-            value === o.key ? "font-semibold text-amber-700" : "text-slate-700"
+            value === o.key ? "font-semibold text-teal-700" : "text-slate-700"
           }`}
         >
           {o.label}
@@ -206,7 +206,7 @@ function HolderFilterOptions({
         type="button"
         onClick={() => onChange("all")}
         className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50 ${
-          value === "all" ? "font-semibold text-amber-700" : "text-slate-700"
+          value === "all" ? "font-semibold text-teal-700" : "text-slate-700"
         }`}
       >
         All holders
@@ -217,7 +217,7 @@ function HolderFilterOptions({
           type="button"
           onClick={() => onChange(h)}
           className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50 ${
-            value === h ? "font-semibold text-amber-700" : "text-slate-700"
+            value === h ? "font-semibold text-teal-700" : "text-slate-700"
           }`}
         >
           {h}
@@ -713,7 +713,7 @@ export function AccountsClient({
           onClick={() => setMobileFiltersOpen(true)}
           className={`flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium md:hidden ${
             activeFilterCount > 0
-              ? "border-amber-300 bg-amber-50 text-amber-800"
+              ? "border-teal-300 bg-teal-50 text-teal-800"
               : "border-slate-300 text-slate-700"
           }`}
         >
@@ -759,7 +759,7 @@ export function AccountsClient({
                       setSortDir(DEFAULT_DIR[k]);
                     }}
                     aria-label="Sort accounts by"
-                    className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500"
+                    className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-teal-500"
                   >
                     {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
                       <option key={k} value={k}>
@@ -781,7 +781,7 @@ export function AccountsClient({
             <button
               type="button"
               onClick={() => setMobileFiltersOpen(false)}
-              className="mt-5 w-full rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
+              className="mt-5 w-full rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800"
             >
               Show {filtered.length} {filtered.length === 1 ? "account" : "accounts"}
             </button>
@@ -934,7 +934,7 @@ export function AccountsClient({
                     data-account-row
                     onClick={() => openAccountView(r)}
                     className={`cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50/70 ${
-                      viewing?.id === r.id || editing?.id === r.id ? "bg-amber-50/60" : ""
+                      viewing?.id === r.id || editing?.id === r.id ? "bg-teal-50/60" : ""
                     }`}
                   >
                     <td className="px-4 py-3">

@@ -36,7 +36,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
     const ring =
       focusRing === "blue"
         ? "focus:border-blue-400 focus:outline-none"
-        : "focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-100";
+        : "focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-100";
     return (
       <div className={`relative ${wrapperClassName}`}>
         {showIcon && (

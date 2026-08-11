@@ -25,7 +25,7 @@ import { useFocusTrap } from "@/lib/useFocusTrap";
 import type { DockLane } from "@/components/AccountViewModal";
 
 const inputClass =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
+  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100";
 const labelClass = "mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500";
 
 /** Lane offsets, matching `AccountViewModal` — the view sheet and this editor
@@ -506,7 +506,7 @@ export function AccountModal({
                       <button
                         type="button"
                         onClick={() => set("routing_number", "")}
-                        className={`whitespace-nowrap font-medium text-amber-700 underline underline-offset-2 hover:text-amber-800 ${hintCls}`}
+                        className={`whitespace-nowrap font-medium text-teal-700 underline underline-offset-2 hover:text-teal-800 ${hintCls}`}
                       >
                         reset
                       </button>
@@ -517,7 +517,7 @@ export function AccountModal({
                         onClick={handleShareRouting}
                         disabled={isSharingRouting}
                         title="Save this as the bank's routing number, visible to everyone tracking it"
-                        className={`whitespace-nowrap font-medium text-amber-700 underline underline-offset-2 hover:text-amber-800 disabled:opacity-60 ${hintCls}`}
+                        className={`whitespace-nowrap font-medium text-teal-700 underline underline-offset-2 hover:text-teal-800 disabled:opacity-60 ${hintCls}`}
                       >
                         {isSharingRouting ? "sharing…" : "share ↑"}
                       </button>
@@ -568,7 +568,7 @@ export function AccountModal({
                     type="checkbox"
                     checked={values.exclude_min_balance}
                     onChange={(e) => set("exclude_min_balance", e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 accent-amber-600"
+                    className="h-4 w-4 rounded border-slate-300 accent-teal-600"
                   />
                   <span className="text-xs text-slate-500">
                     Don&apos;t flag this account for the minimum-balance alert
@@ -749,7 +749,7 @@ export function AccountModal({
                   type="checkbox"
                   checked={onlineAccessOpen}
                   onChange={(e) => setOnlineAccessOpen(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 accent-amber-600"
+                  className="h-4 w-4 rounded border-slate-300 accent-teal-600"
                 />
                 <span className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
                   Online access
@@ -882,13 +882,13 @@ export function AccountModal({
                   <DateInput
                     value={newDate}
                     onChange={setNewDate}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
                   />
                 </div>
                 <select
                   value={newType}
                   onChange={(e) => setNewType(e.target.value as ActivityType | "")}
-                  className="w-32 shrink-0 rounded-lg border border-slate-300 px-2 py-2 text-sm text-slate-700 outline-none focus:border-amber-500"
+                  className="w-32 shrink-0 rounded-lg border border-slate-300 px-2 py-2 text-sm text-slate-700 outline-none focus:border-teal-500"
                   title="Type (optional)"
                 >
                   <option value="">Type (optional)</option>
@@ -899,7 +899,7 @@ export function AccountModal({
                   ))}
                 </select>
                 <input
-                  className="min-w-[7rem] flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                  className="min-w-[7rem] flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
                   placeholder="note (optional)"
                   value={newNote}
                   onChange={(e) => setNewNote(e.target.value)}
@@ -907,7 +907,7 @@ export function AccountModal({
                 <button
                   type="button"
                   onClick={addEntry}
-                  className="shrink-0 rounded-lg bg-amber-700 px-3 py-2 text-sm font-medium text-white hover:bg-amber-800"
+                  className="shrink-0 rounded-lg bg-teal-700 px-3 py-2 text-sm font-medium text-white hover:bg-teal-800"
                 >
                   Add
                 </button>
@@ -944,7 +944,7 @@ export function AccountModal({
           <button
             type="submit"
             disabled={isPending}
-            className="flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-60"
+            className="flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60"
           >
             {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
             {initial ? "Save account" : "Add account"}

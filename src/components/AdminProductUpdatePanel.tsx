@@ -136,7 +136,7 @@ export function AdminProductUpdatePanel() {
           type="button"
           onClick={handleSendAll}
           disabled={sendingAll || loading || count === 0}
-          className="flex items-center gap-2 rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
+          className="flex items-center gap-2 rounded-lg bg-teal-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
         >
           {sendingAll && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           {loading ? "Send to everyone" : `Send to ${count ?? 0} ${count === 1 ? "person" : "people"}`}

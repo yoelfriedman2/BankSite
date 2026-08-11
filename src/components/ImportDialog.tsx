@@ -707,12 +707,12 @@ export function ImportDialog({
               <button
                 type="button"
                 onClick={() => downloadImportTemplate()}
-                className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-amber-700 hover:underline"
+                className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-teal-700 hover:underline"
               >
                 <Download className="h-4 w-4" />
                 Download a template
               </button>
-              <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 px-4 py-8 text-center hover:border-amber-400 hover:bg-amber-50/40">
+              <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 px-4 py-8 text-center hover:border-teal-400 hover:bg-teal-50/40">
                 <UploadCloud className="h-7 w-7 text-slate-400" />
                 <span className="text-sm font-medium text-slate-700">Choose a file</span>
                 <span className="text-xs text-slate-600">.xlsx, .xls or .csv</span>
@@ -785,7 +785,7 @@ export function ImportDialog({
                             <select
                               value={entry.selectedId}
                               onChange={(e) => updateMatch(idx, e.target.value)}
-                              className="min-w-0 flex-1 truncate rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-amber-500"
+                              className="min-w-0 flex-1 truncate rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-teal-500"
                             >
                               <option value={CREATE_NEW}>+ Create new bank</option>
                               <optgroup label="Existing banks">
@@ -873,7 +873,7 @@ export function ImportDialog({
                                         [i]: e.target.value as "skip" | "update" | "add_new",
                                       }))
                                     }
-                                    className="mt-1.5 w-full rounded-md border border-amber-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-amber-500"
+                                    className="mt-1.5 w-full rounded-md border border-amber-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-teal-500"
                                   >
                                     <option value="skip">Skip — it&apos;s the same account, leave it as-is</option>
                                     <option value="update">Update the existing account with this file&apos;s values</option>
@@ -966,7 +966,7 @@ export function ImportDialog({
                 type="button"
                 onClick={handleImport}
                 disabled={isPending}
-                className="flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-60"
+                className="flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60"
               >
                 {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Import {review.length} bank{review.length === 1 ? "" : "s"}

@@ -220,7 +220,7 @@ export function AdminUsersClient({
                         value={u.access_status}
                         disabled={accessBusyId === u.id}
                         onChange={(e) => changeAccess(u, e.target.value as AccessStatus)}
-                        className={`rounded-md border border-slate-200 px-2 py-1 text-xs font-medium capitalize outline-none focus:border-amber-400 disabled:opacity-50 ${ACCESS_BADGE[u.access_status]}`}
+                        className={`rounded-md border border-slate-200 px-2 py-1 text-xs font-medium capitalize outline-none focus:border-teal-400 disabled:opacity-50 ${ACCESS_BADGE[u.access_status]}`}
                         title="Change this user's access"
                       >
                         <option value="approved">Approved</option>
@@ -236,7 +236,7 @@ export function AdminUsersClient({
                         checked={u.is_fdic_admin}
                         disabled={roleBusyId === u.id}
                         onChange={() => toggleFdicAdmin(u)}
-                        className="h-4 w-4 rounded border-slate-300 accent-amber-600 disabled:opacity-50"
+                        className="h-4 w-4 rounded border-slate-300 accent-teal-600 disabled:opacity-50"
                       />
                     </label>
                   </td>

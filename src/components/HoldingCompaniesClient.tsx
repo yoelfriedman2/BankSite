@@ -58,7 +58,7 @@ function StepDots({ current }: { current: Step }) {
         <div
           key={s}
           className={`h-1.5 flex-1 rounded-full ${
-            i <= idx ? "bg-amber-500" : "bg-slate-200"
+            i <= idx ? "bg-teal-500" : "bg-slate-200"
           }`}
         />
       ))}
@@ -103,7 +103,7 @@ function FileUploadStep({
         href={href}
         target="_blank"
         rel="noreferrer"
-        className="mb-5 inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100"
+        className="mb-5 inline-flex items-center gap-1.5 rounded-lg border border-teal-300 bg-teal-50 px-3 py-2 text-sm font-medium text-teal-800 hover:bg-teal-100"
       >
         Open the download page <ExternalLink className="h-3.5 w-3.5" />
       </a>
@@ -121,7 +121,7 @@ function FileUploadStep({
           if (f) onFile(f);
         }}
         className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors ${
-          dragOver ? "border-amber-400 bg-amber-50" : "border-slate-300 bg-slate-50 hover:bg-slate-100"
+          dragOver ? "border-teal-400 bg-teal-50" : "border-slate-300 bg-slate-50 hover:bg-slate-100"
         }`}
       >
         {busy ? (
@@ -510,7 +510,7 @@ export function HoldingCompaniesClient({
           <button
             type="button"
             onClick={enterWizard}
-            className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-medium text-white hover:bg-amber-800"
+            className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800"
           >
             <RefreshCw className="h-4 w-4" />
             Run sync
@@ -674,7 +674,7 @@ export function HoldingCompaniesClient({
               type="button"
               onClick={start}
               disabled={loadingCrosswalk}
-              className="inline-flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-medium text-white hover:bg-amber-800 disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800 disabled:opacity-60"
             >
               {loadingCrosswalk ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
               Get started
@@ -805,7 +805,7 @@ export function HoldingCompaniesClient({
                   type="checkbox"
                   checked={selected.has(g.parentRssd)}
                   onChange={() => toggle(g.parentRssd)}
-                  className="mt-1 h-4 w-4 rounded border-slate-300 text-amber-500 focus:ring-amber-400"
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-teal-500 focus:ring-teal-400"
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -877,7 +877,7 @@ export function HoldingCompaniesClient({
                 type="button"
                 onClick={apply}
                 disabled={applying || (selected.size === 0 && selectedUnlinks.size === 0)}
-                className="inline-flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-medium text-white hover:bg-amber-800 disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800 disabled:opacity-60"
               >
                 {applying && <Loader2 className="h-4 w-4 animate-spin" />}
                 Apply {selected.size + selectedUnlinks.size}{" "}

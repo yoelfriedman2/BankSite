@@ -19,6 +19,7 @@ export default async function AppLayout({
   let vaultEnabled = false;
   let vaultSalt: string | null = null;
   let vaultCheck: string | null = null;
+  let tourSeenVersion: string | null = null;
 
   if (DEMO_MODE) {
     const p = getDemoProfile();
@@ -49,7 +50,7 @@ export default async function AppLayout({
     // than rejecting, so Promise.all is safe here and preserves the exact
     // same independent-degradation behavior, just concurrently instead of
     // sequentially.
-    const [{ data: profile }, { data: acc, error: accErr }, { data: vault }] = await Promise.all([
+    const [{ data: profile }, { data: acc, error: accErr }, { data: vault }, { data: tour }] = await Promise.all([
       supabase.from("profiles").select("display_name, onboarded").eq("id", user.id).maybeSingle(),
       // Access gate (migration 0036). Fails CLOSED: any query error, missing
       // profile row, or non-"approved" status blocks a non-owner user — send
@@ -65,7 +66,13 @@ export default async function AppLayout({
       // must not break the other two fields above, same reasoning as the
       // access gate. vaultEnabled just stays false, its own safe default.
       supabase.from("profiles").select("vault_encryption_enabled, vault_salt, vault_check").eq("id", user.id).maybeSingle(),
+      // Walkthrough "seen" flag (migration 0057) — same isolation reasoning
+      // again. A missing column just leaves tourSeenVersion null, which
+      // WalkthroughModal treats identically to "never fetched at all" and
+      // falls back to its pre-existing localStorage-only check.
+      supabase.from("profiles").select("walkthrough_tour_seen").eq("id", user.id).maybeSingle(),
     ]);
+    tourSeenVersion = (tour?.walkthrough_tour_seen as string | null) ?? null;
 
     if (!isOwner && (accErr || !acc || acc.access_status !== "approved")) {
       redirect("/pending");
@@ -101,7 +108,7 @@ export default async function AppLayout({
     <VaultKeyProvider enabled={vaultEnabled} salt={vaultSalt} check={vaultCheck}>
       <div className="flex min-h-screen bg-slate-50">
         <IdleTimeout enabled={!DEMO_MODE} />
-        <WalkthroughModal isDemo={DEMO_MODE} userId={userId} />
+        <WalkthroughModal isDemo={DEMO_MODE} userId={userId} tourSeenVersion={tourSeenVersion} />
         <SideNav displayName={displayName} isOwner={isOwner} userId={userId} />
         <div className="flex min-w-0 flex-1 flex-col">
           <TopNav displayName={displayName} isOwner={isOwner} userId={userId} />

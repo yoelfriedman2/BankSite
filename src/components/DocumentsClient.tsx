@@ -100,7 +100,7 @@ export function DocumentsClient({ documents }: { documents: AccountDocumentWithC
                   <button
                     type="button"
                     onClick={() => handleView(doc)}
-                    className="text-slate-400 hover:text-amber-600"
+                    className="text-slate-400 hover:text-teal-600"
                     title="View"
                   >
                     <Eye className="h-4 w-4" />

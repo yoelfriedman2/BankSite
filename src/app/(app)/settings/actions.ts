@@ -146,7 +146,10 @@ const FEEDBACK_COOLDOWN_MS = 2 * 60 * 1000;
  *  own email cooldown. Fails open (never blocks sending) if migration 0039
  *  hasn't added profiles.last_feedback_at yet: a select on a missing column
  *  just leaves that field undefined, same as "never sent before". */
-export async function sendFeedback(message: string): Promise<{ error?: string; skipped?: boolean }> {
+export async function sendFeedback(
+  message: string,
+  kind: "bug" | "idea" | "general" = "general",
+): Promise<{ error?: string; skipped?: boolean }> {
   const text = message.trim();
   if (!text) return { error: "Please enter a message." };
   if (text.length > 4000) return { error: "Message is too long." };
@@ -180,7 +183,7 @@ export async function sendFeedback(message: string): Promise<{ error?: string; s
   // the cooldown just never engages, rather than blocking the email itself.
   await supabase.from("profiles").update({ last_feedback_at: new Date().toISOString() }).eq("id", user.id);
 
-  return sendFeedbackEmail(name, user.email ?? "", text);
+  return sendFeedbackEmail(name, user.email ?? "", text, kind);
 }
 
 /** Revokes every session for the current user across all devices. */

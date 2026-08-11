@@ -17,7 +17,7 @@ import { getMyAccountVaultFields, updateAccountVaultFields, type VaultFieldSet }
 import { useToast } from "@/components/Toast";
 
 const inputClass =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
+  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100";
 
 type Mode = "idle" | "warn" | "setup" | "disable-confirm";
 
@@ -286,7 +286,7 @@ export function VaultEncryptionCard({ enabled }: { enabled: boolean }) {
               type="button"
               onClick={handleEnable}
               disabled={isPending || !pw1 || !pw2}
-              className="flex items-center gap-2 rounded-lg bg-amber-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-60"
+              className="flex items-center gap-2 rounded-lg bg-teal-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60"
             >
               {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Enable encryption
@@ -317,7 +317,7 @@ export function VaultEncryptionCard({ enabled }: { enabled: boolean }) {
                 type="button"
                 onClick={handleUnlock}
                 disabled={isPending || !unlockPw}
-                className="flex shrink-0 items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-60"
+                className="flex shrink-0 items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60"
               >
                 {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Unlock

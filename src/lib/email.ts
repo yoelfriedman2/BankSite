@@ -431,10 +431,17 @@ export async function sendBackupEmail(
 }
 
 /* ── User feedback / "report a problem" sent to the owner ── */
+const FEEDBACK_KIND_LABEL: Record<"bug" | "idea" | "general", string | null> = {
+  bug: "Bug report",
+  idea: "Feature idea",
+  general: null,
+};
+
 export async function sendFeedbackEmail(
   fromName: string,
   fromEmail: string,
   message: string,
+  kind: "bug" | "idea" | "general" = "general",
 ): Promise<{ error?: string; skipped?: boolean }> {
   const adminEmail = process.env.ADMIN_EMAIL;
   if (!adminEmail) {
@@ -443,12 +450,20 @@ export async function sendFeedbackEmail(
   }
   const who = escapeHtml(fromName || fromEmail || "A user");
   const safeEmail = escapeHtml(fromEmail);
+  const label = FEEDBACK_KIND_LABEL[kind];
+  const subject =
+    kind === "bug"
+      ? `Bug report from ${fromName || fromEmail || "a user"}`
+      : kind === "idea"
+        ? `Feature idea from ${fromName || fromEmail || "a user"}`
+        : `Bank Tracker feedback from ${fromName || fromEmail || "a user"}`;
   const html = `
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:#0f172a;">
+  ${label ? `<p style="margin:0 0 8px;display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0f766e;background:#f0fdfa;border-radius:999px;padding:3px 10px;">${label}</p>` : ""}
   <p style="margin:0 0 4px;"><strong>${who}</strong> sent feedback${safeEmail ? ` (<a href="mailto:${safeEmail}">${safeEmail}</a>)` : ""}:</p>
-  <div style="white-space:pre-wrap;border-left:3px solid #F59E0B;padding:10px 14px;margin-top:10px;background:#f8fafc;border-radius:0 8px 8px 0;color:#1e293b;line-height:1.6;">${escapeHtml(message)}</div>
+  <div style="white-space:pre-wrap;border-left:3px solid #0F766E;padding:10px 14px;margin-top:10px;background:#f8fafc;border-radius:0 8px 8px 0;color:#1e293b;line-height:1.6;">${escapeHtml(message)}</div>
 </div>`;
-  return sendEmail(adminEmail, `Bank Tracker feedback from ${fromName || fromEmail || "a user"}`, html);
+  return sendEmail(adminEmail, subject, html);
 }
 
 /* ── Hand-triggered "what's new" digest, broadcast from Admin ──

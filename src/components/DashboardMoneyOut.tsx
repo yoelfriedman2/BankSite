@@ -27,7 +27,7 @@ export function DashboardMoneyOut({ sweeps }: { sweeps: OutstandingSweep[] }) {
           <span className="text-sm font-semibold text-slate-900">{formatCurrency(total)}</span>
           <Link
             href="/money"
-            className="flex items-center gap-1 text-sm font-medium text-amber-700 hover:underline"
+            className="flex items-center gap-1 text-sm font-medium text-teal-700 hover:underline"
           >
             Manage
             <ArrowRight className="h-4 w-4" />

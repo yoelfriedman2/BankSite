@@ -130,7 +130,7 @@ export function GlobalSearch() {
         onFocus={() => setOpen(true)}
         onKeyDown={handleKeyDown}
         placeholder="Search banks & accounts…"
-        className="bg-white focus:border-amber-400"
+        className="bg-white focus:border-teal-400"
       />
       <span className="sr-only" role="status" aria-live="polite">{resultsSummary}</span>
       {open && q.trim().length >= 2 && (
@@ -163,7 +163,7 @@ export function GlobalSearch() {
                         href={`/banks?openId=${encodeURIComponent(b.id)}`}
                         onClick={() => setOpen(false)}
                         onMouseEnter={() => setActiveIndex(idx)}
-                        className={`block truncate px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 ${idx === activeIndex ? "bg-amber-50" : ""}`}
+                        className={`block truncate px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 ${idx === activeIndex ? "bg-teal-50" : ""}`}
                       >
                         {b.name}
                         {b.state ? (
@@ -190,7 +190,7 @@ export function GlobalSearch() {
                         href={`/accounts?openId=${encodeURIComponent(a.id)}`}
                         onClick={() => setOpen(false)}
                         onMouseEnter={() => setActiveIndex(idx)}
-                        className={`block truncate px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 ${idx === activeIndex ? "bg-amber-50" : ""}`}
+                        className={`block truncate px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 ${idx === activeIndex ? "bg-teal-50" : ""}`}
                       >
                         {a.holder || "—"}
                         <span className="text-slate-600"> · {a.bankName}</span>

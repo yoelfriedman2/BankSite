@@ -3,8 +3,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
 import { useFocusTrap } from "@/lib/useFocusTrap";
+import { markWalkthroughSeen } from "@/app/(app)/actions";
 
-const BASE = "bt_tour_v2";
+/** Also the value stored server-side (profiles.walkthrough_tour_seen, see
+ *  migration 0057) — bump this if the tour is redesigned and should show
+ *  once more for everyone, same as it always worked for the localStorage
+ *  key alone before the server-side flag existed. */
+const TOUR_VERSION = "bt_tour_v2";
+const BASE = TOUR_VERSION;
 
 const STEPS = [
   {
@@ -74,9 +80,16 @@ type TipPos = { top: number; left: number; arrowDir: "left" | "up" };
 export function WalkthroughModal({
   isDemo,
   userId,
+  tourSeenVersion,
 }: {
   isDemo: boolean;
   userId: string;
+  /** From the server (profiles.walkthrough_tour_seen) — null if the user
+   *  has never dismissed this version of the tour on ANY device, or if
+   *  migration 0057 hasn't been run yet (in which case this always reads
+   *  null and behavior falls back to the pre-existing localStorage check
+   *  below, exactly as it worked before). */
+  tourSeenVersion?: string | null;
 }) {
   const key = `${BASE}_${userId}`;
   const [step, setStep] = useState(0);
@@ -91,12 +104,17 @@ export function WalkthroughModal({
 
   useEffect(() => {
     if (isDemo || !userId) return;
+    // The server already knows this account has seen this exact tour
+    // version — never show it again here, regardless of what this
+    // particular browser's own localStorage says (a different device, a
+    // cleared cache, etc. all no longer matter once the server says seen).
+    if (tourSeenVersion === TOUR_VERSION) return;
     try {
       if (!localStorage.getItem(key)) setShow(true);
     } catch {
       /* storage blocked */
     }
-  }, [isDemo, key, userId]);
+  }, [isDemo, key, userId, tourSeenVersion]);
 
   const reposition = useCallback(() => {
     const sid = STEPS[step].id;
@@ -168,6 +186,11 @@ export function WalkthroughModal({
       /* storage blocked */
     }
     setShow(false);
+    // Best-effort, fire-and-forget: this is what makes "seen it" survive a
+    // different browser/device. A failure here (migration not run yet, a
+    // network blip) just means the localStorage-only fallback above is all
+    // that's covering this dismissal — never worth blocking the close on.
+    markWalkthroughSeen(TOUR_VERSION).catch(() => {});
   }
 
   // `show` is the "active" signal, not the default (whole-lifetime) one — this
@@ -201,7 +224,7 @@ export function WalkthroughModal({
         overflow: "hidden",
       }}
     >
-      <div style={{ height: 3, background: "#F59E0B" }} />
+      <div style={{ height: 3, background: "#14B8A6" }} />
 
       <div style={{ padding: "13px 15px 11px" }}>
         <div
@@ -216,7 +239,7 @@ export function WalkthroughModal({
             style={{
               fontSize: 10,
               fontWeight: 700,
-              color: "#F59E0B",
+              color: "#14B8A6",
               textTransform: "uppercase",
               letterSpacing: "0.18em",
             }}
@@ -264,6 +287,23 @@ export function WalkthroughModal({
           {cur.desc}
         </div>
 
+        {isLast && (
+          <a
+            href="/guide"
+            onClick={dismiss}
+            style={{
+              display: "inline-block",
+              fontSize: 11.5,
+              fontWeight: 600,
+              color: "#14B8A6",
+              marginBottom: 12,
+              textDecoration: "none",
+            }}
+          >
+            This covers the basics — see the full Guide for everything else →
+          </a>
+        )}
+
         <div
           style={{
             display: "flex",
@@ -281,7 +321,7 @@ export function WalkthroughModal({
                 width: i === step ? 18 : 5,
                 height: 5,
                 borderRadius: 99,
-                background: i === step ? "#F59E0B" : "rgba(255,255,255,0.14)",
+                background: i === step ? "#14B8A6" : "rgba(255,255,255,0.14)",
                 border: "none",
                 cursor: "pointer",
                 padding: 0,
@@ -324,8 +364,8 @@ export function WalkthroughModal({
               style={{
                 fontSize: 12,
                 fontWeight: 700,
-                color: "#000",
-                background: "#F59E0B",
+                color: "#fff",
+                background: "#0F766E",
                 border: "none",
                 borderRadius: 8,
                 padding: "6px 14px",
@@ -343,8 +383,8 @@ export function WalkthroughModal({
                 gap: 3,
                 fontSize: 12,
                 fontWeight: 700,
-                color: "#000",
-                background: "#F59E0B",
+                color: "#fff",
+                background: "#0F766E",
                 border: "none",
                 borderRadius: 8,
                 padding: "6px 14px",
@@ -371,7 +411,7 @@ export function WalkthroughModal({
             width: ringRect.width + 8,
             height: ringRect.height + 8,
             borderRadius: 10,
-            border: "2px solid #F59E0B",
+            border: "2px solid #14B8A6",
             pointerEvents: "none",
             zIndex: 49,
             animation: "tourPulse 1.8s ease-in-out infinite",
@@ -440,8 +480,8 @@ export function WalkthroughModal({
 
       <style>{`
         @keyframes tourPulse {
-          0%,100% { box-shadow: 0 0 0 3px rgba(245,158,11,0.20); }
-          50%      { box-shadow: 0 0 0 7px rgba(245,158,11,0.08), 0 0 20px rgba(245,158,11,0.18); }
+          0%,100% { box-shadow: 0 0 0 3px rgba(20,184,166,0.20); }
+          50%      { box-shadow: 0 0 0 7px rgba(20,184,166,0.08), 0 0 20px rgba(20,184,166,0.18); }
         }
       `}</style>
     </>

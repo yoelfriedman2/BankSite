@@ -145,7 +145,7 @@ export function CalendarClient({ events }: { events: CalEvent[] }) {
                   <div
                     className={`mb-1 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs ${
                       isToday
-                        ? "bg-amber-700 font-semibold text-white"
+                        ? "bg-teal-700 font-semibold text-white"
                         : "text-slate-500"
                     }`}
                   >

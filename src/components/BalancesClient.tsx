@@ -104,7 +104,7 @@ export function BalancesClient({
           <select
             value={holder}
             onChange={(e) => setHolder(e.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500"
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-teal-500"
           >
             <option value="all">All holders</option>
             {holders.map((h) => (
