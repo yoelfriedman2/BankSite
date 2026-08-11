@@ -6,7 +6,7 @@ import { useFocusTrap } from "@/lib/useFocusTrap";
 import { markWalkthroughSeen } from "@/app/(app)/actions";
 
 /** Also the value stored server-side (profiles.walkthrough_tour_seen, see
- *  migration 0055) — bump this if the tour is redesigned and should show
+ *  migration 0057) — bump this if the tour is redesigned and should show
  *  once more for everyone, same as it always worked for the localStorage
  *  key alone before the server-side flag existed. */
 const TOUR_VERSION = "bt_tour_v2";
@@ -86,7 +86,7 @@ export function WalkthroughModal({
   userId: string;
   /** From the server (profiles.walkthrough_tour_seen) — null if the user
    *  has never dismissed this version of the tour on ANY device, or if
-   *  migration 0055 hasn't been run yet (in which case this always reads
+   *  migration 0057 hasn't been run yet (in which case this always reads
    *  null and behavior falls back to the pre-existing localStorage check
    *  below, exactly as it worked before). */
   tourSeenVersion?: string | null;

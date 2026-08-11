@@ -183,7 +183,7 @@ build" (two Artifact mockups iterated live in chat before any code changed).
 - **Walkthrough popping up repeatedly, root-caused and fixed.** `WalkthroughModal.tsx` only ever
   tracked "seen it" in that browser's own `localStorage` — switching devices (the user's reported
   mobile→desktop case), a browser clearing storage, or a private window all "forget" it, since none of
-  those share storage. Migration **`0055_walkthrough_seen.sql`** adds `profiles.walkthrough_tour_seen`
+  those share storage. Migration **`0057_walkthrough_seen.sql`** adds `profiles.walkthrough_tour_seen`
   (nullable text — stores the tour's own version tag, `bt_tour_v2`, not a plain boolean, so a future
   redesign can bump the version and have it show once more for everyone, same as the old localStorage
   key already did). New `markWalkthroughSeen()` (`app/(app)/actions.ts`) stamps it on dismiss;

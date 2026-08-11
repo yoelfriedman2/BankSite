@@ -24,7 +24,7 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
 
 ## One-time setup pending
 
-- **Run migration `0055_walkthrough_seen.sql`** — adds `profiles.walkthrough_tour_seen` (nullable
+- **Run migration `0057_walkthrough_seen.sql`** — adds `profiles.walkthrough_tour_seen` (nullable
   text, additive). Fixes the welcome walkthrough popping back up on a different browser/device: it
   was tracked only in that browser's own `localStorage`, so switching devices (or a browser clearing
   storage) made it reappear even for someone who'd already dismissed it. Now the app also stamps this

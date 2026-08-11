@@ -66,7 +66,7 @@ export default async function AppLayout({
       // must not break the other two fields above, same reasoning as the
       // access gate. vaultEnabled just stays false, its own safe default.
       supabase.from("profiles").select("vault_encryption_enabled, vault_salt, vault_check").eq("id", user.id).maybeSingle(),
-      // Walkthrough "seen" flag (migration 0055) — same isolation reasoning
+      // Walkthrough "seen" flag (migration 0057) — same isolation reasoning
       // again. A missing column just leaves tourSeenVersion null, which
       // WalkthroughModal treats identically to "never fetched at all" and
       // falls back to its pre-existing localStorage-only check.
