@@ -24,14 +24,12 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
 
 ## One-time setup pending
 
-- **Run migration `0055_delete_account_transaction.sql`** — new `delete_account_transaction(p_transaction_id,
-  p_adjust_balance)` function, letting a user delete ANY row from an account's balance history (not just
-  the single most-recent one `edit_last_account_transaction` is restricted to). `p_adjust_balance` controls
-  whether the account's current balance is also corrected to undo that row's dollar effect (logged as a new
-  `correction`-type reversal entry) or left as-is. SQL given directly in chat when this was built
-  (2026-08-11), per the standing rule — see the migration file itself for the exact text. Degrades
-  gracefully until run — the delete button's RPC call errors with a friendly message, same fallback shape
-  as every other migration-gated write in this app.
+- ~~Run migration `0055_delete_account_transaction.sql`~~ — **confirmed run 2026-08-11.** New
+  `delete_account_transaction(p_transaction_id, p_adjust_balance)` function, letting a user delete ANY
+  row from an account's balance history (not just the single most-recent one
+  `edit_last_account_transaction` is restricted to). `p_adjust_balance` controls whether the account's
+  current balance is also corrected to undo that row's dollar effect (logged as a new `correction`-type
+  reversal entry) or left as-is.
 
 - ~~Run migration `0054_mailed_deposits.sql`~~ — **confirmed run 2026-08-09.** New private per-user
   table (`mailed_deposits`) tracking a check enclosed through Send money as "waiting to post" instead
