@@ -970,6 +970,13 @@ export type Database = {
         Args: { p_account_id: string; p_amount: number; p_credited_on: string }
         Returns: number
       }
+      delete_account_transaction: {
+        Args: {
+          p_adjust_balance: boolean
+          p_transaction_id: string
+        }
+        Returns: number
+      }
       edit_last_account_transaction: {
         Args: {
           p_new_amount: number

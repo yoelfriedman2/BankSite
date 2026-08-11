@@ -21,6 +21,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-08-11",
+    title: "Delete any transaction from an account's balance history",
+    items: [
+      "Every entry in an account's Balance history — not just the most recent one — now has its own delete option, no matter how far back it is.",
+      "Deleting asks first whether to also correct the account's current balance to undo that entry's dollar effect, or just remove it from the log and leave the balance as-is — your call each time.",
+    ],
+  },
+  {
     date: "2026-08-09",
     title: "Send money and letters to a bank without writing anything by hand",
     items: [

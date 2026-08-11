@@ -139,6 +139,7 @@ const TOPICS: Topic[] = [
       "Adding the first account flips the bank's status to Open for you automatically.",
       "Account numbers are masked in lists — open the account to see the full number.",
       "The Balance section has an \"Add transaction\" button — enter a deposit or withdrawal amount and it's applied for you, instead of doing the math and retyping the total. Made a typo on the one you just entered? The latest row in Balance history below has its own edit button, so you can fix it in place.",
+      "Every row in Balance history — not just the latest one — has a delete button too. Deleting asks whether to also correct the account's current balance to undo that entry's effect, or just remove it from the log and leave the balance alone.",
       "The Balance field in the editor still works too, for when you just want to correct the number to match what the bank shows online — it's logged as a \"Correction\" in the history rather than a deposit or withdrawal, so it reads differently from an entry you actually logged.",
       "Set a monthly fee's amount and the day of the month it's charged, and it's deducted from the balance on its own from then on — no need to log it by hand. Leave either blank to turn it off.",
       "Click a bank's name on the Accounts list for a clean, read-only view of that account — good for a quick look without any risk of changing something by accident. From there, \"View bank\" jumps to that bank's page, and \"Edit\" opens the full editable form. The pencil icon still opens the editor directly.",

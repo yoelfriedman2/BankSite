@@ -9,6 +9,7 @@ import {
   getDemoBalanceHistory,
   addDemoTransaction,
   editLastDemoTransaction,
+  deleteDemoTransaction,
 } from "@/lib/demo";
 import { friendlyDbError } from "@/lib/friendlyError";
 import { formatCurrency } from "@/lib/format";
@@ -506,6 +507,41 @@ export async function editLastAccountTransaction(
   if (data == null) {
     return { error: "A newer transaction was added — this can no longer be edited." };
   }
+
+  revalidate();
+  return {};
+}
+
+/** Delete any transaction from the ledger — unlike editLastAccountTransaction,
+ *  not restricted to the single most-recent row or to a user-entered type
+ *  (see delete_account_transaction, migration 0055, for why that's safe).
+ *  `adjustBalance` is the caller's own choice (asked via a confirm prompt
+ *  each time it's used): true reverses the deleted row's dollar effect from
+ *  the account's current balance and logs that reversal as a new entry;
+ *  false just removes the log row and leaves the live balance untouched. */
+export async function deleteAccountTransaction(
+  transactionId: string,
+  adjustBalance: boolean,
+): Promise<{ error?: string }> {
+  if (DEMO_MODE) {
+    const result = deleteDemoTransaction(transactionId, adjustBalance);
+    if (result == null) return { error: "That transaction couldn't be found." };
+    revalidate();
+    return {};
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { data, error } = await supabase.rpc("delete_account_transaction", {
+    p_transaction_id: transactionId,
+    p_adjust_balance: adjustBalance,
+  });
+  if (error) return { error: friendlyDbError(error.message) };
+  if (data == null) return { error: "That transaction couldn't be found." };
 
   revalidate();
   return {};

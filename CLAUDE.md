@@ -176,6 +176,47 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-08-11 (fix: "Add transaction" could silently default to Deposit; new: delete any transaction)**
+— Two user reports: (1) the "Add transaction" form pre-selected Deposit by default, so entering an
+amount/reason for a withdrawal without deliberately clicking the "Withdrawal" toggle first silently
+saved it as a deposit — a real bug, not a display issue (`TRANSACTION_TYPE_LABELS`/RPC both correctly
+used whatever direction was passed in; the bug was that a direction could be submitted without ever
+being chosen). Fixed in `TransactionForm` (`src/components/BalanceHistoryBox.tsx`): a fresh "Add" now
+starts with neither button selected (`direction: Direction | null`), Add stays disabled until one is
+explicitly picked, with a small "Choose deposit or withdrawal above" hint while it's unset. Edit
+(fixing the latest row) is unaffected — it still pre-selects the existing row's own sign, which is
+correct there. (2) Wanted to delete any row from Balance history, not just the single most-recent one
+`edit_last_account_transaction` (migration 0051) allows editing — "it doesn't matter how far back I'm
+going." New `delete_account_transaction(p_transaction_id, p_adjust_balance)` (migration **0055**, not
+yet run — see TODO.md) removes any row regardless of type or age (safe unlike editing: nothing else
+reads a history row's stored `balance` as a source of truth — `accounts.balance` is the one live
+number every page trusts — so an older row's own snapshot text going stale after a neighbor is deleted
+is cosmetic, not a desync). `p_adjust_balance` is a caller choice made via two chained
+`window.confirm()`s in `BalanceHistoryBox.tsx`'s new `deleteTx()` (matching this app's established
+plain-`window.confirm` destructive-action pattern): confirm the delete itself, then — only if the row
+actually carried a dollar amount — separately ask whether to also reverse that amount from the
+account's current balance. Reversing logs a new `correction`-type entry ("Removed transaction: …")
+rather than silently editing history, so there's still an audit trail of the correction itself. Every
+row in `TransactionHistoryBox` now has its own delete button (previously only the latest editable row
+had any per-row control at all). Both entry points (`AccountModal`, `AccountViewModal`) get this for
+free — they share the one `useTransactionEntry` hook this lives in.
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (148, unchanged) all clean. A standalone
+script mirroring the delete/reversal math (both `adjustBalance` branches, a withdrawal vs. a deposit
+reversal, the `change_amount == null` no-op case, fractional-cent rounding) confirmed correct before
+trusting the real SQL. Live DEMO_MODE CDP pass: confirmed Add stays disabled with an amount+reason
+entered but no direction chosen, and the hint text shows; confirmed a withdrawal explicitly chosen and
+submitted renders labeled "Withdrawal" (not "Deposit"); confirmed deleting a **non-latest** row (with
+a newer one already added on top of it) actually removes that specific older row and — after
+confirming the balance-adjust prompt — posts a correctly-signed reversal entry (a deleted withdrawal's
+reversal is `+`, not `−`); no 375px overflow; zero console errors. The `window.confirm`-declines-
+adjustment path (delete-only, balance untouched) isn't exercisable through the CDP driver, which
+auto-accepts every JS dialog by design (documented in `scratchpad/cdp.mjs`) — verified instead via the
+standalone math script's explicit `adjustBalance: false` case. `DEMO_MODE` was flipped to `true` via a
+temporary `.env.local` (none existed in this fresh environment) and removed before finishing.
+Changelog entry added for the delete capability (genuinely new); the deposit-default fix is a bug fix,
+skipped per the standing features-only policy.
+
 **2026-08-09 (later still — owner-triggered "what's new" digest email, hand-approved copy)** — User
 wanted a product-update email about the Send money feature, iterated on it via a live HTML preview
 (rendered as an Artifact — an iframe against a `data:` URI so the actual email markup, table layout

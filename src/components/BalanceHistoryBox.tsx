@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Pencil } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { DateInput } from "@/components/DateInput";
 import { Box, BoxHeader } from "@/components/DetailBox";
@@ -11,6 +11,7 @@ import {
   getBalanceHistory,
   recordAccountTransaction,
   editLastAccountTransaction,
+  deleteAccountTransaction,
   type BalancePoint,
 } from "@/app/(app)/money/actions";
 import {
@@ -90,6 +91,35 @@ export function useTransactionEntry(accountId: string | null) {
     return null;
   }
 
+  /** Deletes any row, any age. Confirms the delete itself, then — only if
+   *  the row actually carried a dollar amount — separately asks whether to
+   *  also reverse that amount from the account's current balance, since a
+   *  duplicate/mistaken log entry sometimes never really moved the balance
+   *  and shouldn't be "un-applied" a second time. */
+  async function deleteTx(point: BalancePoint) {
+    const label = TRANSACTION_TYPE_LABELS[point.type] ?? "transaction";
+    const amountText =
+      point.change_amount != null ? ` (${formatCurrency(Math.abs(point.change_amount))})` : "";
+    if (!window.confirm(`Delete this ${label.toLowerCase()}${amountText} from ${formatDate(point.as_of_date)}? This can't be undone.`)) {
+      return;
+    }
+    let adjustBalance = false;
+    if (point.change_amount != null && point.change_amount !== 0) {
+      adjustBalance = window.confirm(
+        `Also adjust the account's current balance to undo this transaction's ${formatCurrency(
+          Math.abs(point.change_amount),
+        )} effect?\n\nOK = remove it from the log AND correct the balance.\nCancel = just remove it from the log, leave the balance as-is.`,
+      );
+    }
+    const res = await deleteAccountTransaction(point.id, adjustBalance);
+    if (res.error) {
+      window.alert(res.error);
+      return;
+    }
+    refresh();
+    router.refresh();
+  }
+
   return {
     history,
     loaded,
@@ -102,6 +132,7 @@ export function useTransactionEntry(accountId: string | null) {
     closeForms,
     submitAdd,
     submitEdit,
+    deleteTx,
   };
 }
 
@@ -187,6 +218,15 @@ export function TransactionHistoryBox({ tx }: { tx: TransactionEntryState }) {
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => tx.deleteTx(p)}
+                aria-label="Delete this transaction"
+                title="Delete this transaction"
+                className="shrink-0 text-slate-400 hover:text-rose-600"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
             </li>
           ))}
         </ul>
@@ -200,7 +240,7 @@ function TransactionForm({
   onCancel,
   onSubmit,
   initialAmount,
-  initialDirection = "deposit",
+  initialDirection,
   initialReason = "",
   initialDate,
 }: {
@@ -209,19 +249,24 @@ function TransactionForm({
   /** Returns an error message, or null on success. */
   onSubmit: (amount: number, direction: Direction, reason: string, date: string) => Promise<string | null>;
   initialAmount?: number;
+  /** Omit for a fresh "Add" — neither Deposit nor Withdrawal is pre-selected
+   *  then, so it can't be silently submitted as a deposit by someone who
+   *  typed an amount/reason without noticing they never picked a direction.
+   *  Always passed for "Edit", where the existing row's own sign is the
+   *  correct starting point. */
   initialDirection?: Direction;
   initialReason?: string;
   initialDate?: string;
 }) {
   const [amount, setAmount] = useState(initialAmount != null ? String(initialAmount) : "");
-  const [direction, setDirection] = useState<Direction>(initialDirection);
+  const [direction, setDirection] = useState<Direction | null>(initialDirection ?? null);
   const [reason, setReason] = useState(initialReason);
   const [date, setDate] = useState(initialDate || todayLocalStr());
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const parsed = Number(amount);
-  const canSubmit = amount.trim() !== "" && parsed > 0 && !pending;
+  const canSubmit = amount.trim() !== "" && parsed > 0 && direction !== null && !pending;
 
   return (
     <div className="mt-2 space-y-2 rounded-lg border border-emerald-200 bg-white p-2.5">
@@ -249,6 +294,9 @@ function TransactionForm({
           Withdrawal
         </button>
       </div>
+      {direction === null && (
+        <p className="text-xs text-slate-500">Choose deposit or withdrawal above.</p>
+      )}
       {/* flex-wrap, matching the Activity history add-row's own established
        *  pattern in AccountModal — the narrow (28rem) docked bank-drawer lane
        *  doesn't have room for three unwrapped fields side by side, and
@@ -289,6 +337,7 @@ function TransactionForm({
           type="button"
           disabled={!canSubmit}
           onClick={async () => {
+            if (!direction) return;
             setPending(true);
             setError(null);
             const err = await onSubmit(parsed, direction, reason, date);

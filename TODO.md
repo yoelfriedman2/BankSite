@@ -24,6 +24,78 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
 
 ## One-time setup pending
 
+- **Run migration `0055_delete_account_transaction.sql`** — new `delete_account_transaction(p_transaction_id,
+  p_adjust_balance)` function, letting a user delete ANY row from an account's balance history (not just
+  the single most-recent one `edit_last_account_transaction` is restricted to). `p_adjust_balance` controls
+  whether the account's current balance is also corrected to undo that row's dollar effect (logged as a new
+  `correction`-type reversal entry) or left as-is. Paste directly into the Supabase SQL editor:
+
+  ```sql
+  create or replace function public.delete_account_transaction(
+    p_transaction_id uuid,
+    p_adjust_balance boolean
+  )
+  returns numeric
+  language plpgsql
+  security invoker
+  set search_path = ''
+  as $$
+  declare
+    v_account_id uuid;
+    v_change_amount numeric;
+    v_reason text;
+    v_user_id uuid;
+    v_current_balance numeric;
+    v_new_balance numeric;
+  begin
+    select account_id, change_amount, reason, user_id
+      into v_account_id, v_change_amount, v_reason, v_user_id
+      from public.account_balance_history
+      where id = p_transaction_id and user_id = auth.uid();
+
+    if v_account_id is null then
+      return null; -- not found, or not this caller's row
+    end if;
+
+    delete from public.account_balance_history where id = p_transaction_id;
+
+    if not p_adjust_balance or v_change_amount is null then
+      select balance into v_new_balance
+        from public.accounts
+        where id = v_account_id and user_id = auth.uid();
+      return v_new_balance;
+    end if;
+
+    select balance into v_current_balance
+      from public.accounts
+      where id = v_account_id and user_id = auth.uid()
+      for update;
+
+    if v_current_balance is null then
+      return null;
+    end if;
+
+    v_new_balance := round(v_current_balance - v_change_amount, 2);
+
+    update public.accounts set balance = v_new_balance where id = v_account_id;
+
+    insert into public.account_balance_history
+      (user_id, account_id, as_of_date, balance, change_amount, reason, type)
+    values (
+      v_user_id, v_account_id, current_date, v_new_balance, round(-v_change_amount, 2),
+      'Removed transaction: ' || coalesce(v_reason, 'no reason given'), 'correction'
+    );
+
+    return v_new_balance;
+  end;
+  $$;
+
+  grant execute on function public.delete_account_transaction(uuid, boolean) to authenticated;
+  ```
+
+  Degrades gracefully until run — the delete button's RPC call errors with a friendly message, same
+  fallback shape as every other migration-gated write in this app.
+
 - ~~Run migration `0054_mailed_deposits.sql`~~ — **confirmed run 2026-08-09.** New private per-user
   table (`mailed_deposits`) tracking a check enclosed through Send money as "waiting to post" instead
   of crediting the destination account immediately. Adds `post_mailed_deposit()` (the RPC that
