@@ -21,6 +21,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-08-11",
+    title: "Report a bug or request a feature, right from the app",
+    items: [
+      "A small message icon next to the logo (top bar on mobile, sidebar header on desktop) opens a short form — pick Bug or Idea, write what happened or what would help, and send. It goes straight to the owner's inbox.",
+    ],
+  },
+  {
     date: "2026-08-09",
     title: "Send money and letters to a bank without writing anything by hand",
     items: [

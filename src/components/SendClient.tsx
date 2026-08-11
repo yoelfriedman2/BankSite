@@ -70,7 +70,7 @@ export interface SendBank {
 export type SendMode = "letter" | "money";
 
 const inputCls =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
+  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100";
 const labelCls = "mb-1 block text-xs font-medium text-slate-500";
 
 function Section({
@@ -691,12 +691,12 @@ export function SendClient({
                         onClick={() => setDestAccountId(on ? null : a.id)}
                         className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm ${
                           on
-                            ? "border-amber-400 bg-amber-50 text-slate-900"
+                            ? "border-teal-400 bg-teal-50 text-slate-900"
                             : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                         }`}
                       >
                         {on ? (
-                          <Check className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                          <Check className="h-3.5 w-3.5 shrink-0 text-teal-600" />
                         ) : (
                           <CreditCard className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                         )}
@@ -728,7 +728,7 @@ export function SendClient({
                   <button
                     type="button"
                     onClick={() => setBankId(b.id)}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-amber-50"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-teal-50"
                   >
                     <span className="min-w-0 flex-1 truncate text-slate-800">{b.name}</span>
                     <span className="shrink-0 text-xs text-slate-500">
@@ -757,7 +757,7 @@ export function SendClient({
             type="checkbox"
             checked={includeLetter}
             onChange={(e) => setIncludeLetter(e.target.checked)}
-            className="accent-amber-600"
+            className="accent-teal-600"
           />
           Include a letter
         </label>
@@ -775,7 +775,7 @@ export function SendClient({
                     title={t.blurb}
                     className={`rounded-lg border px-2.5 py-2 text-left text-xs font-semibold ${
                       on
-                        ? "border-amber-400 bg-amber-50 text-amber-900"
+                        ? "border-teal-400 bg-teal-50 text-teal-900"
                         : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                     }`}
                   >
@@ -830,7 +830,7 @@ export function SendClient({
                       setEdited(false);
                       setBody(renderBody(templateId));
                     }}
-                    className="flex items-center gap-1 text-[11px] font-semibold text-amber-700 hover:underline"
+                    className="flex items-center gap-1 text-[11px] font-semibold text-teal-700 hover:underline"
                   >
                     <RotateCcw className="h-3 w-3" />
                     Reset to template
@@ -858,7 +858,7 @@ export function SendClient({
             type="checkbox"
             checked={includeCheck}
             onChange={(e) => setIncludeCheck(e.target.checked)}
-            className="accent-amber-600"
+            className="accent-teal-600"
           />
           Print a check with this
         </label>
@@ -920,7 +920,7 @@ export function SendClient({
                   onClick={() => setSourceKind("external")}
                   className={`flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs font-semibold ${
                     sourceKind === "external"
-                      ? "border-amber-400 bg-amber-50 text-amber-900"
+                      ? "border-teal-400 bg-teal-50 text-teal-900"
                       : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                   }`}
                 >
@@ -932,7 +932,7 @@ export function SendClient({
                   onClick={() => setSourceKind("account")}
                   className={`flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs font-semibold ${
                     sourceKind === "account"
-                      ? "border-amber-400 bg-amber-50 text-amber-900"
+                      ? "border-teal-400 bg-teal-50 text-teal-900"
                       : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                   }`}
                 >
@@ -962,7 +962,7 @@ export function SendClient({
                         type="checkbox"
                         checked={deductSource}
                         onChange={(e) => setDeductSource(e.target.checked)}
-                        className="mt-0.5 accent-amber-600"
+                        className="mt-0.5 accent-teal-600"
                       />
                       <span>
                         Take {amount ? formatCurrency(parseFloat(amount) || 0) : "the amount"} out of this
@@ -996,7 +996,7 @@ export function SendClient({
                           <div
                             key={s.id}
                             className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
-                              on ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-white"
+                              on ? "border-teal-400 bg-teal-50" : "border-slate-200 bg-white"
                             }`}
                           >
                             <button
@@ -1120,7 +1120,7 @@ export function SendClient({
                   type="checkbox"
                   checked={includeSlip}
                   onChange={(e) => setIncludeSlip(e.target.checked)}
-                  className="accent-amber-600"
+                  className="accent-teal-600"
                 />
                 Print a deposit ticket too
               </label>
@@ -1148,7 +1148,7 @@ export function SendClient({
                     name="sendcheckmode"
                     checked={printMode === "blank"}
                     onChange={() => setPrintMode("blank")}
-                    className="accent-amber-600"
+                    className="accent-teal-600"
                   />
                   Blank paper
                 </label>
@@ -1158,7 +1158,7 @@ export function SendClient({
                     name="sendcheckmode"
                     checked={printMode === "preprinted"}
                     onChange={() => setPrintMode("preprinted")}
-                    className="accent-amber-600"
+                    className="accent-teal-600"
                   />
                   Pre-printed check stock
                 </label>
@@ -1201,7 +1201,7 @@ export function SendClient({
             <p className="text-xs text-slate-500">
               A mailed check hasn&apos;t actually posted the moment it&apos;s printed, so it&apos;s tracked as
               waiting to post rather than credited right away — either way it shows up on{" "}
-              <Link href="/money" className="font-medium text-amber-700 hover:underline">
+              <Link href="/money" className="font-medium text-teal-700 hover:underline">
                 Money → Waiting to post
               </Link>
               , where you can mark it posted (or cancel it) yourself at any time.
@@ -1213,7 +1213,7 @@ export function SendClient({
                 onClick={() => setAutoPost(true)}
                 className={`rounded-lg border px-3 py-2 text-left text-sm font-semibold ${
                   autoPost
-                    ? "border-amber-400 bg-amber-50 text-amber-900"
+                    ? "border-teal-400 bg-teal-50 text-teal-900"
                     : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                 }`}
               >
@@ -1224,7 +1224,7 @@ export function SendClient({
                 onClick={() => setAutoPost(false)}
                 className={`rounded-lg border px-3 py-2 text-left text-sm font-semibold ${
                   !autoPost
-                    ? "border-amber-400 bg-amber-50 text-amber-900"
+                    ? "border-teal-400 bg-teal-50 text-teal-900"
                     : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                 }`}
               >
@@ -1243,7 +1243,7 @@ export function SendClient({
                     value={postDays}
                     onChange={(e) => setPostDays(e.target.value)}
                     onBlur={() => setPostDays(String(clampPostDays(parseInt(postDays, 10) || defaultDepositPostDays)))}
-                    className="w-14 rounded-l-lg border-0 px-2 py-1.5 text-center text-sm text-slate-900 outline-none focus:ring-2 focus:ring-amber-100"
+                    className="w-14 rounded-l-lg border-0 px-2 py-1.5 text-center text-sm text-slate-900 outline-none focus:ring-2 focus:ring-teal-100"
                   />
                   <div className="flex flex-col border-l border-slate-300">
                     <button
@@ -1280,7 +1280,7 @@ export function SendClient({
                 type="checkbox"
                 checked={logActivity}
                 onChange={(e) => setLogActivity(e.target.checked)}
-                className="mt-0.5 accent-amber-600"
+                className="mt-0.5 accent-teal-600"
               />
               <span>
                 Log activity on the account once it posts
@@ -1294,7 +1294,7 @@ export function SendClient({
               type="checkbox"
               checked={logActivity}
               onChange={(e) => setLogActivity(e.target.checked)}
-              className="mt-0.5 accent-amber-600"
+              className="mt-0.5 accent-teal-600"
               disabled={!destAccountId}
             />
             <span className={destAccountId ? "" : "text-slate-400"}>

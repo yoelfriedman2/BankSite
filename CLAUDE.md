@@ -176,6 +176,77 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-08-11 (walkthrough fixed, feedback button, teal replaces amber as the interactive color)** —
+Three requests from the user in one session, the color change explicitly gated on "show me before you
+build" (two Artifact mockups iterated live in chat before any code changed).
+
+- **Walkthrough popping up repeatedly, root-caused and fixed.** `WalkthroughModal.tsx` only ever
+  tracked "seen it" in that browser's own `localStorage` — switching devices (the user's reported
+  mobile→desktop case), a browser clearing storage, or a private window all "forget" it, since none of
+  those share storage. Migration **`0055_walkthrough_seen.sql`** adds `profiles.walkthrough_tour_seen`
+  (nullable text — stores the tour's own version tag, `bt_tour_v2`, not a plain boolean, so a future
+  redesign can bump the version and have it show once more for everyone, same as the old localStorage
+  key already did). New `markWalkthroughSeen()` (`app/(app)/actions.ts`) stamps it on dismiss;
+  `(app)/layout.tsx` fetches it as its own separate, independently-degrading query (same isolation
+  convention as the other profile fields in that file) and passes it down as `tourSeenVersion`. The
+  component now only falls back to its old localStorage check when the server hasn't confirmed "seen"
+  for this exact version — a match there means never show again, regardless of what any one browser
+  says. Degrades to the pre-existing localStorage-only behavior until the migration runs.
+  **Not built this round**: growing the tour to cover the ~10 pages shipped since it was written (Up
+  next, Send money/letter, Documents, Fees & interest, Address change, FDIC sync, Holding companies,
+  Road trip) — offered as a choice, never answered, so left as-is; the last step now links to `/guide`
+  instead, on the "keep it short, point to the full Guide" default.
+- **`FeedbackButton.tsx`** (new) — a small, plain-gray icon (no label, no color until opened) tucked
+  into the sidebar's header row on desktop and the mobile top bar, next to the logo — explicitly
+  **not** a floating button on every page, after the user pushed back on that first idea and asked to
+  see placement options instead (an Artifact comparing "pinned top-right corner" vs "built into
+  existing chrome"; the latter was picked). Opens a small popover — Bug/Idea toggle, a textarea, a
+  plain "Send" button (the user explicitly didn't want it named after anyone: "not send to you...
+  send to admin or something, or just send") — and reuses `sendFeedback()` (`settings/actions.ts`),
+  the same rate-limited action Settings' own feedback box already called, rather than a new pipe.
+  `sendFeedback`/`sendFeedbackEmail` (`lib/email.ts`) both gained an optional `kind: "bug" | "idea" |
+  "general"` param (default `"general"`, so Settings' existing call is unaffected) that changes the
+  email's subject line and adds a small "Bug report"/"Feature idea" tag to the body. Same click-toggle
+  / outside-pointerdown / capture-phase-Escape pattern as `RoutingInfoTip.tsx`.
+- **The interactive accent color changed from amber-700 to teal-700**, app-wide, after showing a live
+  color-comparison Artifact (5 candidates rendered against a real mock of the sidebar/buttons) — the
+  user picked teal. **Scoped deliberately narrow**: only literal interactive/brand elements — primary
+  buttons, action links, focus rings, checkbox/radio accents, active/selected states (sort-column
+  arrows, selected filter chips, the calendar's "today" cell, a wizard's step-progress dots, a
+  drag-over dropzone, a selected choice-card in Send money/letter) — moved to teal. **Deliberately
+  left amber**: every place amber already carries a *different*, established meaning in this app —
+  dormancy/CD-maturity urgency text, the `transactionType.ts` "correction" badge, `badges.tsx`'s
+  status/priority pills, static warning/notice callout boxes (import errors, MICR-missing checks,
+  migration-needed notices), decorative icon tints in section headers, the Updates/community-note
+  "new" indicators, and — most deliberately — the entire "Only you" private-data wash in
+  `BankForm.tsx`/`DetailBox.tsx`/`AccountModal.tsx`/`AccountViewModal.tsx` (amber = private, emerald =
+  shared, a whole visual language documented at length elsewhere in this file that this round didn't
+  touch at all). The app's logo mark itself (`Logo.tsx`, gold-on-navy) is also untouched — the
+  complaint was specifically about the button color, not the brand mark. **A few button-shaped
+  elements were caught and reverted after an automated first pass over-applied**: a couple of
+  ownership-scheme hover states and one reminder-chip's remove button briefly went teal against a
+  surrounding element that stayed amber — caught by reviewing every changed line against its
+  surrounding context (not just trusting the substitution rules) and reverted to keep each element's
+  colors internally consistent.
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (148, unchanged — no new pure-logic
+module) all clean. Live DEMO_MODE CDP pass (`scratchpad/verify-teal-and-feedback.mjs`, new): confirmed
+a real button's computed background is no longer amber-700's `rgb(180,83,9)`; the feedback trigger
+renders in both the desktop sidebar and mobile top bar (had to pick the genuinely *visible* one of the
+two DOM matches, same "candidates, pick the nonzero-size one" approach `WalkthroughModal` itself
+already uses for its `[data-tour]` lookups); the popover opens, the Bug/Idea toggle works, typing
+enables Send, Escape closes it; zero console errors across every touched page; no 375px overflow on
+Banks or Accounts, with or without the popover open. Desktop and mobile screenshots reviewed directly.
+**Not independently click-tested**: the walkthrough's actual server round-trip — `DEMO_MODE` skips
+showing the tour at all (`isDemo` short-circuits before any of this session's new logic runs), so the
+persistence fix was verified by reading the change against `layout.tsx`'s existing, already-proven
+"separate degrading query per field" pattern rather than a live pass. `DEMO_MODE` was flipped to
+`true` via a temporary `.env.local` (none existed in this fresh environment) and removed before
+finishing. Changelog entry added for the feedback button (genuinely new capability); the walkthrough
+fix and color change are both bug fixes/rebranding with no new capability, so neither got one, per the
+standing features-only policy. No Guide entry — the feedback button's own copy ("Report a bug or
+request a feature") is self-explanatory without a topic page.
+
 **2026-08-09 (later still — owner-triggered "what's new" digest email, hand-approved copy)** — User
 wanted a product-update email about the Send money feature, iterated on it via a live HTML preview
 (rendered as an Artifact — an iframe against a `data:` URI so the actual email markup, table layout

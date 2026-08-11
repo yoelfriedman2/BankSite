@@ -113,7 +113,7 @@ export function AdminBackupsPanel() {
             type="button"
             onClick={backupNow}
             disabled={backingUp}
-            className="flex items-center gap-2 rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg bg-teal-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
           >
             {backingUp && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             Back up now
@@ -167,7 +167,7 @@ export function AdminBackupsPanel() {
                   <button
                     type="button"
                     onClick={() => setRestoreTarget(b)}
-                    className="flex items-center gap-1 rounded-md border border-amber-200 px-2 py-1 font-semibold text-amber-700 hover:bg-amber-50"
+                    className="flex items-center gap-1 rounded-md border border-teal-200 px-2 py-1 font-semibold text-teal-700 hover:bg-teal-50"
                   >
                     <Undo2 className="h-3 w-3" />
                     Restore a user…
@@ -274,7 +274,7 @@ function RestoreModal({ backup, onClose }: { backup: BackupFile; onClose: () => 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={!users || restoring}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 disabled:opacity-50"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 disabled:opacity-50"
               >
                 {!users && <option>Loading…</option>}
                 {users?.length === 0 && <option>No users found in this backup</option>}
@@ -310,7 +310,7 @@ function RestoreModal({ backup, onClose }: { backup: BackupFile; onClose: () => 
                 type="button"
                 onClick={handleRestore}
                 disabled={restoring || !email || !users?.length}
-                className="flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
+                className="flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
               >
                 {restoring && <Loader2 className="h-4 w-4 animate-spin" />}
                 Restore

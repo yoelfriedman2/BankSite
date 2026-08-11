@@ -33,6 +33,7 @@ import { Logo } from "@/components/Logo";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { useChangelogUnread } from "@/components/useChangelogUnread";
 import { useFocusTrap } from "@/lib/useFocusTrap";
+import { FeedbackButton } from "@/components/FeedbackButton";
 
 type NavLink = {
   href: string;
@@ -140,6 +141,8 @@ export function TopNav({
           </button>
           <Logo className="h-8 w-8" />
           <span className="font-semibold text-slate-900">Bank Tracker</span>
+          <span className="flex-1" />
+          <FeedbackButton variant="light" align="right" />
         </div>
         <div className="px-3 pb-2">
           <GlobalSearch />

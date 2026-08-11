@@ -214,7 +214,7 @@ export function RoadTripTrips({
           <button
             type="button"
             onClick={() => handleLoad(suggestion)}
-            className="shrink-0 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+            className="shrink-0 rounded-lg border border-teal-300 bg-white px-2.5 py-1 text-xs font-semibold text-teal-700 hover:bg-teal-100"
           >
             Load it instead
           </button>

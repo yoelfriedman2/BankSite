@@ -15,7 +15,7 @@ import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { useToast } from "@/components/Toast";
 
 const inputClass =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
+  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100";
 
 export function AddressChangeClient({ data }: { data: AddressChangeData }) {
   const router = useRouter();
@@ -82,7 +82,7 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
               setBusy(false);
             });
           }}
-          className="mt-4 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
+          className="mt-4 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
         >
           {busy ? "Starting…" : "Start tracking"}
         </button>
@@ -212,7 +212,7 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
                   href={withScheme(item.website)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-700 hover:underline"
+                  className="flex shrink-0 items-center gap-1 text-xs font-medium text-teal-700 hover:underline"
                 >
                   <Globe className="h-3.5 w-3.5" />
                   Site

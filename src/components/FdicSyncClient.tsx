@@ -174,7 +174,7 @@ export function FdicSyncClient({ canApply }: { canApply: boolean }) {
           type="button"
           onClick={runCheck}
           disabled={checking}
-          className="flex shrink-0 items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-60"
+          className="flex shrink-0 items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60"
         >
           {checking ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           {checking ? "Checking…" : report ? "Check again" : "Check against FDIC"}

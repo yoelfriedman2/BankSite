@@ -807,6 +807,7 @@ export type Database = {
           vault_check: string | null
           vault_encryption_enabled: boolean
           vault_salt: string | null
+          walkthrough_tour_seen: string | null
         }
         Insert: {
           access_requested_at?: string | null
@@ -833,6 +834,7 @@ export type Database = {
           vault_check?: string | null
           vault_encryption_enabled?: boolean
           vault_salt?: string | null
+          walkthrough_tour_seen?: string | null
         }
         Update: {
           access_requested_at?: string | null
@@ -859,6 +861,7 @@ export type Database = {
           vault_check?: string | null
           vault_encryption_enabled?: boolean
           vault_salt?: string | null
+          walkthrough_tour_seen?: string | null
         }
         Relationships: []
       }

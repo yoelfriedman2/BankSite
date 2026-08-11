@@ -56,7 +56,7 @@ function parseToIso(input: string): string | null {
 // field on active financial screens (Money moved, Balance by date, the
 // account activity log's date, and a bank reminder's date).
 const DEFAULT_CLASS =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
+  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100";
 
 export function DateInput({
   id,

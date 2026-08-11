@@ -38,7 +38,7 @@ export function VaultUnlockPrompt({ label = "Unlock to view or edit login detail
           type="password"
           autoComplete="off"
           placeholder="Vault password"
-          className="w-full min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+          className="w-full min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           onKeyDown={(e) => {
@@ -52,7 +52,7 @@ export function VaultUnlockPrompt({ label = "Unlock to view or edit login detail
           type="button"
           onClick={handleUnlock}
           disabled={busy || !password}
-          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-amber-700 px-3 py-2 text-sm font-medium text-white hover:bg-amber-800 disabled:opacity-60"
+          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-teal-700 px-3 py-2 text-sm font-medium text-white hover:bg-teal-800 disabled:opacity-60"
         >
           {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           Unlock

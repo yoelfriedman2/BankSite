@@ -26,7 +26,7 @@ import {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 const inputCls =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
+  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100";
 const labelCls = "mb-1 block text-xs font-medium text-slate-500 uppercase tracking-wide";
 
 export function CheckPrintModal({
@@ -313,11 +313,11 @@ export function CheckPrintModal({
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Print settings</p>
             <div className="flex flex-col gap-2 sm:flex-row sm:gap-5">
               <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input type="radio" name="checkmode" checked={mode === "blank"} onChange={() => setMode("blank")} className="accent-amber-600" />
+                <input type="radio" name="checkmode" checked={mode === "blank"} onChange={() => setMode("blank")} className="accent-teal-600" />
                 Blank paper <span className="text-slate-600">(draw full check)</span>
               </label>
               <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input type="radio" name="checkmode" checked={mode === "preprinted"} onChange={() => setMode("preprinted")} className="accent-amber-600" />
+                <input type="radio" name="checkmode" checked={mode === "preprinted"} onChange={() => setMode("preprinted")} className="accent-teal-600" />
                 Pre-printed check stock
               </label>
             </div>

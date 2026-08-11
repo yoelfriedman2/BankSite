@@ -7,7 +7,7 @@ type Suggestion = { display_name: string; lat?: string; lon?: string };
 export type PickedPlace = { display: string; lat: number; lng: number };
 
 const inputClass =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
+  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100";
 
 let instanceCounter = 0;
 
@@ -136,7 +136,7 @@ export function AddressAutocomplete({
             <li key={i} id={`${listboxId}-${i}`} role="option" aria-selected={i === activeIndex}>
               <button
                 type="button"
-                className={`block w-full truncate px-3 py-2 text-left text-slate-700 hover:bg-amber-50 ${i === activeIndex ? "bg-amber-50" : ""}`}
+                className={`block w-full truncate px-3 py-2 text-left text-slate-700 hover:bg-teal-50 ${i === activeIndex ? "bg-teal-50" : ""}`}
                 onClick={() => pick(s)}
                 onMouseEnter={() => setActiveIndex(i)}
               >

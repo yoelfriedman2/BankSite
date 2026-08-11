@@ -29,7 +29,7 @@ export function BankSetupNotice() {
       <button
         type="button"
         onClick={() => router.refresh()}
-        className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
+        className="rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800"
       >
         Refresh now
       </button>

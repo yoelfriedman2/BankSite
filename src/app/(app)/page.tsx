@@ -56,7 +56,7 @@ function StatCard({
   return (
     <Link
       href={href}
-      className="rounded-2xl border border-slate-200 bg-white p-5 transition-colors hover:border-amber-300 hover:bg-amber-50/30"
+      className="rounded-2xl border border-slate-200 bg-white p-5 transition-colors hover:border-teal-300 hover:bg-teal-50/30"
     >
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-slate-500">{label}</span>
@@ -196,7 +196,7 @@ export default async function DashboardPage() {
           <h2 className="font-semibold text-slate-900">Needs attention</h2>
           <Link
             href="/accounts?attention=1"
-            className="flex items-center gap-1 text-sm font-medium text-amber-700 hover:underline"
+            className="flex items-center gap-1 text-sm font-medium text-teal-700 hover:underline"
           >
             View all
             <ArrowRight className="h-4 w-4" />
@@ -269,7 +269,7 @@ export default async function DashboardPage() {
           <h2 className="font-semibold text-slate-900">Up next</h2>
           <Link
             href="/up-next"
-            className="flex items-center gap-1 text-sm font-medium text-amber-700 hover:underline"
+            className="flex items-center gap-1 text-sm font-medium text-teal-700 hover:underline"
           >
             View all
             <ArrowRight className="h-4 w-4" />

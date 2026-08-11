@@ -29,6 +29,7 @@ import {
 import { Logo } from "@/components/Logo";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { useChangelogUnread } from "@/components/useChangelogUnread";
+import { FeedbackButton } from "@/components/FeedbackButton";
 
 type NavLink = {
   href: string;
@@ -114,6 +115,8 @@ export function SideNav({
           <div className="text-sm font-semibold text-white">Bank Tracker</div>
           <div className="text-[11px] text-slate-500">Mutual conversions</div>
         </div>
+        <span className="flex-1" />
+        <FeedbackButton variant="dark" align="left" />
       </div>
 
       <div className="px-3 pb-3">

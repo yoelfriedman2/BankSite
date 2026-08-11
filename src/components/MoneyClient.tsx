@@ -32,7 +32,7 @@ import {
 } from "@/app/(app)/money/actions";
 
 const inputClass =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100";
+  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100";
 
 const todayStr = todayLocalStr;
 
@@ -172,7 +172,7 @@ export function MoneyClient({
         <h2 className="text-sm font-semibold text-slate-700">Currently moved out</h2>
         <button
           onClick={() => setNewOpen(true)}
-          className="flex items-center gap-2 rounded-lg bg-amber-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-800"
+          className="flex items-center gap-2 rounded-lg bg-teal-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-teal-800"
         >
           <Plus className="h-4 w-4" />
           New money move
@@ -250,7 +250,7 @@ export function MoneyClient({
         <h2 className="text-sm font-semibold text-slate-700">Borrowed money</h2>
         <button
           onClick={() => setNewBorrowedOpen(true)}
-          className="flex items-center gap-2 rounded-lg bg-amber-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-800"
+          className="flex items-center gap-2 rounded-lg bg-teal-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-teal-800"
         >
           <Plus className="h-4 w-4" />
           New borrowed money
@@ -534,7 +534,7 @@ function NewBorrowedModal({
           <button
             onClick={handleSubmit}
             disabled={isPending || !sourceName.trim() || !reason.trim() || !(Number(amount) > 0)}
-            className="flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
           >
             {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
             Add
@@ -676,7 +676,7 @@ function NewMoveModal({
                         min="0"
                         placeholder="amount"
                         aria-label={`Amount to move from ${a.holder ?? ""} ${a.bankName}`}
-                        className="w-28 rounded-lg border border-slate-300 px-2 py-1.5 text-right text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                        className="w-28 rounded-lg border border-slate-300 px-2 py-1.5 text-right text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
                         value={amt}
                         onChange={(e) =>
                           setAmounts((m) => ({ ...m, [a.accountId]: e.target.value }))
@@ -708,7 +708,7 @@ function NewMoveModal({
             <button
               onClick={handleSubmit}
               disabled={isPending || selected.length === 0 || !reason.trim()}
-              className="flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
+              className="flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
             >
               {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               Move money

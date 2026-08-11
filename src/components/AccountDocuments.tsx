@@ -250,7 +250,7 @@ export function AccountDocuments({ accountId }: { accountId: string }) {
               <button
                 type="button"
                 onClick={() => handleView(doc)}
-                className="shrink-0 text-slate-400 hover:text-amber-600"
+                className="shrink-0 text-slate-400 hover:text-teal-600"
                 title="View"
               >
                 <Eye className="h-3.5 w-3.5" />

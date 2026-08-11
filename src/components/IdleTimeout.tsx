@@ -196,7 +196,7 @@ function IdleWarningDialog({
         <button
           type="button"
           onClick={onStaySignedIn}
-          className="mt-4 w-full rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
+          className="mt-4 w-full rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800"
         >
           Stay signed in
         </button>

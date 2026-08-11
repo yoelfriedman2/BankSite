@@ -24,6 +24,14 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
 
 ## One-time setup pending
 
+- **Run migration `0055_walkthrough_seen.sql`** — adds `profiles.walkthrough_tour_seen` (nullable
+  text, additive). Fixes the welcome walkthrough popping back up on a different browser/device: it
+  was tracked only in that browser's own `localStorage`, so switching devices (or a browser clearing
+  storage) made it reappear even for someone who'd already dismissed it. Now the app also stamps this
+  column with the tour's version tag on dismiss, and treats a match there as "never show again,"
+  regardless of what any one browser's `localStorage` says. Degrades gracefully until run — the
+  component just falls back to its old localStorage-only check, same as before this shipped.
+
 - ~~Run migration `0054_mailed_deposits.sql`~~ — **confirmed run 2026-08-09.** New private per-user
   table (`mailed_deposits`) tracking a check enclosed through Send money as "waiting to post" instead
   of crediting the destination account immediately. Adds `post_mailed_deposit()` (the RPC that

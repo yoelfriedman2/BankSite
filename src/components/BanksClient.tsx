@@ -209,7 +209,7 @@ function FilterMenu({
         }}
         title={`Filter by ${label}`}
         aria-label={`Filter by ${label}`}
-        className={`rounded p-0.5 ${active ? "text-amber-600" : "text-slate-300 hover:text-slate-500"}`}
+        className={`rounded p-0.5 ${active ? "text-teal-600" : "text-slate-300 hover:text-slate-500"}`}
       >
         <FilterIcon className="h-3.5 w-3.5" />
       </button>
@@ -248,7 +248,7 @@ function StatusFilterOptions({
           type="button"
           onClick={() => onChange(o.key)}
           className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50 ${
-            value === o.key ? "font-semibold text-amber-700" : "text-slate-700"
+            value === o.key ? "font-semibold text-teal-700" : "text-slate-700"
           }`}
         >
           {o.label}
@@ -273,7 +273,7 @@ function StateFilterOptions({
         type="button"
         onClick={() => onChange("all")}
         className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50 ${
-          value === "all" ? "font-semibold text-amber-700" : "text-slate-700"
+          value === "all" ? "font-semibold text-teal-700" : "text-slate-700"
         }`}
       >
         All states
@@ -284,7 +284,7 @@ function StateFilterOptions({
           type="button"
           onClick={() => onChange(s)}
           className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50 ${
-            value === s ? "font-semibold text-amber-700" : "text-slate-700"
+            value === s ? "font-semibold text-teal-700" : "text-slate-700"
           }`}
         >
           {s}
@@ -319,7 +319,7 @@ function StageFilterOptions({
             type="checkbox"
             checked={value.has(s)}
             onChange={() => toggle(s)}
-            className="h-3.5 w-3.5 rounded border-slate-300 text-amber-500 focus:ring-amber-400"
+            className="h-3.5 w-3.5 rounded border-slate-300 text-teal-500 focus:ring-teal-400"
           />
           {CONVERSION_STAGE_LABELS[s]}
         </label>
@@ -703,7 +703,7 @@ export function BanksClient({
           </button>
           <button
             onClick={openAdd}
-            className="flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
+            className="flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800"
           >
             <Plus className="h-4 w-4" />
             Add bank
@@ -726,7 +726,7 @@ export function BanksClient({
           onClick={() => setMobileFiltersOpen(true)}
           className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium md:hidden ${
             activeFilterCount > 0
-              ? "border-amber-300 bg-amber-50 text-amber-800"
+              ? "border-teal-300 bg-teal-50 text-teal-800"
               : "border-slate-300 text-slate-700"
           }`}
         >
@@ -778,7 +778,7 @@ export function BanksClient({
                       setSortDir(DEFAULT_DIR[k]);
                     }}
                     aria-label="Sort banks by"
-                    className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-amber-500"
+                    className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-teal-500"
                   >
                     {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
                       <option key={k} value={k}>
@@ -800,7 +800,7 @@ export function BanksClient({
             <button
               type="button"
               onClick={() => setMobileFiltersOpen(false)}
-              className="mt-5 w-full rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
+              className="mt-5 w-full rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800"
             >
               Show {filtered.length} {filtered.length === 1 ? "bank" : "banks"}
             </button>
@@ -831,7 +831,7 @@ export function BanksClient({
                     openBank(b);
                   }
                 }}
-                className="flex w-full cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+                className="flex w-full cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400"
               >
                 {health !== "none" ? (
                   <span className="mt-1 shrink-0">
@@ -964,7 +964,7 @@ export function BanksClient({
                     }}
                     tabIndex={0}
                     aria-label={`Manage ${b.name}`}
-                    className="cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400"
+                    className="cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-400"
                   >
                     <td className="px-3 py-3">
                       <div className="flex items-center gap-1.5">
