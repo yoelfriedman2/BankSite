@@ -24,13 +24,12 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
 
 ## One-time setup pending
 
-- **Run migration `0057_walkthrough_seen.sql`** — adds `profiles.walkthrough_tour_seen` (nullable
-  text, additive). Fixes the welcome walkthrough popping back up on a different browser/device: it
-  was tracked only in that browser's own `localStorage`, so switching devices (or a browser clearing
-  storage) made it reappear even for someone who'd already dismissed it. Now the app also stamps this
-  column with the tour's version tag on dismiss, and treats a match there as "never show again,"
-  regardless of what any one browser's `localStorage` says. Degrades gracefully until run — the
-  component just falls back to its old localStorage-only check, same as before this shipped.
+- ~~Run migration `0057_walkthrough_seen.sql`~~ — **confirmed run 2026-08-11.** Adds
+  `profiles.walkthrough_tour_seen` (nullable text, additive). Fixes the welcome walkthrough popping
+  back up on a different browser/device: it was tracked only in that browser's own `localStorage`, so
+  switching devices (or a browser clearing storage) made it reappear even for someone who'd already
+  dismissed it. The app now also stamps this column with the tour's version tag on dismiss, and treats
+  a match there as "never show again," regardless of what any one browser's `localStorage` says.
 
 - ~~Run migration `0056_delete_transaction_no_reversal_log.sql`~~ — **confirmed run 2026-08-11.**
   Replaces `delete_account_transaction` (0055) so adjusting the balance on delete no longer logs a new
