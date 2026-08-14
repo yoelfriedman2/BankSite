@@ -217,6 +217,16 @@ export function BankForm({
     });
   }
 
+  // Keep an open read-only view sheet showing live data: after router.refresh()
+  // (e.g. the ledger's own "+ Add transaction", used right from this view —
+  // not just the edit form) hands down a fresh `accounts` prop, the sheet
+  // should follow instead of sitting on the balance it was opened with. Also
+  // closes itself if the account disappeared. Mirrors AccountsClient.tsx's
+  // identical fix for its own standalone view sheet.
+  useEffect(() => {
+    setViewingAccount((cur) => (cur ? accounts.find((a) => a.id === cur.id) ?? null : null));
+  }, [accounts]);
+
   useEffect(
     () => () => {
       if (outgoingTimer.current) window.clearTimeout(outgoingTimer.current);

@@ -176,6 +176,34 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-08-14, third same-day follow-up (fix: the read-only account preview sheet's own balance didn't
+live-update after adding a transaction)** — User caught a real gap in the previous round's "already
+works" claim: that round only tested the *edit* path (clicking an account row's pencil icon). Opening
+an account in **read-only preview mode** instead (clicking the account row itself, inside a bank
+drawer) also offers "+ Add transaction" — and using it there left the sheet's own "Current balance"
+row stuck on the number it was opened with, even though the balance had genuinely changed underneath
+it. Root cause, once traced: `AccountViewModal`'s `account` prop comes from `BankForm.tsx`'s
+`viewingAccount` state, which is a one-time snapshot captured at the moment the row is clicked
+(`setViewingAccount(a)` inside `openAccountView`) — nothing ever re-derived it from the fresh
+`accounts` prop after `router.refresh()`, unlike the standalone Accounts page's own equivalent view
+sheet (`AccountsClient.tsx`'s `viewing` state), which already had exactly this fix (a `useEffect`
+re-syncing from `rows` on every change, added back when that page's own docking work shipped) —
+`BankForm.tsx`'s bank-drawer version of the same sheet had simply never gotten the same treatment.
+Fixed by adding the identical `useEffect` to `BankForm.tsx`: `setViewingAccount((cur) => cur ?
+accounts.find(a => a.id === cur.id) ?? null : null)`, keyed on `accounts`. The bank drawer's own "My
+accounts" preview list and its "total balance" header stat were **not** actually broken by this —
+both already read directly off the same live `accounts` prop with no snapshot in between, confirmed
+by reproducing the bug with the fix reverted: the list correctly moved from $269.75 to $289.50 in the
+same test run where the view sheet's own balance stayed frozen at $269.75.
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (148, unchanged) all clean. Reproduced
+live in DEMO_MODE first — `git stash`'d the fix, confirmed the view sheet's balance visibly stayed
+stale after a deposit while the "My accounts" list correctly updated, restored the fix, confirmed the
+view sheet now updates in the same pass (`scratchpad/verify-view-mode-balance-sync.mjs`, new). Pure
+logic change (one `useEffect`, no new markup), so no mobile-layout risk to separately check. Bug fix,
+skipped changelog per the standing features-only policy. `DEMO_MODE` was flipped to `true` via a
+temporary `.env.local` (none existed in this fresh environment) and removed before finishing.
+
 **2026-08-14, same-day follow-up (confirmed the bank-drawer "My accounts" preview + total balance
 already live-sync; fixed one unrelated demo-mode gap found while checking)** — User follow-up asked
 to make sure that opening a bank, then opening one of its accounts from inside the drawer, and adding
