@@ -176,6 +176,38 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-08-14, same-day follow-up (confirmed the bank-drawer "My accounts" preview + total balance
+already live-sync; fixed one unrelated demo-mode gap found while checking)** — User follow-up asked
+to make sure that opening a bank, then opening one of its accounts from inside the drawer, and adding
+a deposit there updates (1) the account editor's own Balance field immediately (already fixed above)
+and (2) — without closing the editor or reloading — the bank drawer's "My accounts" preview list
+balance for that account, and its header's "$X total balance" stat. Investigated rather than assumed:
+both the list row (`BankForm.tsx`) and the header stat (`totalBalance = accounts.reduce(...)`) read
+directly off the same `accounts` array prop threaded down from `banks/page.tsx` (`force-dynamic`,
+fetched fresh from Supabase on every request) through `BanksClient.tsx`'s `accountsByBank` — no local
+copy anywhere in that chain that could go stale — and `useTransactionEntry`'s existing
+`router.refresh()` after every add/edit/delete already re-runs that whole server-fetch and re-renders
+with fresh props. Verified live with a new `scratchpad/verify-bank-drawer-live-sync.mjs`: opened a
+bank drawer, opened one of its accounts docked beside it, added a deposit, and confirmed — with
+nothing closed and no manual reload — the account editor's field, the "My accounts" list row, and the
+header's total balance all updated to the new figure in the same pass. This was already working;
+nothing needed changing for the reported behavior itself.
+
+**One real, unrelated bug found and fixed while verifying**: opening a bank drawer in DEMO_MODE threw
+two console errors — `getRelatedBanks` (`banks/actions.ts`, called whenever a bank drawer opens, to
+populate the "Related banks" chips) had no `DEMO_MODE` guard at all, unlike every sibling function in
+that file, so it tried to build a real Supabase client with no credentials configured and 500'd. Added
+the same one-line `if (DEMO_MODE) return [];` guard every other read-only demo-aware function in this
+file already uses. Zero effect on real/production behavior (DEMO_MODE is always false there) — this
+only fixes the demo-mode click-testing path, which is also why this specific gap had gone unnoticed
+until a verification pass happened to open a bank drawer inside a fresh DEMO_MODE session.
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (148, unchanged) all clean. Live
+DEMO_MODE pass confirmed zero console errors after the `getRelatedBanks` fix (previously 2 per bank
+drawer open), and re-confirmed the full live-sync chain still holds. Bug fix, no changelog/Guide entry
+per the standing features-only policy. `DEMO_MODE` was flipped to `true` via a temporary `.env.local`
+(none existed in this fresh environment) and removed before finishing.
+
 **2026-08-14 (fix: adding a transaction then hitting Save could silently cancel it out via a phantom
 "correction"; new: reason suggestions on Add transaction)** — User report: "add a deposit, hit save,
 it automatically comes up right when you go out of it, a withdrawal of the same amount... says

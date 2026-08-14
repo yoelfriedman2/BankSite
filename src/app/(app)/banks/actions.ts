@@ -1743,6 +1743,7 @@ export async function getRelatedByCert(): Promise<Record<number, RelatedRef[]>> 
  *  Includes both explicit bank_relationships rows and banks sharing the same holding company. */
 export async function getRelatedBanks(cert: number): Promise<RelatedBank[]> {
   if (!Number.isInteger(cert)) return [];
+  if (DEMO_MODE) return [];
 
   const supabase = await createClient();
   const {
