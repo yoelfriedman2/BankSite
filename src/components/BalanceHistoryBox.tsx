@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -22,6 +22,31 @@ import {
 
 type Direction = "deposit" | "withdrawal";
 
+/** Common reasons to speed up entry — shown as native <datalist> suggestions
+ *  on the existing "Reason" text input rather than a separate dropdown
+ *  control, so picking one is optional and typing anything else still works
+ *  exactly as before. Kept as suggestions, not a fixed set of options, since
+ *  the field has always been free text (and is stored as such). */
+const DEPOSIT_REASON_SUGGESTIONS = [
+  "Deposit",
+  "Interest",
+  "Transfer in",
+  "Refund",
+  "Reimbursement",
+  "Gift",
+  "Payroll",
+  "Dividend",
+];
+const WITHDRAWAL_REASON_SUGGESTIONS = [
+  "Withdrawal",
+  "ATM withdrawal",
+  "Fee",
+  "Transfer out",
+  "Purchase",
+  "Payment",
+  "Bill pay",
+];
+
 /** Shared state/logic behind the transaction ledger, split from its two
  *  render locations: the "+ Add transaction" trigger lives in the Balance
  *  box (next to the number it acts on), while the dated list of past
@@ -29,8 +54,22 @@ type Direction = "deposit" | "withdrawal";
  *  `null` for an account that doesn't exist yet (the "Add account" form) —
  *  the hook no-ops rather than fetching/mutating anything in that case, so
  *  it's safe to call unconditionally (a hook can't be called conditionally)
- *  and let the caller decide whether to render its two pieces at all. */
-export function useTransactionEntry(accountId: string | null) {
+ *  and let the caller decide whether to render its two pieces at all.
+ *
+ *  `onBalanceChange`, when given, fires with the account's new real balance
+ *  after every successful add/edit/delete — every one of those RPCs already
+ *  returns it. This exists so a caller holding its own separate "balance"
+ *  form field (AccountModal's editable Balance input) can stay in sync with
+ *  what the ledger just committed server-side. Without it, that field keeps
+ *  showing whatever balance the form loaded with; hitting the account
+ *  editor's own Save afterward would then submit that stale number as the
+ *  new balance, which upsertAccount can't tell apart from a deliberate
+ *  manual correction — it would silently log an equal-and-opposite
+ *  "correction" entry that cancels out the deposit/withdrawal just added. */
+export function useTransactionEntry(
+  accountId: string | null,
+  onBalanceChange?: (newBalance: number) => void,
+) {
   const router = useRouter();
   const [history, setHistory] = useState<BalancePoint[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -74,6 +113,7 @@ export function useTransactionEntry(accountId: string | null) {
     if (!accountId) return "That account isn't saved yet.";
     const res = await recordAccountTransaction(accountId, amount, direction, reason, date);
     if (res.error) return res.error;
+    if (res.newBalance != null) onBalanceChange?.(res.newBalance);
     closeForms();
     refresh();
     router.refresh();
@@ -85,6 +125,7 @@ export function useTransactionEntry(accountId: string | null) {
     const signed = direction === "withdrawal" ? -amount : amount;
     const res = await editLastAccountTransaction(latest.id, signed, reason, date);
     if (res.error) return res.error;
+    if (res.newBalance != null) onBalanceChange?.(res.newBalance);
     closeForms();
     refresh();
     router.refresh();
@@ -116,6 +157,7 @@ export function useTransactionEntry(accountId: string | null) {
       window.alert(res.error);
       return;
     }
+    if (res.newBalance != null) onBalanceChange?.(res.newBalance);
     refresh();
     router.refresh();
   }
@@ -264,6 +306,9 @@ function TransactionForm({
   const [date, setDate] = useState(initialDate || todayLocalStr());
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const reasonListId = useId();
+  const reasonSuggestions =
+    direction === "withdrawal" ? WITHDRAWAL_REASON_SUGGESTIONS : DEPOSIT_REASON_SUGGESTIONS;
 
   const parsed = Number(amount);
   const canSubmit = amount.trim() !== "" && parsed > 0 && direction !== null && !pending;
@@ -318,11 +363,20 @@ function TransactionForm({
           <DateInput value={date} onChange={setDate} />
         </div>
         <input
+          list={reasonListId}
           placeholder="Reason (optional)"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           className="min-w-[7rem] flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
         />
+        {/* Native combo-box suggestions, not a second control — same input,
+         *  same width, same layout either way. Still plain free text
+         *  underneath, so anything not on this list works exactly as before. */}
+        <datalist id={reasonListId}>
+          {reasonSuggestions.map((r) => (
+            <option key={r} value={r} />
+          ))}
+        </datalist>
       </div>
       {error && <p className="text-xs text-rose-600">{error}</p>}
       <div className="flex justify-end gap-2">

@@ -176,6 +176,62 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-08-14 (fix: adding a transaction then hitting Save could silently cancel it out via a phantom
+"correction"; new: reason suggestions on Add transaction)** — User report: "add a deposit, hit save,
+it automatically comes up right when you go out of it, a withdrawal of the same amount... says
+correction." Root cause: `AccountModal.tsx`'s form state (`values`, seeded once from the `initial`
+account prop via `useState(() => toValues(...))`) never re-synced when the embedded transaction
+ledger (`BalanceHistoryBox.tsx`'s `useTransactionEntry`) posted a deposit/withdrawal — `record_
+account_transaction` (migration 0051) updates `accounts.balance` directly via its own RPC, but the
+account editor's own "Balance (USD)" input kept showing whatever balance the form loaded with. If the
+user then clicked the outer "Save account" button (a completely ordinary thing to do right after
+logging a transaction — nothing in the UI suggested a separate "leave without saving" step was
+needed), that stale value was submitted as `patch.balance`. `upsertAccount` can't tell a stale
+leftover apart from a deliberate manual override: any submitted balance that differs from the
+account's current DB balance is treated as an explicit correction (`balanceChanging` in
+`accounts/actions.ts`, routed through `update_account_balance`, migration 0043, which tags its own
+insert `type: 'correction'`) — so Save silently wrote an equal-and-opposite entry undoing the deposit
+just added, labeled "Correction" in the history list.
+
+Fixed by keeping the two in sync: `record_account_transaction`/`edit_last_account_transaction`/
+`delete_account_transaction` already return the account's real new balance from their RPCs (and the
+DEMO_MODE mirrors in `lib/demo.ts` already returned it too) — that return value just wasn't being
+used. `recordAccountTransaction`/`editLastAccountTransaction`/`deleteAccountTransaction`
+(`money/actions.ts`) now surface it as `newBalance` in their result. `useTransactionEntry` takes an
+optional `onBalanceChange(newBalance)` callback and fires it after every successful add/edit/delete.
+`AccountModal.tsx` passes one that updates `values.balance` directly via `setValues` (not the `set()`
+helper, so this sync doesn't itself arm the unsaved-changes prompt) — so a Save right after using the
+ledger submits the real current balance, `balanceChanging` comes out `false`, and no correction is
+ever written. `AccountViewModal.tsx`'s own `useTransactionEntry` call is unaffected (no second
+argument = no-op callback; it's read-only and has no Save button to stage a stale value into).
+
+Same session, second request: a reason dropdown for deposits/withdrawals ("was it interest? a
+difference?") without disturbing the compact form layout. Added `<datalist>` suggestions
+(`DEPOSIT_REASON_SUGGESTIONS`/`WITHDRAWAL_REASON_SUGGESTIONS` in `BalanceHistoryBox.tsx`, swapped
+based on the selected direction) to the existing "Reason (optional)" text input — same element, same
+width, same row, nothing new to lay out. It's suggestions on free text, not a fixed set of options,
+so anything not on the list still works exactly as it did before.
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (148, unchanged) all clean. Reproduced
+the exact reported bug live in DEMO_MODE first (temporarily reverted the `AccountModal.tsx` fix via
+`git stash`, confirmed the balance field visibly stayed stale after a deposit while the account's
+real balance had moved on, re-applied the fix, confirmed it now updates immediately) —
+`scratchpad/verify-tx-balance-sync.mjs`, new. A second script (`verify-tx-balance-persist.mjs`)
+confirmed the corrected balance survives a genuine fresh page reload, not just in-page state. Also
+confirmed the datalist suggestions render and correctly swap between deposit/withdrawal wording, and
+no 375px overflow with the transaction form open (`verify-tx-mobile.mjs`). **One demo-mode-only gap
+noted, not fixed**: `upsertAccount`'s DEMO_MODE branch writes a changed balance directly with no
+history row at all (unlike real mode's `update_account_balance` RPC, which always logs a `correction`
+row) — a pre-existing, unrelated inconsistency between demo and real mode for this one field, not
+introduced by this fix and not the bug being reported; the fix's actual mechanism (keeping the form's
+balance in sync so nothing stale is ever submitted) prevents the real-mode correction write by
+construction, verified by reading `upsertAccount`'s `balanceChanging` check directly rather than
+relying on DEMO_MODE to reproduce a write path it doesn't implement. Bug fix, skipped changelog per
+the standing features-only policy; the reason-suggestion dropdown is a minor refinement to an
+existing input (not a new capability on its own), also skipped per "when in doubt, leave it out."
+`DEMO_MODE` was flipped to `true` via a temporary `.env.local` (none existed in this fresh
+environment) and removed before finishing.
+
 **2026-08-11 (fix: "Add transaction" could silently default to Deposit; new: delete any transaction)**
 — Two user reports: (1) the "Add transaction" form pre-selected Deposit by default, so entering an
 amount/reason for a withdrawal without deliberately clicking the "Withdrawal" toggle first silently

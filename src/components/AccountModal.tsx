@@ -129,7 +129,17 @@ export function AccountModal({
   // Purely a UI toggle — the "add an entry" row is hidden until asked for so
   // an account with no logged activity yet doesn't show a permanent input row.
   const [activityAdding, setActivityAdding] = useState(false);
-  const tx = useTransactionEntry(initial?.id ?? null);
+  // Keeps the "Balance (USD)" field in sync with what the ledger just
+  // committed, so a Save right after adding/editing/deleting a transaction
+  // submits the real current balance instead of the stale one this form
+  // loaded with — submitting a stale value here is indistinguishable from a
+  // deliberate manual correction server-side (see upsertAccount), and would
+  // silently log an equal-and-opposite "correction" entry that cancels out
+  // the transaction just added. Uses setValues directly, not set(), so this
+  // sync doesn't itself arm the unsaved-changes prompt.
+  const tx = useTransactionEntry(initial?.id ?? null, (newBalance) =>
+    setValues((v) => ({ ...v, balance: String(newBalance) })),
+  );
   const [dirty, setDirty] = useState(false);
 
   // Routing number: the account's own value always wins; the bank's shared one

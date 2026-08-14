@@ -434,7 +434,7 @@ export async function recordAccountTransaction(
   type: "deposit" | "withdrawal",
   reason: string,
   asOfDate: string,
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; newBalance?: number }> {
   if (!(amount > 0)) return { error: "Enter an amount greater than $0." };
   const signedAmount = type === "withdrawal" ? -amount : amount;
   const trimmedReason = reason.trim() || (type === "deposit" ? "Deposit" : "Withdrawal");
@@ -443,7 +443,7 @@ export async function recordAccountTransaction(
     const result = addDemoTransaction(accountId, signedAmount, type, trimmedReason, asOfDate);
     if (result == null) return { error: "That account couldn't be found." };
     revalidate();
-    return {};
+    return { newBalance: result };
   }
 
   const supabase = await createClient();
@@ -463,7 +463,7 @@ export async function recordAccountTransaction(
   if (data == null) return { error: "That account couldn't be found." };
 
   revalidate();
-  return {};
+  return { newBalance: data };
 }
 
 /** Fix a fat-fingered entry. Only the account's single most-recent
@@ -478,7 +478,7 @@ export async function editLastAccountTransaction(
   amount: number,
   reason: string,
   asOfDate: string,
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; newBalance?: number }> {
   if (!amount) return { error: "Enter a nonzero amount." };
   const trimmedReason = reason.trim() || null;
 
@@ -488,7 +488,7 @@ export async function editLastAccountTransaction(
       return { error: "A newer transaction was added — this can no longer be edited." };
     }
     revalidate();
-    return {};
+    return { newBalance: result };
   }
 
   const supabase = await createClient();
@@ -509,7 +509,7 @@ export async function editLastAccountTransaction(
   }
 
   revalidate();
-  return {};
+  return { newBalance: data };
 }
 
 /** Delete any transaction from the ledger — unlike editLastAccountTransaction,
@@ -522,12 +522,12 @@ export async function editLastAccountTransaction(
 export async function deleteAccountTransaction(
   transactionId: string,
   adjustBalance: boolean,
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; newBalance?: number }> {
   if (DEMO_MODE) {
     const result = deleteDemoTransaction(transactionId, adjustBalance);
     if (result == null) return { error: "That transaction couldn't be found." };
     revalidate();
-    return {};
+    return { newBalance: result };
   }
 
   const supabase = await createClient();
@@ -544,7 +544,7 @@ export async function deleteAccountTransaction(
   if (data == null) return { error: "That transaction couldn't be found." };
 
   revalidate();
-  return {};
+  return { newBalance: data };
 }
 
 /** Each account's balance as of the given date (latest recorded point on or before it). */
