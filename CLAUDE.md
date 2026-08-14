@@ -176,6 +176,63 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-08-14, fourth same-day follow-up (account numbers shown in full everywhere; fix: a real
+character-dropping/focus-loss bug in the Banks/Accounts search boxes)** — Two requests:
+
+- **Account numbers are no longer masked anywhere.** Per explicit user decision — this is a private,
+  invite-only, single-family app, so a viewer of an account number is always already someone privately
+  looking at their own family's data; masking to "••1234" bought no real privacy and only cost an extra
+  click to see the real number. There were three separate, undocumented duplicate implementations of
+  the same masking logic (a real case of the "3 similar lines is better than a premature abstraction"
+  principle going the other way — these had drifted into 3 near-identical private helpers instead of
+  ever being shared): `lib/format.ts#maskAccountNumber` (used by `AccountsClient.tsx`, `BankForm.tsx`,
+  `ChecksClient.tsx`), `SendClient.tsx#maskAccount`, and `ImportDialog.tsx#maskAcctNum`. Rather than
+  touch every call site, all three function *bodies* were changed to just return the number as-is —
+  kept as named functions (not inlined) so every display of an account number still funnels through
+  one place per file, with a comment explaining the decision so a future session doesn't wonder why a
+  function called "mask…" doesn't mask. Also dropped `GuideClient.tsx`'s now-inaccurate "Account
+  numbers are masked in lists" tip.
+- **Real bug, confirmed and root-caused, not just theorized: the Banks/Accounts page search boxes
+  could silently drop/skip characters while typing, and could lose focus mid-type.** Both pages'
+  search boxes (added for UX-08, 2026-07-26) wrote the typed query into the URL via a debounced
+  `router.replace()`, and separately re-synced local `query` state from the page's `initialQuery` prop
+  whenever it changed — meant to catch browser back/forward and bookmarked `?q=` links. The race: both
+  `banks/page.tsx` and `accounts/page.tsx` are `force-dynamic`, so `router.replace()` triggers a real
+  server round-trip to re-fetch the whole page; if the user kept typing while that round-trip was still
+  in flight (real Vercel+Supabase latency, not this sandbox's instant in-memory demo data), the stale
+  `initialQuery` it eventually resolved to got synced back into `query` — silently overwriting whatever
+  had been typed in the meantime. Fixed by replacing `router.replace()` with a raw
+  `window.history.replaceState()` in both files: `q` was never read server-side anyway (filtering is
+  100% client-side via a `useMemo`), so the URL write only ever needed to be a cosmetic, bookmarkable
+  address-bar update — a raw history write does that with zero server round-trip and zero risk of
+  re-rendering this component out from under itself, so nothing typed afterward can ever be clobbered.
+  Genuine back/forward and bookmarked-link cases are unaffected (those trigger a real Next.js
+  navigation regardless, which still produces a fresh `initialQuery` the sync-back effect correctly
+  picks up). Grepped for `router.replace` across the whole app first — these were the only two call
+  sites, so this wasn't happening anywhere else, per the user's own "check elsewhere" ask.
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (148, unchanged) all clean. The search-box
+bug needed real effort to reproduce, not just reasoned about — this sandbox's local demo server resolves
+the RSC round-trip fast enough (in-memory data, no real network) that the race essentially never fires
+under normal typing speed. Used CDP's `Network.emulateNetworkConditions` (700ms latency) to simulate a
+real production round-trip, then typed with a deliberate pause (crossing the 300ms debounce) followed by
+more typing while the now-slow round-trip was still in flight. First attempt looked like a false negative
+(no drops) — traced to the test itself matching the wrong element (`GlobalSearch`'s page-wide combobox,
+which also has a placeholder containing "search" and sits earlier in the DOM — the exact same trap this
+file's UX-08 entry already documented once). Once the selector was corrected to the Banks page's own
+box, the **unfixed** code reproduced the bug precisely: typing "Kennebunk Savings Test 123" landed as
+"Kennebunk ngs Test 123" in the box — "Sa" and "vi" silently dropped, matching the user's own report of
+letters being "removed" and "skipped" exactly. With the fix restored: identical typing test lands
+character-for-character correct, focus never leaves the box, the URL still picks up the query via the
+history write, and — confirmed via captured `Network.requestWillBeSent` events — **zero** network
+requests fire while typing at all anymore. Re-ran the identical typing-race test against the Accounts
+page's own search box too (same fix, same result: no drops, no focus loss). Also confirmed no 375px
+overflow anywhere a full (longer, unmasked) account number now renders — Accounts (mobile card + desktop
+table), Checks, and the bank drawer's "My accounts" list. `DEMO_MODE` was flipped to `true` via a
+temporary `.env.local` (none existed in this fresh environment) and removed before finishing. Both
+changes are bug fixes/a privacy-tradeoff decision with no new capability, so skipped changelog/Guide
+per the standing features-only policy (beyond removing the one now-inaccurate Guide tip mentioned above).
+
 **2026-08-14, third same-day follow-up (fix: the read-only account preview sheet's own balance didn't
 live-update after adding a transaction)** — User caught a real gap in the previous round's "already
 works" claim: that round only tested the *edit* path (clicking an account row's pencil icon). Opening

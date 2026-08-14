@@ -519,10 +519,10 @@ function findAccountMatch(
   return best;
 }
 
+// Shows the full account number — per explicit 2026-08-14 decision, this app
+// has no reason to mask it (private, invite-only, single family).
 function maskAcctNum(n: string | null): string {
-  if (!n) return "";
-  const digits = n.replace(/\D/g, "");
-  return digits.length > 4 ? `••${digits.slice(-4)}` : n;
+  return n ?? "";
 }
 
 function rowHasAccountData(r: ImportRow): boolean {

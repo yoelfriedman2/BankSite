@@ -411,6 +411,18 @@ export function AccountsClient({
   // and browser back/forward — or a bookmarked/pasted `?q=` link — updates the
   // box instead of being silently ignored after the first render. Skips the
   // very first write so mounting doesn't immediately re-push the same URL.
+  //
+  // Deliberately `window.history.replaceState`, NOT `router.replace()` — see
+  // the identical fix/comment in BanksClient.tsx. `q` is never read
+  // server-side here either (filtering is all client-side), so a real
+  // Next.js navigation on every debounce fire bought nothing but a race: a
+  // slow-to-resolve `router.replace()` on this force-dynamic page could hand
+  // back a stale `initialQuery` while the user kept typing, and the effect
+  // below that syncs `query` from `initialQuery` would silently overwrite
+  // what they'd since typed — read as dropped/skipped letters, sometimes
+  // with the box itself losing focus (a real navigation can flash the
+  // route's loading state). A raw history write never re-renders this
+  // component, so nothing can race it.
   const skipNextWrite = useRef(true);
   useEffect(() => {
     if (skipNextWrite.current) {
@@ -422,7 +434,8 @@ export function AccountsClient({
       if (query.trim()) params.set("q", query);
       else params.delete("q");
       const qs = params.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      const url = qs ? `${pathname}?${qs}` : pathname;
+      window.history.replaceState(null, "", url);
     }, 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps

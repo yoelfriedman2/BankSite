@@ -37,11 +37,14 @@ export function titleCase(value: string | null | undefined): string {
 }
 
 /** Show only the last 4 digits of an account number (e.g. ••1234). */
+/** Shows the account number in full — per explicit 2026-08-14 decision, this
+ *  is a private, invite-only, single-family app where every viewer of an
+ *  account is already someone privately looking at their own family's data,
+ *  so masking bought no real privacy and only cost a click to see the real
+ *  number. Kept as a named function (not inlined at each call site) so every
+ *  display of an account number still goes through one place. */
 export function maskAccountNumber(value: string | null | undefined): string {
-  if (!value) return "";
-  const trimmed = value.trim();
-  if (trimmed.length <= 4) return trimmed;
-  return `••${trimmed.slice(-4)}`;
+  return value?.trim() ?? "";
 }
 
 /** A bank's stored website (from the FDIC API or manual entry) is often

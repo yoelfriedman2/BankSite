@@ -98,9 +98,10 @@ function Section({
   );
 }
 
+// Shows the full account number — per explicit 2026-08-14 decision, this app
+// has no reason to mask it (private, invite-only, single family).
 function maskAccount(num: string | null): string {
-  if (!num) return "no number on file";
-  return num.length <= 4 ? num : `••${num.slice(-4)}`;
+  return num ?? "no number on file";
 }
 
 /** "123 Main St / Springfield, MA 01101" as the block that goes in the window. */

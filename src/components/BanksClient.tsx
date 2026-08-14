@@ -388,6 +388,21 @@ export function BanksClient({
   // and browser back/forward — or a bookmarked/pasted `?q=` link — updates the
   // box instead of being silently ignored after the first render. Skips the
   // very first write so mounting doesn't immediately re-push the same URL.
+  //
+  // Deliberately `window.history.replaceState`, NOT `router.replace()` — `q`
+  // is never read server-side (filtering is all client-side, see the
+  // `useMemo` below), so there's nothing a real Next.js navigation would
+  // accomplish here beyond making the URL bar match. `router.replace()` on a
+  // force-dynamic page instead re-fetches the whole page from the server on
+  // every debounce fire, which — if that round trip is still in flight when
+  // the user keeps typing — hands this component a new `initialQuery` prop
+  // that's already stale by the time it arrives; the effect below that syncs
+  // `query` from `initialQuery` would then silently overwrite whatever the
+  // user has since typed, which is what read as dropped/skipped letters and
+  // the box losing focus (a real navigation can flash the route's loading
+  // state, unmounting the input). A raw history write changes the address
+  // bar with no server round trip and no re-render of this component at all,
+  // so it can't race with anything the user types afterward.
   const skipNextWrite = useRef(true);
   useEffect(() => {
     if (skipNextWrite.current) {
@@ -399,7 +414,8 @@ export function BanksClient({
       if (query.trim()) params.set("q", query);
       else params.delete("q");
       const qs = params.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      const url = qs ? `${pathname}?${qs}` : pathname;
+      window.history.replaceState(null, "", url);
     }, 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
