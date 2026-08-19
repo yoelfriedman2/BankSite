@@ -3,7 +3,7 @@
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendAccessApprovedEmail, sendProductUpdateEmail, renderProductUpdateEmailHtml } from "@/lib/email";
+import { sendAccessApprovedEmail } from "@/lib/email";
 import {
   buildBackupZip,
   saveBackupToStorage,
@@ -296,90 +296,3 @@ export async function restoreUserFromBackupAction(
   return restoreUserFromBackup(path, email);
 }
 
-/** Everyone the "what's new" digest would go to: opted into product-update
- *  emails, master email switch on, and actually approved to be in the app —
- *  same three-filter shape as addBankComment's community-note broadcast
- *  (banks/actions.ts), including the same INT-02 reasoning: a pending/denied
- *  signup defaults both notify flags true, so access_status must be checked
- *  separately or a not-yet-approved user would get emailed anyway. */
-async function productUpdateRecipients(): Promise<{ id: string; email: string; display_name: string | null }[]> {
-  const admin = createAdminClient();
-  const { data: profiles } = await admin
-    .from("profiles")
-    .select("id, display_name")
-    .eq("notify_email", true)
-    .eq("notify_product_updates", true);
-  if (!profiles?.length) return [];
-
-  const { data: statuses, error: statusErr } = await admin
-    .from("profiles")
-    .select("id, access_status")
-    .in("id", profiles.map((p) => p.id));
-  const blocked = new Set(
-    statusErr
-      ? []
-      : (statuses ?? [])
-          .filter((s) => s.access_status && s.access_status !== "approved")
-          .map((s) => s.id),
-  );
-  const eligible = profiles.filter((p) => !blocked.has(p.id));
-  if (!eligible.length) return [];
-
-  const { data: authData } = await admin.auth.admin.listUsers({ perPage: 1000 });
-  const emailMap = Object.fromEntries((authData?.users ?? []).map((u) => [u.id, u.email ?? ""]));
-
-  return eligible
-    .map((p) => ({ id: p.id as string, email: emailMap[p.id as string] ?? "", display_name: p.display_name as string | null }))
-    .filter((p) => !!p.email);
-}
-
-/** Who the digest would reach, so Admin can show a real count before the
- *  owner confirms sending — a broadcast email can't be unsent. */
-export async function getProductUpdateRecipientCount(): Promise<{ count?: number; error?: string }> {
-  const owner = await requireOwner();
-  if (!owner) return { error: "Not authorized." };
-  const recipients = await productUpdateRecipients();
-  return { count: recipients.length };
-}
-
-/** Sends the hand-authored "what's new" digest (sendProductUpdateEmail in
- *  lib/email.ts) to every eligible recipient. Owner-triggered only, from
- *  Admin → Users — there's no schedule and no CMS; the content is edited in
- *  code and this just fires whatever's currently there. */
-export async function sendProductUpdateBroadcast(): Promise<{ sent?: number; failed?: number; error?: string }> {
-  const owner = await requireOwner();
-  if (!owner) return { error: "Not authorized." };
-
-  const recipients = await productUpdateRecipients();
-  if (!recipients.length) return { sent: 0, failed: 0 };
-
-  const results = await Promise.all(
-    recipients.map((r) => sendProductUpdateEmail(r.email, r.display_name ?? "")),
-  );
-  const failed = results.filter((r) => "error" in r && r.error).length;
-  return { sent: recipients.length - failed, failed };
-}
-
-/** The exact HTML the broadcast would send, greeted as the owner would see
- *  it — rendered, never mailed. This is what closes the "I can't see it
- *  before it goes out" gap: the admin panel shows this in an iframe before
- *  the send button is even reachable. */
-export async function getProductUpdateEmailPreview(): Promise<{ html?: string; error?: string }> {
-  const owner = await requireOwner();
-  if (!owner) return { error: "Not authorized." };
-  return { html: renderProductUpdateEmailHtml(owner.user_metadata?.full_name ?? "") };
-}
-
-/** Sends the digest to the owner's own address only — a real send through
- *  the real provider, landing in a real inbox, before anyone commits to the
- *  full broadcast. */
-export async function sendProductUpdateTestEmail(): Promise<{ error?: string }> {
-  const owner = await requireOwner();
-  if (!owner || !owner.email) return { error: "Not authorized." };
-  const res = await sendProductUpdateEmail(owner.email, owner.user_metadata?.full_name ?? "");
-  if ("error" in res && res.error) return { error: res.error };
-  if ("skipped" in res && res.skipped) {
-    return { error: "Email isn't configured on this deployment (RESEND_API_KEY unset) — nothing was sent." };
-  }
-  return {};
-}

@@ -10,7 +10,6 @@ import {
   type AccessStatus,
 } from "@/app/(app)/admin/actions";
 import { AdminBackupsPanel } from "@/components/AdminBackupsPanel";
-import { AdminProductUpdatePanel } from "@/components/AdminProductUpdatePanel";
 import { useFocusTrap } from "@/lib/useFocusTrap";
 
 function fmtDate(iso: string | null) {
@@ -118,7 +117,6 @@ export function AdminUsersClient({
       </div>
 
       <AdminBackupsPanel />
-      <AdminProductUpdatePanel />
 
       {loadError && (
         <p className="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{loadError}</p>

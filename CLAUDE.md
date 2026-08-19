@@ -176,6 +176,37 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-08-19, same-day follow-up (removed the "Product update email" panel from Admin entirely)**
+— Direct follow-up to the entry below: the owner didn't like the panel living on the Admin page
+(a comms/marketing action, not user administration) and, more importantly, found it wasn't
+actually solving its own problem — there's no in-app content editor, so every roundup still meant
+asking me to hand-edit `PRODUCT_UPDATE_ITEMS` and redeploy. Rather than rebuild it elsewhere
+(considered: drive the email off the live changelog and move the send control onto `/updates`),
+the owner chose the simpler path: skip having an in-app broadcast feature at all. Going forward,
+a "what's new" email is a one-off ask in a session — draft it, show the owner the rendered HTML,
+send it once approved — the same shape as every other one-off production write this project
+already does via a small script (see "Real writes against production" in Tech stack above), not a
+standing app feature.
+
+Removed: `AdminProductUpdatePanel.tsx` (deleted); its mount in `AdminUsersClient.tsx`; the five
+product-update actions in `admin/actions.ts` (`productUpdateRecipients`,
+`getProductUpdateRecipientCount`, `sendProductUpdateBroadcast`, `getProductUpdateEmailPreview`,
+`sendProductUpdateTestEmail`); and the email template in `lib/email.ts` (`PRODUCT_UPDATE_ITEMS`,
+`PRODUCT_UPDATE_SUBJECT`, `productUpdateItemHtml`, `renderProductUpdateEmailHtml`,
+`sendProductUpdateEmail`). **Left alone, deliberately**: `profiles.notify_product_updates` (the
+Settings → Alerts & emails toggle) — it's still a real, meaningful "do you want these emails"
+preference a future one-off send should keep respecting, even with no standing feature reading it
+today; removing it would need a migration to drop the column, which nobody asked for. No
+migration this round either way — pure code deletion.
+
+**Verification**: `tsc --noEmit`, `npm run build` (temp `xlsx` CDN→npm swap, restored after,
+confirmed via `git diff` showing nothing), `npm test` (148, unchanged) all clean. `/admin`'s own
+bundle size dropped 8.46 kB → 7.32 kB, confirming the panel is actually gone from the client
+bundle, not just hidden. Grepped for every remaining reference to the removed names — only
+`notify_product_updates` itself remained, in Settings, exactly as intended. Not independently
+click-tested (same `/admin`-redirects-in-DEMO_MODE limitation as every admin-only change in this
+file). Bug-fix-shaped removal, no new capability — skipped changelog/Guide.
+
 **2026-08-19 (Admin → Users no longer tallies other users' private data)** — User pushback:
 the admin user table showed each family member's Accounts/Docs/Notes/Statuses counts at a
 glance — real private-data exposure with no operational purpose, since none of it is needed to
