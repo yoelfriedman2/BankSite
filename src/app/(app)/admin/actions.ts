@@ -36,28 +36,18 @@ export interface AdminUser {
   created_at: string;
   last_sign_in_at: string | null;
   last_seen_at: string | null;
-  accounts: number;
-  documents: number;
-  notes: number;
-  banks_with_status: number;
   is_fdic_admin: boolean;
   access_status: AccessStatus;
   access_requested_at: string | null;
 }
 
-function tally(
-  rows: Array<Record<string, unknown>> | null,
-  key: string,
-): Map<string, number> {
-  const m = new Map<string, number>();
-  for (const r of rows ?? []) {
-    const k = r[key] as string | null;
-    if (k) m.set(k, (m.get(k) ?? 0) + 1);
-  }
-  return m;
-}
-
-export async function listUsersWithStats(): Promise<{
+// Deliberately does NOT touch accounts/account_documents/bank_comments/banks
+// — the admin view has no business tallying other users' private data just
+// to render a list. It only reads the account-level facts owning/approving
+// people actually requires: identity, access status, FDIC-admin role, and
+// last-seen. (deleteUserById still reads a user's own document paths, but
+// only at the moment of a delete it performs, never surfaced in this list.)
+export async function listUsers(): Promise<{
   users?: AdminUser[];
   error?: string;
 }> {
@@ -70,30 +60,12 @@ export async function listUsersWithStats(): Promise<{
   const authUsers = authData?.users ?? [];
 
   // is_fdic_admin (migration 0026) is queried separately from the core profile
-  // fields — if that column isn't there yet, this page still shows names/stats
+  // fields — if that column isn't there yet, this page still shows names
   // correctly (everyone just shows as not-FDIC-admin) instead of the whole
   // Promise.all failing on one unknown column.
-  //
-  // Every one of these sums a table across EVERY user, not just one (DATA-18)
-  // — the closest-to-real risk of the 1000-row PostgREST cap in this app,
-  // since it's the one place that adds row counts across the whole family
-  // instead of one person's own data. Paginated past it the same way the
-  // personal export/weekly backup already are (DATA-06/REL-03).
-  const [profiles, accts, docs, notes, banks, fdicAdminRes, accessRes] = await Promise.all([
+  const [profiles, fdicAdminRes, accessRes] = await Promise.all([
     fetchAllRows<{ id: string; display_name: string | null }>((from, to) =>
       admin.from("profiles").select("id, display_name").range(from, to),
-    ),
-    fetchAllRows<{ user_id: string }>((from, to) =>
-      admin.from("accounts").select("user_id").is("deleted_at", null).range(from, to),
-    ),
-    fetchAllRows<{ user_id: string }>((from, to) =>
-      admin.from("account_documents").select("user_id").range(from, to),
-    ),
-    fetchAllRows<{ author_id: string }>((from, to) =>
-      admin.from("bank_comments").select("author_id").range(from, to),
-    ),
-    fetchAllRows<{ user_id: string; status: string }>((from, to) =>
-      admin.from("banks").select("user_id, status").is("deleted_at", null).neq("status", "untracked").range(from, to),
     ),
     fetchAllRows<{ id: string; is_fdic_admin: boolean | null }>((from, to) =>
       admin.from("profiles").select("id, is_fdic_admin").range(from, to),
@@ -127,10 +99,6 @@ export async function listUsersWithStats(): Promise<{
       },
     ]),
   );
-  const acctMap = tally(accts.rows, "user_id");
-  const docMap = tally(docs.rows, "user_id");
-  const noteMap = tally(notes.rows, "author_id");
-  const bankMap = tally(banks.rows, "user_id");
 
   const users: AdminUser[] = authUsers
     .map((u) => {
@@ -142,10 +110,6 @@ export async function listUsersWithStats(): Promise<{
         created_at: u.created_at,
         last_sign_in_at: u.last_sign_in_at ?? null,
         last_seen_at: access?.lastSeen ?? null,
-        accounts: acctMap.get(u.id) ?? 0,
-        documents: docMap.get(u.id) ?? 0,
-        notes: noteMap.get(u.id) ?? 0,
-        banks_with_status: bankMap.get(u.id) ?? 0,
         is_fdic_admin: fdicAdminById.get(u.id) ?? false,
         access_status: access?.status ?? "approved",
         access_requested_at: access?.requestedAt ?? null,

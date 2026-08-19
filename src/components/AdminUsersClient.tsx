@@ -111,9 +111,9 @@ export function AdminUsersClient({
           Users
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Everyone with access, and what they&apos;ve saved. Deleting a user permanently
-          removes their account and their private data — their public community notes
-          stay, credited to their name.
+          Everyone with access to Bank Tracker. Deleting a user permanently removes their
+          account and their private data — their public community notes stay, credited
+          to their name.
         </p>
       </div>
 
@@ -178,10 +178,6 @@ export function AdminUsersClient({
           <thead>
             <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-600">
               <th className="px-4 py-3 font-medium">User</th>
-              <th className="px-3 py-3 text-right font-medium">Accounts</th>
-              <th className="px-3 py-3 text-right font-medium">Docs</th>
-              <th className="px-3 py-3 text-right font-medium">Notes</th>
-              <th className="px-3 py-3 text-right font-medium">Statuses</th>
               <th className="px-3 py-3 font-medium">Last seen</th>
               <th className="px-3 py-3 font-medium">Access</th>
               <th className="px-3 py-3 text-center font-medium" title="Can apply FDIC sync changes">FDIC admin</th>
@@ -205,10 +201,6 @@ export function AdminUsersClient({
                     <div className="text-xs text-slate-600">{u.email}</div>
                     <div className="text-[11px] text-slate-600">Joined {fmtDate(u.created_at)}</div>
                   </td>
-                  <td className="px-3 py-3 text-right tabular-nums text-slate-700">{u.accounts}</td>
-                  <td className="px-3 py-3 text-right tabular-nums text-slate-700">{u.documents}</td>
-                  <td className="px-3 py-3 text-right tabular-nums text-slate-700">{u.notes}</td>
-                  <td className="px-3 py-3 text-right tabular-nums text-slate-700">{u.banks_with_status}</td>
                   <td className="px-3 py-3 text-slate-500">{fmtDate(u.last_seen_at ?? u.last_sign_in_at)}</td>
                   <td className="px-3 py-3">
                     {isSelf ? (
@@ -257,7 +249,7 @@ export function AdminUsersClient({
             })}
             {list.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-10 text-center text-sm text-slate-600">
+                <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-600">
                   No users.
                 </td>
               </tr>
@@ -321,10 +313,9 @@ function DeleteUserModal({
         </div>
         <p className="mt-1 text-sm text-slate-500">
           Permanently deletes <span className="font-medium text-slate-700">{target.email}</span>{" "}
-          and all their private data ({target.accounts} accounts, {target.documents} documents).
-          Their {target.notes} community note{target.notes === 1 ? "" : "s"} stay, still credited
-          to their name. This cannot be undone directly, but a backup taken beforehand (see
-          Backups above) can restore their data if they're re-added later.
+          and all their private data. Their community notes stay, still credited to their
+          name. This cannot be undone directly, but a backup taken beforehand (see Backups
+          above) can restore their data if they're re-added later.
         </p>
 
         <label className="mt-4 block text-xs font-medium text-slate-500">

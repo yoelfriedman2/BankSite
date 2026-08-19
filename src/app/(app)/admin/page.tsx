@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { DEMO_MODE } from "@/lib/demo";
-import { listUsersWithStats } from "./actions";
+import { listUsers } from "./actions";
 import { AdminUsersClient } from "@/components/AdminUsersClient";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +18,7 @@ export default async function AdminPage() {
     !!user && !!adminEmail && user.email?.toLowerCase() === adminEmail.toLowerCase();
   if (!isOwner) redirect("/");
 
-  const { users, error } = await listUsersWithStats();
+  const { users, error } = await listUsers();
 
   return (
     <AdminUsersClient

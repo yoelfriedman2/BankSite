@@ -176,6 +176,28 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-08-19 (Admin → Users no longer tallies other users' private data)** — User pushback:
+the admin user table showed each family member's Accounts/Docs/Notes/Statuses counts at a
+glance — real private-data exposure with no operational purpose, since none of it is needed to
+approve/deny access or grant the FDIC-admin role. Removed those four columns entirely, and
+removed the *server-side* queries that computed them (`listUsersWithStats` → renamed
+`listUsers` in `admin/actions.ts`) — this isn't just hiding numbers client-side, the admin
+action no longer reads `accounts`/`account_documents`/`bank_comments`/`banks` across every user
+at all. `AdminUser` only carries identity, access status, FDIC-admin role, and last-seen now.
+The delete-user confirmation dialog's warning text also dropped its numeric "N accounts, M
+documents" breakdown for the same reason — still warns the delete is permanent and private data
+is gone, just without surfacing counts an admin has no reason to see. `deleteUserById` itself is
+unaffected — it still reads a user's own document storage paths, but only in the instant of
+performing that user's own delete, never displayed anywhere. Bug fix / privacy tightening, no
+new capability — skipped changelog/Guide per the standing owner-only-admin-tooling exclusion.
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (148, unchanged) all clean (temp
+`xlsx` CDN→npm swap for the sandbox install, restored after — confirmed via `git diff` showing
+nothing). Not independently click-tested — `/admin` redirects away entirely in DEMO_MODE, same
+accepted limitation as every other admin-only change in this file; verified instead by reading
+the diff against the original code, confirming the table/column count and delete-modal copy stay
+internally consistent (colSpan updated 9→5 to match the now-5-column table).
+
 **2026-08-14, fourth same-day follow-up (account numbers shown in full everywhere; fix: a real
 character-dropping/focus-loss bug in the Banks/Accounts search boxes)** — Two requests:
 
