@@ -176,6 +176,44 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-08-20 (fix: the account view sheet's "Log activity today" menu opened off the bottom of the
+screen)** — User report with a screenshot: opening a non-CD account (from the Accounts page, sheet
+docked to the right at desktop width) and clicking the footer's "Log activity today" button showed
+the menu cut off below the visible window, unreachable. Root cause: `QuickLogButton`
+(`AccountsClient.tsx`) always opens its dropdown downward (`absolute ... mt-1`) — fine for its other
+two call sites (a table row, a mobile card), which sit inside a normally-scrolling page, but the
+same button is also passed as `AccountViewModal`'s `footerAction`, right at the bottom edge of the
+docked sheet's `xl:h-full` column. Opening downward from there pushed the menu past the sheet's own
+`overflow-hidden` bound, clipping it — not just visually tight, genuinely unreachable (confirmed via
+a reverted-fix test: `elementFromPoint` on the menu's own item buttons hit nothing, i.e. actually
+unclickable, not just hard to see). Added an `openUpward` prop to `QuickLogButton` (`bottom-full
+mb-1` instead of `mt-1`), passed only from the `footerAction` usage — the table-row and mobile-card
+usages are untouched, still opening downward as before, since neither sits against a clipped edge.
+
+Checked the rest of the app for the same shape of bug (an `absolute` dropdown/menu that can end up
+pinned against an `overflow-hidden` ancestor's edge) — grepped every `absolute ... mt-1` menu in
+`src/components` (GlobalSearch, AddressAutocomplete, BankForm's relationship-link search,
+RoadTripClient's bank search, RoutingInfoTip, and the Banks/Accounts column-header filter menus).
+None of the others sit at a clipped viewport-edge boundary the way this one did — they're either in
+normal page flow (search/filter boxes near the top of a page) or inside a genuinely scrollable
+(`overflow-y-auto`, not `overflow-hidden`) container, where an overflowing absolute child just makes
+that container scrollable rather than silently clipping it. `footerAction` (the one prop that can
+place arbitrary content at a sheet's bottom edge) has exactly one caller, this one — so this was the
+only real instance of the bug, not one of several.
+
+**Verification**: `tsc --noEmit`, `npm run build` (temp `xlsx` CDN→npm swap, restored after,
+confirmed via `git diff` showing nothing) both clean. Live DEMO_MODE CDP pass
+(`scratchpad/verify-log-menu-overflow.mjs`, new): reproduced the exact bug first by reverting the
+fix (`git stash`) — the menu's bottom measured 1004.5px against a 761px-tall viewport, and its own
+item buttons failed a real hit-test — then confirmed the fix (menu bottom 709px, fully inside the
+761px viewport, every item hit-testable) with the same script. Also confirmed the mobile card's own
+quick-log button still renders and opens correctly (untouched), and swept every top-level page at
+both 1440px and 375px for horizontal overflow (`document.body.scrollWidth >
+document.documentElement.clientWidth`) — none found, so this pass doubled as the "check everywhere
+else on the site" sweep the report asked for. Bug fix, no changelog/Guide entry per the standing
+features-only policy. `.env.local` was created temporarily (`DEMO_MODE=true`) for this pass and
+removed before finishing, per the standing rule.
+
 **2026-08-19, same-day follow-up (removed the "Product update email" panel from Admin entirely)**
 — Direct follow-up to the entry below: the owner didn't like the panel living on the Admin page
 (a comms/marketing action, not user administration) and, more importantly, found it wasn't

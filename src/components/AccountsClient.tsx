@@ -251,9 +251,17 @@ function AttentionBubble({ reasons }: { reasons: AttentionReason[] }) {
 function QuickLogButton({
   pending,
   onLog,
+  openUpward = false,
 }: {
   pending: boolean;
   onLog: (type: ActivityType | null) => void;
+  /** Opens the menu above the button instead of below. Needed wherever this
+   *  button can end up hard against the bottom of the viewport (the account
+   *  sheet's footer) — opening downward there pushed the menu off-screen,
+   *  clipped by the sheet's own `overflow-hidden` with no way to scroll to
+   *  it. The row/card usages stay downward — they sit inside a scrollable
+   *  page, not pinned to the viewport edge. */
+  openUpward?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -286,7 +294,11 @@ function QuickLogButton({
         )}
       </button>
       {open && (
-        <div className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+        <div
+          className={`absolute right-0 z-20 w-48 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg ${
+            openUpward ? "bottom-full mb-1" : "mt-1"
+          }`}
+        >
           <p className="px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-slate-600">
             Log today as…
           </p>
@@ -1075,6 +1087,7 @@ export function AccountsClient({
               <QuickLogButton
                 pending={logPendingId === viewing.id}
                 onLog={(type) => handleLogToday(viewing, type)}
+                openUpward
               />
             ) : null
           }
