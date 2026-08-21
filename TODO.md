@@ -24,6 +24,17 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
 
 ## One-time setup pending
 
+- **Run migration `0058_quickbooks_export_tracking.sql`** — adds
+  `account_balance_history.qb_exported_at` (nullable timestamptz, additive). Powers the new
+  QuickBooks export page (Tools → QuickBooks export): tracks which transactions have already been
+  included in a downloaded export so re-running it for an overlapping date range doesn't hand back
+  the same rows twice (QuickBooks Desktop's Batch Enter Transactions has no duplicate detection of
+  its own). Degrades gracefully until run — the export still works, it just can't remember what was
+  already exported across runs, so the "already exported" column/checkbox will show 0 for everything.
+  ```sql
+  alter table public.account_balance_history add column if not exists qb_exported_at timestamptz;
+  ```
+
 - ~~Run migration `0057_walkthrough_seen.sql`~~ — **confirmed run 2026-08-11.** Adds
   `profiles.walkthrough_tour_seen` (nullable text, additive). Fixes the welcome walkthrough popping
   back up on a different browser/device: it was tracked only in that browser's own `localStorage`, so

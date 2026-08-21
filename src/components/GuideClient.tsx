@@ -27,6 +27,7 @@ import {
   Lightbulb,
   ChevronDown,
   Building2,
+  FileSpreadsheet,
   type LucideIcon,
 } from "lucide-react";
 import { ASSIGNABLE_STATUSES, STATUS_LABELS } from "@/lib/types";
@@ -269,6 +270,24 @@ const TOPICS: Topic[] = [
       "A check going TO one of your accounts isn't credited the moment it's printed — a mailed check hasn't actually arrived yet. Choose \"Post automatically\" and set how many days to wait (your default is set in Settings → Alerts & emails, and this one mailing can go up or down from it), or \"I'll mark it myself\" for no automatic posting at all. Either way it shows up on Money → Waiting to post, where \"Mark posted\" resolves it early, late, or exactly on schedule.",
       "The activity that resets the dormancy clock is logged at the same time the deposit posts, not when it's mailed — so the account only shows as active once the money is real.",
       "The bank's address comes from the FDIC branch data, so if a bank shows no address on file, run the branch refresh on the Road trip page first.",
+    ],
+  },
+  {
+    id: "quickbooks-export",
+    icon: FileSpreadsheet,
+    title: "QuickBooks export",
+    blurb: "Turn a month of activity into files QuickBooks Desktop can import.",
+    points: [
+      "One click covers every bank at once",
+      "Splits into deposits and withdrawals per account",
+      "Built for Batch Enter Transactions (paste from Excel)",
+      "Marks what's already been exported",
+    ],
+    tips: [
+      "Requires QuickBooks Desktop's Accountant or Enterprise edition — Batch Enter Transactions (under the Accountant menu) isn't in plain Pro or Premier.",
+      "Pick a date range and download — you get one CSV per account per direction (deposits/withdrawals), plus a README with exact paste-in steps, all in one ZIP.",
+      "The category on each row is a safe placeholder (this app doesn't know your real Chart of Accounts) — review it before or after pasting.",
+      "Once you download a range, those transactions are marked exported so running this again later won't include them twice. QuickBooks itself doesn't check for duplicates, so avoid re-pasting the same file.",
     ],
   },
   {
