@@ -7,6 +7,7 @@ import { getApprovedUser } from "@/lib/access";
 import { formatAssets } from "@/lib/format";
 import { sendCommunityNoteEmail } from "@/lib/email";
 import { logAudit, type AuditEntry } from "@/lib/audit";
+import { logPersonalActivity } from "@/lib/personalLog";
 import { friendlyDbError } from "@/lib/friendlyError";
 import { fetchAllRows } from "@/lib/pagination";
 import { normalizeRoutingNumber, routingNumberError } from "@/lib/routingNumber";
@@ -30,6 +31,7 @@ import {
   getDemoUnreadCerts,
   markDemoCommentsRead,
   getDemoHoldingCompanyInfo,
+  addDemoPersonalLog,
   type BankFields,
   type ImportRow,
 } from "@/lib/demo";
@@ -39,6 +41,8 @@ import {
   ELIGIBILITY_LABELS,
   CONVERSION_STAGE_LABELS,
   AUTO_OPEN_FROM_STATUSES,
+  STATUS_LABELS,
+  PRIORITY_LABELS,
 } from "@/lib/types";
 import type {
   BankStatus,
@@ -47,6 +51,7 @@ import type {
   BankComment,
   Bank,
   Account,
+  Priority,
 } from "@/lib/types";
 
 // Shared bank fields, with how to render each for a "what changed" summary.
@@ -84,6 +89,38 @@ function sharedFieldChanges(
   return SHARED_FIELDS.filter((f) => normShared(oldRow[f.key]) !== normShared(patch[f.key])).map(
     (f) => `${f.label} → ${f.fmt(patch[f.key])}`,
   );
+}
+
+// Fields that never propagate to anyone else — private to this user. For the
+// personal history log (which cares about "what did I change", not just
+// what's shared) this is combined with SHARED_FIELDS below.
+const PRIVATE_ONLY_FIELDS: {
+  key: string;
+  label: string;
+  fmt: (v: unknown) => string;
+}[] = [
+  { key: "name", label: "Name", fmt: (v) => (v as string) || "—" },
+  { key: "status", label: "Status", fmt: (v) => STATUS_LABELS[(v as BankStatus) ?? "untracked"] },
+  { key: "priority", label: "Priority", fmt: (v) => (v ? PRIORITY_LABELS[v as Priority] : "none") },
+  { key: "target_balance", label: "Target balance", fmt: (v) => (v != null ? `$${v}` : "—") },
+];
+
+/** Every field that changed between a bank's previous row and the new patch —
+ *  shared and private alike — as "Label → value" strings, for the personal
+ *  history log (/history). Unlike sharedFieldChanges above (which only cares
+ *  about what propagates to other users), this also covers name/status/
+ *  priority/target_balance, and flags a notes edit without exposing its
+ *  content. */
+function personalBankFieldChanges(
+  oldRow: Record<string, unknown> | null,
+  patch: Record<string, unknown>,
+): string[] {
+  if (!oldRow) return [];
+  const changes = [...SHARED_FIELDS, ...PRIVATE_ONLY_FIELDS]
+    .filter((f) => normShared(oldRow[f.key]) !== normShared(patch[f.key]))
+    .map((f) => `${f.label} → ${f.fmt(patch[f.key])}`);
+  if (normShared(oldRow.notes) !== normShared(patch.notes)) changes.push("Notes updated");
+  return changes;
 }
 
 export type BankFormValues = {
@@ -245,10 +282,32 @@ export async function upsertBank(
 
   if (DEMO_MODE) {
     if (values.id) {
+      const prevDemo = getDemoBanks().find((b) => b.id === values.id) as unknown as
+        | Record<string, unknown>
+        | undefined;
       updateDemoBank(values.id, patch);
       await autoQueueIfWantToOpen(values.id, patch.status!);
+      const changes = personalBankFieldChanges(prevDemo ?? null, patch as Record<string, unknown>);
+      if (changes.length) {
+        addDemoPersonalLog({
+          action: "bank_edit",
+          summary: `Updated ${patch.name}: ${changes.join("; ")}`,
+          entityType: "bank",
+          entityId: values.id,
+          cert: patch.cert ?? (prevDemo?.cert as number | null | undefined) ?? null,
+          bankName: patch.name,
+        });
+      }
     } else {
-      addDemoBank({ regulator: null, deleted_at: null, ...patch } as BankFields);
+      const newId = addDemoBank({ regulator: null, deleted_at: null, ...patch } as BankFields);
+      addDemoPersonalLog({
+        action: "bank_add",
+        summary: `Added ${patch.name}`,
+        entityType: "bank",
+        entityId: newId,
+        cert: patch.cert ?? null,
+        bankName: patch.name,
+      });
     }
     revalidate();
     return {};
@@ -289,6 +348,10 @@ export async function upsertBank(
     oldShared = prev ?? null;
   }
 
+  // Set on the insert path below, so the "Added ..." personal-log entry (near
+  // the end of this function) can deep-link to the new bank's own id.
+  let newBankId: string | null = null;
+
   if (values.id) {
     // The FDIC cert is treated as a durable identity everywhere else in the
     // app (shared notes, relationships, branch locations, road trips, FDIC/
@@ -312,7 +375,10 @@ export async function upsertBank(
       .select("id")
       .single();
     if (error) return { error: friendlyDbError(error.message) };
-    if (inserted) await autoQueueIfWantToOpen(inserted.id as string, patch.status!);
+    if (inserted) {
+      newBankId = inserted.id as string;
+      await autoQueueIfWantToOpen(newBankId, patch.status!);
+    }
 
     // For a new bank with a cert, add it (as untracked) to every other user who doesn't have it yet.
     if (patch.cert != null) {
@@ -463,6 +529,33 @@ export async function upsertBank(
     });
   }
 
+  // Personal history log entry (own copy of what changed, private, separate
+  // from the shared audit_log above) — covers every field, shared or not.
+  if (values.id) {
+    const personalChanges = personalBankFieldChanges(oldShared, patch as Record<string, unknown>);
+    if (personalChanges.length) {
+      await logPersonalActivity(supabase, {
+        userId: user.id,
+        action: "bank_edit",
+        summary: `Updated ${patch.name}: ${personalChanges.join("; ")}`,
+        entityType: "bank",
+        entityId: values.id,
+        cert: patch.cert ?? ((oldShared?.cert as number | null | undefined) ?? null),
+        bankName: patch.name,
+      });
+    }
+  } else if (newBankId) {
+    await logPersonalActivity(supabase, {
+      userId: user.id,
+      action: "bank_add",
+      summary: `Added ${patch.name}`,
+      entityType: "bank",
+      entityId: newBankId,
+      cert: patch.cert ?? null,
+      bankName: patch.name,
+    });
+  }
+
   revalidate();
   return {};
 }
@@ -569,8 +662,19 @@ export async function setBankStatus(
   status: BankStatus,
 ): Promise<{ error?: string }> {
   if (DEMO_MODE) {
+    const prev = getDemoBanks().find((b) => b.id === id);
     updateDemoBank(id, { status });
     await autoQueueIfWantToOpen(id, status);
+    if (prev && prev.status !== status) {
+      addDemoPersonalLog({
+        action: "bank_status",
+        summary: `Changed ${prev.name} status: ${STATUS_LABELS[prev.status]} → ${STATUS_LABELS[status]}`,
+        entityType: "bank",
+        entityId: id,
+        cert: prev.cert ?? null,
+        bankName: prev.name,
+      });
+    }
     revalidate();
     return {};
   }
@@ -581,9 +685,23 @@ export async function setBankStatus(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
+  const { data: prev } = await supabase.from("banks").select("name, cert, status").eq("id", id).maybeSingle();
+
   const { error } = await supabase.from("banks").update({ status }).eq("id", id);
   if (!error) await autoQueueIfWantToOpen(id, status);
   if (error) return { error: friendlyDbError(error.message) };
+
+  if (prev && prev.status !== status) {
+    await logPersonalActivity(supabase, {
+      userId: user.id,
+      action: "bank_status",
+      summary: `Changed ${prev.name} status: ${STATUS_LABELS[prev.status as BankStatus]} → ${STATUS_LABELS[status]}`,
+      entityType: "bank",
+      entityId: id,
+      cert: (prev.cert as number | null) ?? null,
+      bankName: prev.name as string,
+    });
+  }
 
   revalidate();
   return {};
@@ -592,7 +710,18 @@ export async function setBankStatus(
 /** Moves a bank (and its currently-active accounts) to Trash. */
 export async function deleteBank(id: string): Promise<{ error?: string }> {
   if (DEMO_MODE) {
+    const prev = getDemoBanks().find((b) => b.id === id);
     deleteDemoBank(id);
+    if (prev) {
+      addDemoPersonalLog({
+        action: "bank_delete",
+        summary: `Moved ${prev.name} to Trash`,
+        entityType: "bank",
+        entityId: id,
+        cert: prev.cert ?? null,
+        bankName: prev.name,
+      });
+    }
     revalidate();
     return {};
   }
@@ -602,6 +731,8 @@ export async function deleteBank(id: string): Promise<{ error?: string }> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
+
+  const { data: prev } = await supabase.from("banks").select("name, cert").eq("id", id).maybeSingle();
 
   const now = new Date().toISOString();
   const { error } = await supabase
@@ -616,13 +747,36 @@ export async function deleteBank(id: string): Promise<{ error?: string }> {
     .eq("bank_id", id)
     .is("deleted_at", null);
 
+  if (prev) {
+    await logPersonalActivity(supabase, {
+      userId: user.id,
+      action: "bank_delete",
+      summary: `Moved ${prev.name} to Trash`,
+      entityType: "bank",
+      entityId: id,
+      cert: (prev.cert as number | null) ?? null,
+      bankName: prev.name as string,
+    });
+  }
+
   revalidate();
   return {};
 }
 
 export async function restoreBank(id: string): Promise<{ error?: string }> {
   if (DEMO_MODE) {
+    const prev = getDemoTrashedBanks().find((b) => b.id === id);
     restoreDemoBank(id);
+    if (prev) {
+      addDemoPersonalLog({
+        action: "bank_restore",
+        summary: `Restored ${prev.name} from Trash`,
+        entityType: "bank",
+        entityId: id,
+        cert: prev.cert ?? null,
+        bankName: prev.name,
+      });
+    }
     revalidate();
     return {};
   }
@@ -639,7 +793,7 @@ export async function restoreBank(id: string): Promise<{ error?: string }> {
   // timestamp and stay in Trash.
   const { data: bankRow } = await supabase
     .from("banks")
-    .select("deleted_at")
+    .select("deleted_at, name, cert")
     .eq("id", id)
     .maybeSingle();
   const trashedAt = bankRow?.deleted_at as string | null;
@@ -658,6 +812,18 @@ export async function restoreBank(id: string): Promise<{ error?: string }> {
       .eq("deleted_at", trashedAt);
   }
 
+  if (bankRow) {
+    await logPersonalActivity(supabase, {
+      userId: user.id,
+      action: "bank_restore",
+      summary: `Restored ${bankRow.name} from Trash`,
+      entityType: "bank",
+      entityId: id,
+      cert: (bankRow.cert as number | null) ?? null,
+      bankName: bankRow.name as string,
+    });
+  }
+
   revalidate();
   return {};
 }
@@ -667,7 +833,16 @@ export async function permanentlyDeleteBank(
   id: string,
 ): Promise<{ error?: string }> {
   if (DEMO_MODE) {
+    const prev = getDemoTrashedBanks().find((b) => b.id === id);
     permanentlyDeleteDemoBank(id);
+    if (prev) {
+      addDemoPersonalLog({
+        action: "bank_permanent_delete",
+        summary: `Permanently deleted ${prev.name} — cannot be undone`,
+        cert: prev.cert ?? null,
+        bankName: prev.name,
+      });
+    }
     revalidate();
     return {};
   }
@@ -677,6 +852,9 @@ export async function permanentlyDeleteBank(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
+
+  // Read the name/cert before deleting — nothing to look up afterward.
+  const { data: prev } = await supabase.from("banks").select("name, cert").eq("id", id).maybeSingle();
 
   // Only ever hard-delete a bank that's already in Trash. This Server Action
   // is directly callable, not just reachable through the Trash page's
@@ -693,6 +871,17 @@ export async function permanentlyDeleteBank(
   if (error) return { error: friendlyDbError(error.message) };
   if (!data || data.length === 0) {
     return { error: "That bank isn't in Trash (or was already removed)." };
+  }
+
+  if (prev) {
+    // No entityId — the row no longer exists, so a deep link would 404.
+    await logPersonalActivity(supabase, {
+      userId: user.id,
+      action: "bank_permanent_delete",
+      summary: `Permanently deleted ${prev.name} — cannot be undone`,
+      cert: (prev.cert as number | null) ?? null,
+      bankName: prev.name as string,
+    });
   }
 
   revalidate();
@@ -795,6 +984,10 @@ export async function importBanks(
 
   if (DEMO_MODE) {
     const result = importDemoRows(rows);
+    addDemoPersonalLog({
+      action: "import",
+      summary: importSummaryText(rows.length, result),
+    });
     revalidate();
     return result;
   }
@@ -1101,8 +1294,7 @@ export async function importBanks(
     }
   }
 
-  revalidate();
-  return {
+  const result = {
     banks: banksTouched,
     accounts: accountsInsertedCount,
     accountsUpdated,
@@ -1110,6 +1302,35 @@ export async function importBanks(
     notes: notesPosted,
     rowErrors: rowErrors.length ? rowErrors : undefined,
   };
+  await logPersonalActivity(supabase, {
+    userId: user.id,
+    action: "import",
+    summary: importSummaryText(rows.length, result),
+  });
+
+  revalidate();
+  return result;
+}
+
+/** Human summary of an import's outcome, for the personal history log. */
+function importSummaryText(
+  rowCount: number,
+  result: {
+    banks?: number;
+    accounts?: number;
+    accountsUpdated?: number;
+    accountsSkipped?: number;
+    rowErrors?: string[];
+  },
+): string {
+  const parts: string[] = [];
+  if (result.banks) parts.push(`${result.banks} bank${result.banks === 1 ? "" : "s"}`);
+  if (result.accounts) parts.push(`${result.accounts} new account${result.accounts === 1 ? "" : "s"}`);
+  if (result.accountsUpdated) parts.push(`${result.accountsUpdated} account${result.accountsUpdated === 1 ? "" : "s"} updated`);
+  if (result.accountsSkipped) parts.push(`${result.accountsSkipped} skipped as duplicates`);
+  const failed = result.rowErrors?.length ?? 0;
+  const base = `Imported a spreadsheet (${rowCount} row${rowCount === 1 ? "" : "s"})${parts.length ? `: ${parts.join(", ")}` : ""}`;
+  return failed ? `${base} — ${failed} row${failed === 1 ? "" : "s"} failed` : base;
 }
 
 /**

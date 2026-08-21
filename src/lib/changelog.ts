@@ -21,6 +21,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-08-21",
+    title: "History — a private log of everything you've changed",
+    items: [
+      "New History page tracks every change to your own data: bank and account edits (renamed, account number changed, status changed, and more), deposits and withdrawals, money moves, imports, and deletes — with the exact bank/account named and a link straight to it.",
+      "This is separate from Updates' shared Activity feed (which only shows community notes and other shared changes everyone can see) — History is private to you, for double-checking what you did and catching a change made to the wrong bank.",
+      "Search and filter by category (Banks, Accounts, Money, Documents & checks, Imports) to find something quickly.",
+    ],
+  },
+  {
     date: "2026-08-11",
     title: "Report a bug or request a feature, right from the app",
     items: [

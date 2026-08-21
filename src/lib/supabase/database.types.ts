@@ -618,6 +618,45 @@ export type Database = {
         }
         Relationships: []
       }
+      personal_activity_log: {
+        Row: {
+          account_label: string | null
+          action: string
+          bank_name: string | null
+          cert: number | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          summary: string
+          user_id: string
+        }
+        Insert: {
+          account_label?: string | null
+          action: string
+          bank_name?: string | null
+          cert?: number | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          summary: string
+          user_id: string
+        }
+        Update: {
+          account_label?: string | null
+          action?: string
+          bank_name?: string | null
+          cert?: number | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          summary?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       payment_sources: {
         Row: {
           account_number: string | null

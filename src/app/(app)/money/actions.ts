@@ -10,11 +10,15 @@ import {
   addDemoTransaction,
   editLastDemoTransaction,
   deleteDemoTransaction,
+  addDemoPersonalLog,
+  getDemoTransactionAccountId,
 } from "@/lib/demo";
 import { friendlyDbError } from "@/lib/friendlyError";
 import { formatCurrency } from "@/lib/format";
 import { todayLocalStr } from "@/lib/date";
 import { inferTransactionType, type TransactionType } from "@/lib/transactionType";
+import { logPersonalActivity, accountLabel } from "@/lib/personalLog";
+import { ACCOUNT_TYPE_LABELS, type AccountType } from "@/lib/types";
 
 export type OutstandingSweep = {
   id: string;
@@ -58,6 +62,44 @@ type AcctJoin = {
   balance: number | null;
   bank: { name: string | null; state: string | null } | null;
 };
+
+/** Holder/type/bank name+cert for one account, resolved once and reused for
+ *  a personal-log entry — never trusted from the client, always re-read. */
+async function accountLogContext(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  accountId: string | null,
+): Promise<{ label: string | null; bankName: string | null; cert: number | null }> {
+  if (!accountId) return { label: null, bankName: null, cert: null };
+  const { data } = await supabase
+    .from("accounts")
+    .select("holder, account_type, bank:banks(name, cert)")
+    .eq("id", accountId)
+    .maybeSingle();
+  if (!data) return { label: null, bankName: null, cert: null };
+  const bank = Array.isArray(data.bank) ? data.bank[0] : data.bank;
+  return {
+    label: accountLabel(
+      data.holder as string | null,
+      data.account_type ? ACCOUNT_TYPE_LABELS[data.account_type as AccountType] : null,
+    ),
+    bankName: (bank?.name as string | null) ?? null,
+    cert: (bank?.cert as number | null) ?? null,
+  };
+}
+function demoAccountLogContext(accountId: string | null): {
+  label: string | null;
+  bankName: string | null;
+  cert: number | null;
+} {
+  const account = accountId ? getDemoAccounts().find((a) => a.id === accountId) : undefined;
+  if (!account) return { label: null, bankName: null, cert: null };
+  const bank = getDemoBanks().find((b) => b.id === account.bank_id);
+  return {
+    label: accountLabel(account.holder, account.account_type ? ACCOUNT_TYPE_LABELS[account.account_type] : null),
+    bankName: bank?.name ?? null,
+    cert: bank?.cert ?? null,
+  };
+}
 
 function revalidate() {
   revalidatePath("/money");
@@ -200,6 +242,12 @@ export async function addBorrowedFund(fields: {
   });
   if (error) return { error: friendlyDbError(error.message) };
 
+  await logPersonalActivity(supabase, {
+    userId: user.id,
+    action: "borrowed_fund_add",
+    summary: `Recorded ${formatCurrency(fields.amount)} borrowed from ${sourceName} — ${reason}`,
+  });
+
   revalidate();
   return {};
 }
@@ -217,6 +265,12 @@ export async function returnBorrowedFund(id: string): Promise<{ error?: string }
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
+  const { data: prev } = await supabase
+    .from("borrowed_funds")
+    .select("source_name, amount")
+    .eq("id", id)
+    .maybeSingle();
+
   // Server-side "today" — no single user timezone to reference here, same
   // convention as every other server-stamped date in this app (see lib/date.ts).
   const { error } = await supabase
@@ -225,6 +279,14 @@ export async function returnBorrowedFund(id: string): Promise<{ error?: string }
     .eq("id", id)
     .is("returned_at", null);
   if (error) return { error: friendlyDbError(error.message) };
+
+  if (prev) {
+    await logPersonalActivity(supabase, {
+      userId: user.id,
+      action: "borrowed_fund_return",
+      summary: `Marked ${formatCurrency(prev.amount as number)} borrowed from ${prev.source_name as string} as repaid`,
+    });
+  }
 
   revalidate();
   return {};
@@ -316,9 +378,15 @@ export async function createSweepBatch(
     if (applied < item.amount - 0.005) shortfall = true;
   }
 
+  const totalApplied = rows.reduce((s, row) => s + row.amount, 0);
+  await logPersonalActivity(supabase, {
+    userId: user.id,
+    action: "sweep_out",
+    summary: `Moved ${formatCurrency(totalApplied)} out of ${rows.length} account${rows.length === 1 ? "" : "s"}: ${r}`,
+  });
+
   revalidate();
   if (shortfall) {
-    const totalApplied = rows.reduce((s, row) => s + row.amount, 0);
     const totalRequested = valid.reduce((s, item) => s + item.amount, 0);
     return {
       error: `Only ${formatCurrency(totalApplied)} of the requested ${formatCurrency(totalRequested)} was moved (across ${rows.length} of ${valid.length} accounts) — one or more balances were lower than expected. Check Money moved for what actually went through.`,
@@ -342,7 +410,7 @@ export async function returnSweep(sweepId: string): Promise<{ error?: string }> 
 
   const { data: sweep } = await supabase
     .from("account_sweeps")
-    .select("id, returned_at")
+    .select("id, returned_at, amount, account_id, reason")
     .eq("id", sweepId)
     .maybeSingle();
   if (!sweep) return { error: "Move not found." };
@@ -353,6 +421,18 @@ export async function returnSweep(sweepId: string): Promise<{ error?: string }> 
   // can't apply the same return twice.
   const { error } = await supabase.rpc("return_sweep", { p_sweep_id: sweepId });
   if (error) return { error: friendlyDbError(error.message) };
+
+  const ctx = await accountLogContext(supabase, (sweep.account_id as string | null) ?? null);
+  await logPersonalActivity(supabase, {
+    userId: user.id,
+    action: "sweep_return",
+    summary: `Returned ${formatCurrency(sweep.amount as number)} to ${ctx.label ?? "account"} at ${ctx.bankName ?? "—"} (${sweep.reason as string})`,
+    entityType: "account",
+    entityId: (sweep.account_id as string | null) ?? null,
+    cert: ctx.cert,
+    bankName: ctx.bankName,
+    accountLabel: ctx.label,
+  });
 
   revalidate();
   return {};
@@ -442,6 +522,16 @@ export async function recordAccountTransaction(
   if (DEMO_MODE) {
     const result = addDemoTransaction(accountId, signedAmount, type, trimmedReason, asOfDate);
     if (result == null) return { error: "That account couldn't be found." };
+    const ctx = demoAccountLogContext(accountId);
+    addDemoPersonalLog({
+      action: "transaction_add",
+      summary: `${type === "deposit" ? "Deposit" : "Withdrawal"} of ${formatCurrency(amount)} — ${ctx.label ?? "account"} at ${ctx.bankName ?? "—"} (${trimmedReason})`,
+      entityType: "account",
+      entityId: accountId,
+      cert: ctx.cert,
+      bankName: ctx.bankName,
+      accountLabel: ctx.label,
+    });
     revalidate();
     return { newBalance: result };
   }
@@ -461,6 +551,18 @@ export async function recordAccountTransaction(
   });
   if (error) return { error: friendlyDbError(error.message) };
   if (data == null) return { error: "That account couldn't be found." };
+
+  const ctx = await accountLogContext(supabase, accountId);
+  await logPersonalActivity(supabase, {
+    userId: user.id,
+    action: "transaction_add",
+    summary: `${type === "deposit" ? "Deposit" : "Withdrawal"} of ${formatCurrency(amount)} — ${ctx.label ?? "account"} at ${ctx.bankName ?? "—"} (${trimmedReason})`,
+    entityType: "account",
+    entityId: accountId,
+    cert: ctx.cert,
+    bankName: ctx.bankName,
+    accountLabel: ctx.label,
+  });
 
   revalidate();
   return { newBalance: data };
@@ -483,10 +585,21 @@ export async function editLastAccountTransaction(
   const trimmedReason = reason.trim() || null;
 
   if (DEMO_MODE) {
+    const accountId = getDemoTransactionAccountId(transactionId);
     const result = editLastDemoTransaction(transactionId, amount, trimmedReason, asOfDate);
     if (result == null) {
       return { error: "A newer transaction was added — this can no longer be edited." };
     }
+    const ctx = demoAccountLogContext(accountId);
+    addDemoPersonalLog({
+      action: "transaction_edit",
+      summary: `Edited a transaction (${formatCurrency(amount)}) — ${ctx.label ?? "account"} at ${ctx.bankName ?? "—"}${trimmedReason ? `: ${trimmedReason}` : ""}`,
+      entityType: "account",
+      entityId: accountId,
+      cert: ctx.cert,
+      bankName: ctx.bankName,
+      accountLabel: ctx.label,
+    });
     revalidate();
     return { newBalance: result };
   }
@@ -496,6 +609,12 @@ export async function editLastAccountTransaction(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
+
+  const { data: txRow } = await supabase
+    .from("account_balance_history")
+    .select("account_id")
+    .eq("id", transactionId)
+    .maybeSingle();
 
   const { data, error } = await supabase.rpc("edit_last_account_transaction", {
     p_transaction_id: transactionId,
@@ -507,6 +626,18 @@ export async function editLastAccountTransaction(
   if (data == null) {
     return { error: "A newer transaction was added — this can no longer be edited." };
   }
+
+  const ctx = await accountLogContext(supabase, (txRow?.account_id as string | undefined) ?? null);
+  await logPersonalActivity(supabase, {
+    userId: user.id,
+    action: "transaction_edit",
+    summary: `Edited a transaction (${formatCurrency(amount)}) — ${ctx.label ?? "account"} at ${ctx.bankName ?? "—"}${trimmedReason ? `: ${trimmedReason}` : ""}`,
+    entityType: "account",
+    entityId: (txRow?.account_id as string | undefined) ?? null,
+    cert: ctx.cert,
+    bankName: ctx.bankName,
+    accountLabel: ctx.label,
+  });
 
   revalidate();
   return { newBalance: data };
@@ -524,8 +655,19 @@ export async function deleteAccountTransaction(
   adjustBalance: boolean,
 ): Promise<{ error?: string; newBalance?: number }> {
   if (DEMO_MODE) {
+    const accountId = getDemoTransactionAccountId(transactionId);
     const result = deleteDemoTransaction(transactionId, adjustBalance);
     if (result == null) return { error: "That transaction couldn't be found." };
+    const ctx = demoAccountLogContext(accountId);
+    addDemoPersonalLog({
+      action: "transaction_delete",
+      summary: `Deleted a transaction — ${ctx.label ?? "account"} at ${ctx.bankName ?? "—"}${adjustBalance ? " (balance adjusted)" : ""}`,
+      entityType: "account",
+      entityId: accountId,
+      cert: ctx.cert,
+      bankName: ctx.bankName,
+      accountLabel: ctx.label,
+    });
     revalidate();
     return { newBalance: result };
   }
@@ -536,12 +678,30 @@ export async function deleteAccountTransaction(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
+  const { data: txRow } = await supabase
+    .from("account_balance_history")
+    .select("account_id")
+    .eq("id", transactionId)
+    .maybeSingle();
+
   const { data, error } = await supabase.rpc("delete_account_transaction", {
     p_transaction_id: transactionId,
     p_adjust_balance: adjustBalance,
   });
   if (error) return { error: friendlyDbError(error.message) };
   if (data == null) return { error: "That transaction couldn't be found." };
+
+  const ctx = await accountLogContext(supabase, (txRow?.account_id as string | undefined) ?? null);
+  await logPersonalActivity(supabase, {
+    userId: user.id,
+    action: "transaction_delete",
+    summary: `Deleted a transaction — ${ctx.label ?? "account"} at ${ctx.bankName ?? "—"}${adjustBalance ? " (balance adjusted)" : ""}`,
+    entityType: "account",
+    entityId: (txRow?.account_id as string | undefined) ?? null,
+    cert: ctx.cert,
+    bankName: ctx.bankName,
+    accountLabel: ctx.label,
+  });
 
   revalidate();
   return { newBalance: data };

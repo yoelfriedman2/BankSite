@@ -12,13 +12,24 @@ import {
   updateDemoBank,
   getDemoBanks,
   getDemoAccounts,
+  getDemoTrashedAccounts,
+  addDemoPersonalLog,
   type AccountFields,
 } from "@/lib/demo";
-import { AUTO_OPEN_FROM_STATUSES, type Account, type ActivityType, type BankStatus } from "@/lib/types";
+import {
+  AUTO_OPEN_FROM_STATUSES,
+  ACCOUNT_TYPE_LABELS,
+  type Account,
+  type ActivityType,
+  type AccountType,
+  type BankStatus,
+} from "@/lib/types";
 import { skipCurrentMonthIfPast } from "@/lib/monthlyFee";
 import { stampOnRateChange } from "@/lib/interestAccrual";
 import { friendlyDbError } from "@/lib/friendlyError";
 import { normalizeRoutingNumber, routingNumberError } from "@/lib/routingNumber";
+import { formatCurrency } from "@/lib/format";
+import { logPersonalActivity, accountLabel } from "@/lib/personalLog";
 
 export type AccountFormValues = {
   id?: string;
@@ -170,6 +181,59 @@ function revalidate() {
   revalidatePath("/");
 }
 
+// Fields diffed for the personal history log's "what changed" summary.
+// Deliberately excludes balance (handled separately below, alongside the
+// atomic update_account_balance write) and the sensitive online-access
+// fields (flagged as a group, never their actual values — see
+// accountFieldChanges).
+const ACCOUNT_DIFF_FIELDS: {
+  key: string;
+  label: string;
+  fmt: (v: unknown) => string;
+}[] = [
+  { key: "holder", label: "Holder", fmt: (v) => (v as string) || "—" },
+  { key: "account_type", label: "Type", fmt: (v) => (v ? ACCOUNT_TYPE_LABELS[v as AccountType] : "—") },
+  { key: "account_number", label: "Account number", fmt: (v) => (v as string) || "—" },
+  { key: "routing_number", label: "Routing number", fmt: (v) => (v as string) || "—" },
+  { key: "last_activity_date", label: "Last activity", fmt: (v) => (v as string) || "—" },
+  { key: "dormancy_months_override", label: "Dormancy override", fmt: (v) => (v != null ? `${v} mo` : "—") },
+  { key: "cd_maturity_date", label: "CD maturity", fmt: (v) => (v as string) || "—" },
+  { key: "cd_term_months", label: "CD term", fmt: (v) => (v != null ? `${v} mo` : "—") },
+  { key: "cd_auto_renew", label: "Auto-renew", fmt: (v) => (v == null ? "not set" : v ? "yes" : "no") },
+  { key: "date_opened", label: "Date opened", fmt: (v) => (v as string) || "—" },
+  { key: "monthly_fee", label: "Monthly fee", fmt: (v) => (v != null ? formatCurrency(v as number) : "none") },
+  { key: "monthly_fee_day", label: "Fee day", fmt: (v) => (v != null ? `day ${v}` : "—") },
+  { key: "interest_rate", label: "Interest rate", fmt: (v) => (v != null ? `${v}%` : "none") },
+  { key: "exclude_min_balance", label: "Excluded from min-balance alert", fmt: (v) => (v ? "yes" : "no") },
+];
+const ONLINE_ACCESS_KEYS = ["online_url", "username", "password", "access_notes"];
+
+function normA(v: unknown): string {
+  if (Array.isArray(v)) return JSON.stringify(v);
+  return v == null ? "" : String(v);
+}
+
+/** Every field that changed between an account's previous row and the new
+ *  patch, as "Label → value" strings, for the personal history log
+ *  (/history). Notes and online-access fields are flagged as changed without
+ *  ever exposing their content — this log is private to the user, but a
+ *  saved password/login URL still shouldn't be echoed back in a plain-text
+ *  summary line. */
+function accountFieldChanges(
+  oldRow: Record<string, unknown> | null,
+  patch: Record<string, unknown>,
+): string[] {
+  if (!oldRow) return [];
+  const changes = ACCOUNT_DIFF_FIELDS.filter((f) => normA(oldRow[f.key]) !== normA(patch[f.key])).map(
+    (f) => `${f.label} → ${f.fmt(patch[f.key])}`,
+  );
+  if (normA(oldRow.notes) !== normA(patch.notes)) changes.push("Notes updated");
+  if (ONLINE_ACCESS_KEYS.some((k) => normA(oldRow[k]) !== normA(patch[k]))) {
+    changes.push("Online access updated");
+  }
+  return changes;
+}
+
 export async function upsertAccount(
   values: AccountFormValues,
 ): Promise<{ error?: string }> {
@@ -187,6 +251,7 @@ export async function upsertAccount(
       patch.monthly_fee != null && patch.monthly_fee_day != null
         ? skipCurrentMonthIfPast(patch.monthly_fee_day, now)
         : null;
+    const bankName = demoBank?.name ?? "—";
     if (values.id) {
       const prev = getDemoAccounts().find((a) => a.id === values.id);
       const feeConfigChanged =
@@ -203,13 +268,44 @@ export async function upsertAccount(
           ? { interest_last_accrued_on: stampOnRateChange(patch.interest_rate, now) }
           : {}),
       });
+      const changes = accountFieldChanges(
+        (prev as unknown as Record<string, unknown>) ?? null,
+        patch as unknown as Record<string, unknown>,
+      );
+      const oldBalance = prev?.balance ?? null;
+      if (patch.balance != null && patch.balance !== oldBalance) {
+        changes.push(
+          `Balance → ${formatCurrency(patch.balance)}${oldBalance != null ? ` (was ${formatCurrency(oldBalance)})` : ""}`,
+        );
+      }
+      if (changes.length) {
+        addDemoPersonalLog({
+          action: "account_edit",
+          summary: `Updated ${accountLabel(patch.holder, patch.account_type ? ACCOUNT_TYPE_LABELS[patch.account_type as AccountType] : null) ?? "account"} at ${bankName}: ${changes.join("; ")}`,
+          entityType: "account",
+          entityId: values.id,
+          cert: demoBank?.cert ?? null,
+          bankName,
+          accountLabel: accountLabel(patch.holder, patch.account_type ? ACCOUNT_TYPE_LABELS[patch.account_type as AccountType] : null),
+        });
+      }
     } else {
-      addDemoAccount(values.bank_id, {
+      const newId = addDemoAccount(values.bank_id, {
         ...patch,
         last_check_number: null,
         monthly_fee_last_charged_on: monthlyFeeLastChargedOn,
         interest_last_accrued_on: stampOnRateChange(patch.interest_rate, now),
         deleted_at: null,
+      });
+      const label = accountLabel(patch.holder, patch.account_type ? ACCOUNT_TYPE_LABELS[patch.account_type as AccountType] : null);
+      addDemoPersonalLog({
+        action: "account_add",
+        summary: `Added ${label ?? "an account"} at ${bankName}`,
+        entityType: "account",
+        entityId: newId,
+        cert: demoBank?.cert ?? null,
+        bankName,
+        accountLabel: label,
       });
     }
     if (demoBank && AUTO_OPEN_FROM_STATUSES.has(demoBank.status)) {
@@ -226,21 +322,27 @@ export async function upsertAccount(
   if (!user) return { error: "You are not signed in." };
 
   // Ownership check: RLS returns a row only if this bank is the caller's own.
+  // name/cert are also fetched here (not just id) so they're on hand for the
+  // personal-log entries below without a second round trip.
   const { data: ownedBank } = await supabase
     .from("banks")
-    .select("id")
+    .select("id, name, cert")
     .eq("id", values.bank_id)
     .maybeSingle();
   if (!ownedBank) return { error: "Bank not found." };
+  const bankName = (ownedBank.name as string) ?? "—";
+  const bankCert = (ownedBank.cert as number | null) ?? null;
 
   const today = new Date().toISOString().slice(0, 10);
   const now = new Date();
   if (values.id) {
     // Record a dated balance point when the balance changes, so the
-    // "balance as of date" history stays accurate.
+    // "balance as of date" history stays accurate. select("*") (not a
+    // narrower column list) so the full previous row is on hand for the
+    // personal-log field-diff below.
     const { data: prev } = await supabase
       .from("accounts")
-      .select("balance, monthly_fee, monthly_fee_day, interest_rate, bank_id")
+      .select("*")
       .eq("id", values.id)
       .maybeSingle();
     if (!prev) return { error: "Account not found." };
@@ -340,6 +442,34 @@ export async function upsertAccount(
         }
       }
     }
+
+    // Personal history log entry — every field that changed, private to this
+    // user (separate from the shared bank-field propagation elsewhere).
+    const changes = accountFieldChanges(
+      prev as unknown as Record<string, unknown>,
+      patch as unknown as Record<string, unknown>,
+    );
+    if (balanceChanging) {
+      changes.push(
+        `Balance → ${formatCurrency(patchBalance)}${oldBalance != null ? ` (was ${formatCurrency(oldBalance)})` : ""}`,
+      );
+    }
+    if (changes.length) {
+      const label = accountLabel(
+        (patch.holder as string | null) ?? null,
+        patch.account_type ? ACCOUNT_TYPE_LABELS[patch.account_type as AccountType] : null,
+      );
+      await logPersonalActivity(supabase, {
+        userId: user.id,
+        action: "account_edit",
+        summary: `Updated ${label ?? "an account"} at ${bankName}: ${changes.join("; ")}`,
+        entityType: "account",
+        entityId: values.id,
+        cert: bankCert,
+        bankName,
+        accountLabel: label,
+      });
+    }
   } else {
     const monthlyFeeLastChargedOn =
       patch.monthly_fee != null && patch.monthly_fee_day != null
@@ -376,6 +506,21 @@ export async function upsertAccount(
         console.error(`[upsertAccount] opening-balance history insert failed for new account ${created.id}:`, historyErr.message);
       }
     }
+
+    const label = accountLabel(
+      (patch.holder as string | null) ?? null,
+      patch.account_type ? ACCOUNT_TYPE_LABELS[patch.account_type as AccountType] : null,
+    );
+    await logPersonalActivity(supabase, {
+      userId: user.id,
+      action: "account_add",
+      summary: `Added ${label ?? "an account"} at ${bankName}`,
+      entityType: "account",
+      entityId: created.id as string,
+      cert: bankCert,
+      bankName,
+      accountLabel: label,
+    });
   }
 
   // Auto-promote to "open" on insert or edit if the bank status warrants it.
@@ -398,7 +543,21 @@ export async function upsertAccount(
 /** Moves an account to Trash. */
 export async function deleteAccount(id: string): Promise<{ error?: string }> {
   if (DEMO_MODE) {
+    const prev = getDemoAccounts().find((a) => a.id === id);
+    const demoBank = prev ? getDemoBanks().find((b) => b.id === prev.bank_id) : undefined;
     deleteDemoAccount(id);
+    if (prev) {
+      const label = accountLabel(prev.holder, prev.account_type ? ACCOUNT_TYPE_LABELS[prev.account_type] : null);
+      addDemoPersonalLog({
+        action: "account_delete",
+        summary: `Moved ${label ?? "an account"} at ${demoBank?.name ?? "—"} to Trash`,
+        entityType: "account",
+        entityId: id,
+        cert: demoBank?.cert ?? null,
+        bankName: demoBank?.name ?? null,
+        accountLabel: label,
+      });
+    }
     revalidate();
     return {};
   }
@@ -409,11 +568,35 @@ export async function deleteAccount(id: string): Promise<{ error?: string }> {
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
+  const { data: prev } = await supabase
+    .from("accounts")
+    .select("holder, account_type, bank:banks(name, cert)")
+    .eq("id", id)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("accounts")
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id);
   if (error) return { error: friendlyDbError(error.message) };
+
+  if (prev) {
+    const prevBank = Array.isArray(prev.bank) ? prev.bank[0] : prev.bank;
+    const label = accountLabel(
+      prev.holder as string | null,
+      prev.account_type ? ACCOUNT_TYPE_LABELS[prev.account_type as AccountType] : null,
+    );
+    await logPersonalActivity(supabase, {
+      userId: user.id,
+      action: "account_delete",
+      summary: `Moved ${label ?? "an account"} at ${prevBank?.name ?? "—"} to Trash`,
+      entityType: "account",
+      entityId: id,
+      cert: (prevBank?.cert as number | null) ?? null,
+      bankName: (prevBank?.name as string | null) ?? null,
+      accountLabel: label,
+    });
+  }
 
   revalidate();
   return {};
@@ -421,12 +604,24 @@ export async function deleteAccount(id: string): Promise<{ error?: string }> {
 
 export async function restoreAccount(id: string): Promise<{ error?: string }> {
   if (DEMO_MODE) {
-    const acc = getDemoAccounts().find((a) => a.id === id);
+    const acc = getDemoTrashedAccounts().find((a) => a.id === id);
     const bank = acc ? getDemoBanks().find((b) => b.id === acc.bank_id) : undefined;
     if (bank?.deleted_at) {
       return { error: "This account's bank is also in Trash — restore the bank first." };
     }
     restoreDemoAccount(id);
+    if (acc) {
+      const label = accountLabel(acc.holder, acc.account_type ? ACCOUNT_TYPE_LABELS[acc.account_type] : null);
+      addDemoPersonalLog({
+        action: "account_restore",
+        summary: `Restored ${label ?? "an account"} at ${bank?.name ?? "—"} from Trash`,
+        entityType: "account",
+        entityId: id,
+        cert: bank?.cert ?? null,
+        bankName: bank?.name ?? null,
+        accountLabel: label,
+      });
+    }
     revalidate();
     return {};
   }
@@ -441,13 +636,17 @@ export async function restoreAccount(id: string): Promise<{ error?: string }> {
   // account sitting under a soft-deleted bank (INT-04) — the Trash page shows
   // banks and accounts as separate lists, so restoring just the account
   // (without also restoring its bank) is an easy way to end up in exactly
-  // that inconsistent state. Block it with a clear reason instead.
-  const { data: acc } = await supabase.from("accounts").select("bank_id").eq("id", id).maybeSingle();
-  if (acc?.bank_id) {
-    const { data: bank } = await supabase.from("banks").select("deleted_at").eq("id", acc.bank_id).maybeSingle();
-    if (bank?.deleted_at) {
-      return { error: "This account's bank is also in Trash — restore the bank first." };
-    }
+  // that inconsistent state. Block it with a clear reason instead. Also
+  // fetches holder/account_type/bank name+cert here (one query) so the
+  // personal-log entry below doesn't need a second round trip.
+  const { data: acc } = await supabase
+    .from("accounts")
+    .select("bank_id, holder, account_type, bank:banks(name, cert, deleted_at)")
+    .eq("id", id)
+    .maybeSingle();
+  const accBank = acc ? (Array.isArray(acc.bank) ? acc.bank[0] : acc.bank) : null;
+  if (accBank?.deleted_at) {
+    return { error: "This account's bank is also in Trash — restore the bank first." };
   }
 
   const { error } = await supabase
@@ -455,6 +654,23 @@ export async function restoreAccount(id: string): Promise<{ error?: string }> {
     .update({ deleted_at: null })
     .eq("id", id);
   if (error) return { error: friendlyDbError(error.message) };
+
+  if (acc) {
+    const label = accountLabel(
+      acc.holder as string | null,
+      acc.account_type ? ACCOUNT_TYPE_LABELS[acc.account_type as AccountType] : null,
+    );
+    await logPersonalActivity(supabase, {
+      userId: user.id,
+      action: "account_restore",
+      summary: `Restored ${label ?? "an account"} at ${accBank?.name ?? "—"} from Trash`,
+      entityType: "account",
+      entityId: id,
+      cert: (accBank?.cert as number | null) ?? null,
+      bankName: (accBank?.name as string | null) ?? null,
+      accountLabel: label,
+    });
+  }
 
   revalidate();
   return {};
@@ -465,7 +681,19 @@ export async function permanentlyDeleteAccount(
   id: string,
 ): Promise<{ error?: string }> {
   if (DEMO_MODE) {
+    const prev = getDemoTrashedAccounts().find((a) => a.id === id);
+    const demoBank = prev ? getDemoBanks().find((b) => b.id === prev.bank_id) : undefined;
     permanentlyDeleteDemoAccount(id);
+    if (prev) {
+      const label = accountLabel(prev.holder, prev.account_type ? ACCOUNT_TYPE_LABELS[prev.account_type] : null);
+      addDemoPersonalLog({
+        action: "account_permanent_delete",
+        summary: `Permanently deleted ${label ?? "an account"} at ${demoBank?.name ?? "—"} — cannot be undone`,
+        cert: demoBank?.cert ?? null,
+        bankName: demoBank?.name ?? null,
+        accountLabel: label,
+      });
+    }
     revalidate();
     return {};
   }
@@ -475,6 +703,13 @@ export async function permanentlyDeleteAccount(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
+
+  // Read the label/bank before deleting — nothing to look up afterward.
+  const { data: prev } = await supabase
+    .from("accounts")
+    .select("holder, account_type, bank:banks(name, cert)")
+    .eq("id", id)
+    .maybeSingle();
 
   // Only ever hard-delete an account that's already in Trash — same guard as
   // permanentlyDeleteBank, for the same reason: this Server Action is
@@ -491,6 +726,22 @@ export async function permanentlyDeleteAccount(
     return { error: "That account isn't in Trash (or was already removed)." };
   }
 
+  if (prev) {
+    const prevBank = Array.isArray(prev.bank) ? prev.bank[0] : prev.bank;
+    const label = accountLabel(
+      prev.holder as string | null,
+      prev.account_type ? ACCOUNT_TYPE_LABELS[prev.account_type as AccountType] : null,
+    );
+    await logPersonalActivity(supabase, {
+      userId: user.id,
+      action: "account_permanent_delete",
+      summary: `Permanently deleted ${label ?? "an account"} at ${prevBank?.name ?? "—"} — cannot be undone`,
+      cert: (prevBank?.cert as number | null) ?? null,
+      bankName: (prevBank?.name as string | null) ?? null,
+      accountLabel: label,
+    });
+  }
+
   revalidate();
   return {};
 }
@@ -502,7 +753,7 @@ export async function duplicateAccount(
     const source = getDemoAccounts().find((a) => a.id === id);
     if (!source) return { error: "Account not found." };
     const demoBank = getDemoBanks().find((b) => b.id === source.bank_id);
-    addDemoAccount(source.bank_id, {
+    const newId = addDemoAccount(source.bank_id, {
       ...fieldsFromAccount(source),
       account_number: null,
       activity_log: [],
@@ -530,6 +781,16 @@ export async function duplicateAccount(
     if (demoBank && AUTO_OPEN_FROM_STATUSES.has(demoBank.status)) {
       updateDemoBank(source.bank_id, { status: "open" });
     }
+    const label = accountLabel(source.holder, source.account_type ? ACCOUNT_TYPE_LABELS[source.account_type] : null);
+    addDemoPersonalLog({
+      action: "account_duplicate",
+      summary: `Duplicated ${label ?? "an account"} at ${demoBank?.name ?? "—"} as a new account`,
+      entityType: "account",
+      entityId: newId,
+      cert: demoBank?.cert ?? null,
+      bankName: demoBank?.name ?? null,
+      accountLabel: label,
+    });
     revalidate();
     return {};
   }
@@ -573,12 +834,24 @@ export async function duplicateAccount(
 
   const { data: bank } = await supabase
     .from("banks")
-    .select("status")
+    .select("name, cert, status")
     .eq("id", bankId)
     .maybeSingle();
   if (bank && AUTO_OPEN_FROM_STATUSES.has(bank.status as BankStatus)) {
     await supabase.from("banks").update({ status: "open" }).eq("id", bankId);
   }
+
+  const label = accountLabel(src.holder, src.account_type ? ACCOUNT_TYPE_LABELS[src.account_type] : null);
+  await logPersonalActivity(supabase, {
+    userId: user.id,
+    action: "account_duplicate",
+    summary: `Duplicated ${label ?? "an account"} at ${bank?.name ?? "—"} as a new account`,
+    entityType: "account",
+    entityId: created.id as string,
+    cert: (bank?.cert as number | null) ?? null,
+    bankName: (bank?.name as string | null) ?? null,
+    accountLabel: label,
+  });
 
   revalidate();
   return {};

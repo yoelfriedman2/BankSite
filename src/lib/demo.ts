@@ -13,6 +13,7 @@ import { AUTO_OPEN_FROM_STATUSES, type Account, type Bank, type BankComment, typ
 import { BANKS_SEED } from "./banks-seed";
 import type { RoadTripPlan } from "@/app/(app)/road-trip/actions";
 import { EDITABLE_TRANSACTION_TYPES, type TransactionType } from "./transactionType";
+import type { PersonalLogAction, PersonalLogEntityType } from "./personalLog";
 
 // Demo mode bypasses auth entirely, so it must never be active on any
 // production-style run — even if DEMO_MODE=true is left set there by
@@ -257,6 +258,18 @@ export type DemoBalancePoint = {
   created_at: string;
 };
 
+export type DemoPersonalLogEntry = {
+  id: string;
+  action: PersonalLogAction;
+  summary: string;
+  entity_type: PersonalLogEntityType | null;
+  entity_id: string | null;
+  cert: number | null;
+  bank_name: string | null;
+  account_label: string | null;
+  created_at: string;
+};
+
 type DemoStore = {
   profile: Profile;
   banks: Bank[];
@@ -266,6 +279,7 @@ type DemoStore = {
   roadTrips: DemoTrip[];
   holdingCompanies: HoldingCompany[];
   balanceHistory: DemoBalancePoint[];
+  personalActivityLog: DemoPersonalLogEntry[];
 };
 
 function createInitialStore(): DemoStore {
@@ -452,6 +466,7 @@ function createInitialStore(): DemoStore {
     roadTrips: [],
     holdingCompanies: [sampleHoldingCompany],
     balanceHistory,
+    personalActivityLog: [],
   };
 }
 
@@ -475,8 +490,10 @@ export function getDemoBanks(): Bank[] {
 export function getDemoTrashedBanks(): Bank[] {
   return store().banks.filter((b) => !!b.deleted_at);
 }
-export function addDemoBank(fields: BankFields): void {
-  store().banks = [makeBank(fields), ...store().banks];
+export function addDemoBank(fields: BankFields): string {
+  const bank = makeBank(fields);
+  store().banks = [bank, ...store().banks];
+  return bank.id;
 }
 
 // ---- Holding companies ----
@@ -593,8 +610,10 @@ export function getDemoAccounts(): Account[] {
 export function getDemoTrashedAccounts(): Account[] {
   return store().accounts.filter((a) => !!a.deleted_at);
 }
-export function addDemoAccount(bankId: string, fields: AccountFields): void {
-  store().accounts = [...store().accounts, makeAccount(bankId, fields)];
+export function addDemoAccount(bankId: string, fields: AccountFields): string {
+  const account = makeAccount(bankId, fields);
+  store().accounts = [...store().accounts, account];
+  return account.id;
 }
 export function updateDemoAccount(id: string, fields: Partial<AccountFields>): void {
   store().accounts = store().accounts.map((a) =>
@@ -618,6 +637,12 @@ export function getDemoBalanceHistory(accountId: string): DemoBalancePoint[] {
   return store()
     .balanceHistory.filter((h) => h.account_id === accountId)
     .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
+}
+/** Which account a ledger row belongs to — looked up BEFORE editing/deleting
+ *  it (edit/delete resolve a new balance, not the account id), so the
+ *  personal history log can still name the right account/bank afterward. */
+export function getDemoTransactionAccountId(transactionId: string): string | null {
+  return store().balanceHistory.find((h) => h.id === transactionId)?.account_id ?? null;
 }
 
 /** Mirrors record_account_transaction (migration 0051): applies a signed
@@ -707,6 +732,36 @@ export function deleteDemoTransaction(transactionId: string, adjustBalance: bool
 }
 export function permanentlyDeleteDemoAccount(id: string): void {
   store().accounts = store().accounts.filter((a) => a.id !== id);
+}
+
+// ---- Personal activity log (private, per-user history — /history page) ----
+export function getDemoPersonalActivityLog(): DemoPersonalLogEntry[] {
+  // Newest first, matching the real query's ORDER BY created_at DESC.
+  return [...store().personalActivityLog].reverse();
+}
+export function addDemoPersonalLog(entry: {
+  action: PersonalLogAction;
+  summary: string;
+  entityType?: PersonalLogEntityType | null;
+  entityId?: string | null;
+  cert?: number | null;
+  bankName?: string | null;
+  accountLabel?: string | null;
+}): void {
+  store().personalActivityLog = [
+    ...store().personalActivityLog,
+    {
+      id: crypto.randomUUID(),
+      action: entry.action,
+      summary: entry.summary,
+      entity_type: entry.entityType ?? null,
+      entity_id: entry.entityId ?? null,
+      cert: entry.cert ?? null,
+      bank_name: entry.bankName ?? null,
+      account_label: entry.accountLabel ?? null,
+      created_at: new Date().toISOString(),
+    },
+  ];
 }
 
 /** Distinct holder names: the user's saved list plus any used on active accounts. */

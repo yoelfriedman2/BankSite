@@ -27,6 +27,7 @@ import {
   Lightbulb,
   ChevronDown,
   Building2,
+  History,
   type LucideIcon,
 } from "lucide-react";
 import { ASSIGNABLE_STATUSES, STATUS_LABELS } from "@/lib/types";
@@ -398,8 +399,24 @@ const TOPICS: Topic[] = [
       "Who changed shared bank info, notes, or links",
     ],
     tips: [
-      "The Activity log only records shared changes — your private edits (status, notes) never show up there.",
+      "The Activity log only records shared changes — your private edits (status, notes) never show up there. Those show up on History instead.",
       "Tap any activity entry to jump straight to that bank.",
+    ],
+  },
+  {
+    id: "history",
+    icon: History,
+    title: "History",
+    blurb: "A private record of everything you've changed.",
+    points: [
+      "Bank and account edits — renamed, account number changed, status changed, and more",
+      "Deposits, withdrawals, and other money moves",
+      "Imports and deletes",
+    ],
+    tips: [
+      "Only you can see this — it's the private counterpart to Updates' shared Activity log.",
+      "Useful for double-checking what you did, or catching a change made to the wrong bank — tap an entry to jump straight to it.",
+      "Search or filter by category (Banks, Accounts, Money, Documents & checks, Imports) to find something quickly.",
     ],
   },
   {

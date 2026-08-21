@@ -3,6 +3,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DEMO_MODE } from "@/lib/demo";
+import { logPersonalActivity, accountLabel } from "@/lib/personalLog";
+import { ACCOUNT_TYPE_LABELS, type AccountType } from "@/lib/types";
 
 const BUCKET = "account-documents";
 
@@ -82,8 +84,14 @@ export async function uploadDocument(formData: FormData): Promise<AccountDocumen
   const accountId = formData.get("accountId") as string | null;
   if (!file || !accountId) throw new Error("Missing file or account");
 
-  // Ownership check: RLS returns a row only if this account is the caller's own.
-  const { data: owned } = await supabase.from("accounts").select("id").eq("id", accountId).maybeSingle();
+  // Ownership check: RLS returns a row only if this account is the caller's
+  // own. holder/type/bank are also fetched here so the personal-log entry
+  // below doesn't need a second round trip.
+  const { data: owned } = await supabase
+    .from("accounts")
+    .select("id, holder, account_type, bank:banks(name, cert)")
+    .eq("id", accountId)
+    .maybeSingle();
   if (!owned) throw new Error("Account not found");
 
   const ext = file.name.includes(".") ? file.name.split(".").pop() : "";
@@ -116,6 +124,22 @@ export async function uploadDocument(formData: FormData): Promise<AccountDocumen
     await admin.storage.from(BUCKET).remove([storagePath]);
     throw new Error(error.message);
   }
+
+  const bank = Array.isArray(owned.bank) ? owned.bank[0] : owned.bank;
+  const label = accountLabel(
+    owned.holder as string | null,
+    owned.account_type ? ACCOUNT_TYPE_LABELS[owned.account_type as AccountType] : null,
+  );
+  await logPersonalActivity(supabase, {
+    userId: user.id,
+    action: "document_add",
+    summary: `Uploaded a document (${file.name}) — ${label ?? "account"} at ${bank?.name ?? "—"}`,
+    entityType: "account",
+    entityId: accountId,
+    cert: (bank?.cert as number | null) ?? null,
+    bankName: (bank?.name as string | null) ?? null,
+    accountLabel: label,
+  });
 
   return data;
 }
@@ -174,10 +198,12 @@ export async function deleteDocument(docId: string): Promise<void> {
   if (!user) throw new Error("Not authenticated");
 
   // Read the row via RLS (owner-scoped) to get its real storage path — never
-  // trust a client-supplied path for the storage removal.
+  // trust a client-supplied path for the storage removal. filename/account
+  // are also fetched here so the personal-log entry below doesn't need a
+  // second round trip.
   const { data: row } = await supabase
     .from("account_documents")
-    .select("storage_path")
+    .select("storage_path, filename, account:accounts(holder, account_type, bank:banks(name, cert))")
     .eq("id", docId)
     .maybeSingle();
   if (!row) throw new Error("Not found");
@@ -200,4 +226,20 @@ export async function deleteDocument(docId: string): Promise<void> {
 
   const { error } = await supabase.from("account_documents").delete().eq("id", docId);
   if (error) throw new Error(error.message);
+
+  const account = Array.isArray(row.account) ? row.account[0] : row.account;
+  const bank = account ? (Array.isArray(account.bank) ? account.bank[0] : account.bank) : null;
+  const label = accountLabel(
+    account?.holder as string | null,
+    account?.account_type ? ACCOUNT_TYPE_LABELS[account.account_type as AccountType] : null,
+  );
+  await logPersonalActivity(supabase, {
+    userId: user.id,
+    action: "document_delete",
+    summary: `Deleted a document (${(row.filename as string | null) ?? "—"}) — ${label ?? "account"} at ${bank?.name ?? "—"}`,
+    entityType: "account",
+    cert: (bank?.cert as number | null) ?? null,
+    bankName: (bank?.name as string | null) ?? null,
+    accountLabel: label,
+  });
 }

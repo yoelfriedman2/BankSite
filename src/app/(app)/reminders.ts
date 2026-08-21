@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { DEMO_MODE } from "@/lib/demo";
 import type { Reminder } from "@/lib/types";
 import { friendlyDbError } from "@/lib/friendlyError";
+import { logPersonalActivity } from "@/lib/personalLog";
 
 function revalidate() {
   revalidatePath("/banks");
@@ -78,14 +79,25 @@ export async function addReminder(
   // Ownership check: RLS returns a row only if this bank is the caller's own
   // (DATA-10) — without this, a reminder could be inserted pointing at a
   // bank_id that isn't actually this user's, same class of gap already
-  // closed for accounts/documents elsewhere in the app.
-  const { data: owned } = await supabase.from("banks").select("id").eq("id", bankId).maybeSingle();
+  // closed for accounts/documents elsewhere in the app. name/cert are also
+  // fetched here so the personal-log entry below doesn't need a second query.
+  const { data: owned } = await supabase.from("banks").select("id, name, cert").eq("id", bankId).maybeSingle();
   if (!owned) return { error: "Bank not found." };
 
   const { error } = await supabase
     .from("reminders")
     .insert({ user_id: user.id, bank_id: bankId, note: text, due_date: dueDate });
   if (error) return { error: friendlyDbError(error.message) };
+
+  await logPersonalActivity(supabase, {
+    userId: user.id,
+    action: "reminder_add",
+    summary: `Added a reminder for ${owned.name} on ${dueDate}: ${text}`,
+    entityType: "bank",
+    entityId: bankId,
+    cert: (owned.cert as number | null) ?? null,
+    bankName: owned.name as string,
+  });
 
   revalidate();
   return {};
@@ -110,8 +122,32 @@ export async function toggleReminderDone(
 export async function deleteReminder(id: string): Promise<{ error?: string }> {
   if (DEMO_MODE) return {};
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { data: prev } = await supabase
+    .from("reminders")
+    .select("note, bank:banks(name, cert)")
+    .eq("id", id)
+    .maybeSingle();
+
   const { error } = await supabase.from("reminders").delete().eq("id", id);
   if (error) return { error: friendlyDbError(error.message) };
+
+  if (prev) {
+    const bank = Array.isArray(prev.bank) ? prev.bank[0] : prev.bank;
+    await logPersonalActivity(supabase, {
+      userId: user.id,
+      action: "reminder_delete",
+      summary: `Deleted a reminder for ${bank?.name ?? "—"}: ${prev.note as string}`,
+      entityType: "bank",
+      cert: (bank?.cert as number | null) ?? null,
+      bankName: (bank?.name as string | null) ?? null,
+    });
+  }
+
   revalidate();
   return {};
 }

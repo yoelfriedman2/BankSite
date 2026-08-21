@@ -176,6 +176,105 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-08-21 (new: History — a private, per-user change log, separate from the shared Activity feed)**
+— User request: the existing Activity log on /updates only ever shows changes to *shared* data
+(community notes, shared bank-field propagation, bank links — see `lib/audit.ts`'s `audit_log`) —
+there was nothing showing a user their own private history: which account they edited, when they
+changed an account number or holder name, every deposit/withdrawal, what they imported, what they
+deleted. The explicit use case: going back to check what you actually did, or catching a change made
+to the wrong bank. Decided on a new top-level page (`/history`, own nav entry in "More", right after
+Updates) rather than folding it into Updates' existing Activity/What's-new split — it's a
+fundamentally different data domain (private per-user vs. shared-to-everyone), a different intended
+usage pattern (audit/lookup vs. browse), and would only have cluttered that page's already-tight
+two-column layout.
+
+- **New `personal_activity_log` table** (migration **0058_personal_activity_log.sql** — not yet run,
+  see TODO.md), private per-user, RLS scoped to `user_id = auth.uid()` for both SELECT and INSERT
+  (the ordinary "own rows only" pattern — **not** the admin client, unlike `audit_log`, since this is
+  private data, not shared). Append-only: no UPDATE/DELETE policy at all, so an entry can't later be
+  edited or removed even by its own owner. `entity_id`/`cert`/`bank_name`/`account_label` are
+  deliberately **not** foreign keys and are denormalized at write time — the whole point is that "I
+  permanently deleted X" still reads correctly forever after the bank/account row is actually gone.
+- **`src/lib/personalLog.ts`** — `logPersonalActivity(supabase, entry)`, the private counterpart to
+  `lib/audit.ts`'s `logAudit`: same best-effort try/catch-and-log-don't-throw contract, but takes the
+  ordinary RLS-scoped `createClient()` result instead of the admin client, and every entry is scoped
+  to the acting user's own `user_id`. Also exports `accountLabel(holder, typeLabel)` — the shared
+  "Holder · Type" formatting used everywhere an account needs a one-line label in a log entry.
+  `lib/demo.ts` mirrors this with `personalActivityLog` in the in-memory `DemoStore` +
+  `addDemoPersonalLog()`/`getDemoPersonalActivityLog()`, so the whole feature is fully click-testable
+  in DEMO_MODE (unlike several other per-user tables in this app that are DEMO_MODE no-ops).
+- **What's instrumented**: `banks/actions.ts` (`upsertBank` — a field-by-field diff of every changed
+  column, shared and private alike, reusing `SHARED_FIELDS` plus a new `PRIVATE_ONLY_FIELDS`
+  list for name/status/priority/target_balance; `setBankStatus`, `deleteBank`, `restoreBank`,
+  `permanentlyDeleteBank`, `importBanks`), `accounts/actions.ts` (`upsertAccount` — same
+  field-diff approach via a new `ACCOUNT_DIFF_FIELDS` list, balance changes folded in as their own
+  "Balance → $X (was $Y)" line; `deleteAccount`, `restoreAccount`, `permanentlyDeleteAccount`,
+  `duplicateAccount`), `money/actions.ts` (deposits/withdrawals — `recordAccountTransaction`,
+  `editLastAccountTransaction`, `deleteAccountTransaction` — plus `createSweepBatch`/`returnSweep`/
+  `addBorrowedFund`/`returnBorrowedFund`), and — lighter-weight, one entry per action — documents
+  (`accounts/documents.ts`), printed checks (`checks/actions.ts`), and reminders (`reminders.ts`).
+  Sensitive fields (saved login URL/username/password/access notes) are only ever flagged as
+  "Online access updated," never their actual values, even though this log is private — same
+  instinct as never echoing a password back in a summary line anywhere else in this app. **Not yet
+  instrumented, flagged in TODO.md for a future round if wanted**: mailed deposits (Send money),
+  address-change campaigns, road trips — lower-value for a personal audit trail and a materially
+  bigger lift each.
+- **Deep links**: every entry that names a specific bank or account carries `entity_id`/
+  `entity_type`, rendered as a real `/banks?openId=<id>` or `/accounts?openId=<id>` link — reusing
+  the existing `?openId=` deep-link convention (see the 2026-07-26 entry below) rather than the
+  weaker `?q=` text-filter one, so clicking an entry reliably opens the exact bank/account drawer
+  regardless of name collisions.
+- **`HistoryClient.tsx`**: search box (matches summary/bank name/account label across whatever's
+  currently loaded), a row of single-select category chips (Banks/Accounts/Money/Documents &
+  checks/Imports), entries grouped by day ("Today"/"Yesterday"/full date) with a relative
+  "N min/hr/days ago" timestamp. Cursor-paginated (`getPersonalActivityLogPage(before?)`, 100 rows a
+  page, keyed on `created_at` rather than an offset so a new entry landing between page loads can't
+  shift the boundary and skip or repeat a row) with a "Load older entries" button — this table can
+  grow into the thousands over years of use, so it was never going to be a plain unbounded
+  `select("*")` the way a few smaller lists in this app get away with.
+- **A real hydration bug found and fixed during verification, not by review** — see below.
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (148, unchanged) all clean (temp `xlsx`
+CDN→npm swap for the sandbox install, restored after each pass — confirmed via `git diff` showing
+nothing). Live DEMO_MODE CDP pass (`scratchpad/verify-history.mjs`, new, kept for reuse), **31/31**,
+built around the user's own stated concern — not just "does an entry appear" but "does it point at
+the *right* bank/account" — by driving every step through the history entries' own `?openId=` deep
+links rather than clicking a bank/account by name (which, as this pass caught once, can land on the
+wrong DOM element if more than one matching row/card exists at once — a real trap, not an app bug,
+documented in this file's own 2026-07-24 entry for exactly this reason). Confirmed: adding a bank
+logs "Added X"; changing status via the Banks-list quick-select select (`setBankStatus`) logs a
+distinctly-worded "Changed X status: A → B" from changing it via the drawer's Save (which logs it as
+one line in a broader "Updated X: Status → B; ..." field-diff) — two different code paths, two
+different (both correct) log shapes; adding an account, then editing its holder name and account
+number, produced exact "Holder → HistTestHolderRenamed" / "Account number → 11122233" lines; a $55
+deposit produced "Deposit of $55.00 — ... at History Test Bank"; every one of those entries' deep
+link opened the exact right bank/account (not a coincidentally-matching one); the category filter and
+search both correctly narrowed the list; deleting the bank logged "Moved ... to Trash"; no 375px
+overflow; zero unexpected console errors.
+
+**The real hydration bug**: `HistoryClient`'s `timeAgo()`/`dayLabel()` compute "5 min ago"/"Today" off
+`Date.now()`/`new Date()` at render time — and this component, like any "use client" component, is
+server-rendered for the initial HTML *and* hydrated client-side moments later. First-visit testing
+with fresh (seconds-old) entries never caught it, but a **second** visit to a page already holding
+several-minutes-old entries reliably threw a real "Uncaught"/hydration-mismatch error (root-caused via
+the CDP driver's captured `Runtime.exceptionThrown` stack trace → `throwOnHydrationMismatch` →
+React's own hydration code) — confirmed by bisection: 0 or 1 fresh entries never reproduced it, several
+entries spanning real elapsed minutes reproduced it reliably, and it disappeared entirely once the
+one-frame-stale relative-time text nodes were marked `suppressHydrationWarning` (the pattern React's
+own docs recommend for exactly this "relative time can legitimately differ by a few seconds between
+server and client" case — self-corrects the instant hydration finishes, so nothing is actually wrong
+with what the user sees). Re-verified with a dedicated regression check in the same script: two more
+`/history` visits, entries now several minutes old, zero new console errors. Worth remembering for any
+future page that renders `timeAgo()`-style text in a component Next.js server-renders (i.e. anything
+not wrapped in a client-only/`ssr: false` boundary) — `UpdatesClient.tsx`'s own `timeAgo()` has the
+identical theoretical exposure and was **not** touched here (out of scope, no report against it), but
+the same fix would apply if it's ever hit in practice.
+
+Changelog and Guide entries added (genuinely new, user-visible feature). `?openId=` deep-linking,
+`SHARED_FIELDS`-style field-diffing, and the `logPersonalActivity`/`logAudit` private-vs-shared
+distinction are now established conventions — reuse them rather than inventing a new logging shape
+for the next mutation that should show up somewhere.
+
 **2026-08-20 (fix: the account view sheet's "Log activity today" menu opened off the bottom of the
 screen)** — User report with a screenshot: opening a non-CD account (from the Accounts page, sheet
 docked to the right at desktop width) and clicking the footer's "Log activity today" button showed

@@ -25,6 +25,7 @@ import {
   FileText,
   Percent,
   Building2,
+  History,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { GlobalSearch } from "@/components/GlobalSearch";
@@ -78,6 +79,7 @@ const GROUPS: NavGroup[] = [
     label: "More",
     links: [
       { href: "/updates", label: "Updates", icon: Sparkles, tour: "updates" },
+      { href: "/history", label: "History", icon: History, tour: "history" },
       { href: "/guide", label: "Guide", icon: BookOpen, tour: "guide" },
       { href: "/settings", label: "Settings", icon: Settings, tour: "settings" },
       { href: "/admin", label: "Admin", icon: ShieldCheck, tour: "admin", ownerOnly: true },

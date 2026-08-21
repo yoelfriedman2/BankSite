@@ -24,6 +24,18 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
 
 ## One-time setup pending
 
+- **Run migration `0058_personal_activity_log.sql`** — not yet run. New private per-user table
+  (`personal_activity_log`) backing the new `/history` page: a private record of every change a
+  user makes to their own data (bank/account edits — renamed, account number changed, status
+  changed, etc. — deposits/withdrawals, money moves, imports, deletes). RLS scoped to
+  `user_id = auth.uid()` for both SELECT and INSERT (no admin client involved — this is the
+  ordinary "own rows only" per-user pattern, not shared data like `audit_log`), no UPDATE/DELETE
+  policy at all (append-only, tamper-resistant, same shape as `audit_log`). Degrades gracefully
+  until run: every write to it is wrapped in the same best-effort try/catch `lib/audit.ts`'s
+  `logAudit` uses, and the read (`getPersonalActivityLogPage`) treats a query error as "no history
+  yet" rather than crashing the page — so shipping this code doesn't require the migration to run
+  first, the page just shows nothing until it does.
+
 - ~~Run migration `0057_walkthrough_seen.sql`~~ — **confirmed run 2026-08-11.** Adds
   `profiles.walkthrough_tour_seen` (nullable text, additive). Fixes the welcome walkthrough popping
   back up on a different browser/device: it was tracked only in that browser's own `localStorage`, so

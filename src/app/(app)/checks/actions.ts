@@ -3,6 +3,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { DEMO_MODE } from "@/lib/demo";
 import { friendlyDbError } from "@/lib/friendlyError";
+import { formatCurrency } from "@/lib/format";
+import { logPersonalActivity, accountLabel } from "@/lib/personalLog";
+import { ACCOUNT_TYPE_LABELS, type AccountType } from "@/lib/types";
 
 export interface PrintedCheck {
   id: string;
@@ -59,8 +62,14 @@ export async function recordPrintedCheck(input: {
   // own — same pattern as uploadDocument's own check. Not exploitable today
   // (RLS already scopes the insert's own user_id to the caller), but a check
   // logged against someone else's account_id would otherwise silently write
-  // a row that renders as "—" in the caller's own log.
-  const { data: owned } = await supabase.from("accounts").select("id").eq("id", input.accountId).maybeSingle();
+  // a row that renders as "—" in the caller's own log. holder/type/bank are
+  // also fetched here so the personal-log entry below doesn't need a second
+  // round trip.
+  const { data: owned } = await supabase
+    .from("accounts")
+    .select("id, holder, account_type, bank:banks(name, cert)")
+    .eq("id", input.accountId)
+    .maybeSingle();
   if (!owned) return { error: "Account not found." };
 
   const { data, error } = await supabase
@@ -77,6 +86,23 @@ export async function recordPrintedCheck(input: {
     .select("*")
     .single();
   if (error || !data) return { error: friendlyDbError(error?.message) ?? "Could not log the check." };
+
+  const bank = Array.isArray(owned.bank) ? owned.bank[0] : owned.bank;
+  const label = accountLabel(
+    owned.holder as string | null,
+    owned.account_type ? ACCOUNT_TYPE_LABELS[owned.account_type as AccountType] : null,
+  );
+  await logPersonalActivity(supabase, {
+    userId: user.id,
+    action: "check_print",
+    summary: `Printed check #${input.checkNumber ?? "—"} to ${input.payee.trim() || "—"}${input.amount != null ? ` for ${formatCurrency(input.amount)}` : ""} — ${label ?? "account"} at ${bank?.name ?? "—"}`,
+    entityType: "account",
+    entityId: input.accountId,
+    cert: (bank?.cert as number | null) ?? null,
+    bankName: (bank?.name as string | null) ?? null,
+    accountLabel: label,
+  });
+
   return { check: rowToCheck(data) };
 }
 
@@ -122,8 +148,38 @@ export async function getAllPrintedChecks(): Promise<PrintedCheckWithAccount[]> 
 export async function deletePrintedCheck(id: string): Promise<{ error?: string }> {
   if (DEMO_MODE) return {};
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You are not signed in." };
+
+  const { data: prev } = await supabase
+    .from("printed_checks")
+    .select("check_number, payee, account:accounts(holder, account_type, bank:banks(name, cert))")
+    .eq("id", id)
+    .maybeSingle();
+
   // RLS restricts the delete to the check's owner.
   const { error } = await supabase.from("printed_checks").delete().eq("id", id);
   if (error) return { error: friendlyDbError(error.message) };
+
+  if (prev) {
+    const account = Array.isArray(prev.account) ? prev.account[0] : prev.account;
+    const bank = account ? (Array.isArray(account.bank) ? account.bank[0] : account.bank) : null;
+    const label = accountLabel(
+      account?.holder as string | null,
+      account?.account_type ? ACCOUNT_TYPE_LABELS[account.account_type as AccountType] : null,
+    );
+    await logPersonalActivity(supabase, {
+      userId: user.id,
+      action: "check_delete",
+      summary: `Removed check #${prev.check_number ?? "—"} to ${(prev.payee as string | null) ?? "—"} from the log — ${label ?? "account"} at ${bank?.name ?? "—"}`,
+      entityType: "account",
+      cert: (bank?.cert as number | null) ?? null,
+      bankName: (bank?.name as string | null) ?? null,
+      accountLabel: label,
+    });
+  }
+
   return {};
 }
