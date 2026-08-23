@@ -134,14 +134,16 @@ function ReviewCard({
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <div className="flex min-w-0 items-center gap-2">
-        <FileText className="h-4 w-4 flex-none text-slate-400" />
-        <span
-          className="min-w-0 flex-1 truncate text-sm font-medium text-slate-900"
-          title={scan.filename}
-        >
-          {scan.filename}
-        </span>
+      <div className="flex min-w-0 items-start gap-2">
+        <FileText className="mt-0.5 h-4 w-4 flex-none text-slate-400" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-slate-900">
+            {selectedAccount ? `${selectedAccount.bankName} — ${selectedAccount.label}` : "Pick an account below"}
+          </p>
+          <p className="truncate text-xs text-slate-400" title={scan.filename}>
+            {scan.filename}
+          </p>
+        </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {scan.aiDocType && (
@@ -275,14 +277,17 @@ function ReviewCard({
   );
 }
 
-function DoneRow({ scan }: { scan: ScannedDocumentRow }) {
+function DoneRow({ scan, accounts }: { scan: ScannedDocumentRow; accounts: PaperInAccountOption[] }) {
+  const account = accounts.find((a) => a.accountId === scan.reviewedAccountId);
   return (
     <div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
       <CheckCircle2 className="h-4 w-4 flex-none text-emerald-600" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm text-slate-600">{scan.filename}</p>
+        <p className="truncate text-sm text-slate-600">
+          {account ? `${account.bankName} — ${account.label}` : scan.filename}
+        </p>
         <p className="text-xs text-slate-400">
-          Filed{scan.reviewedBalance != null ? ` — balance set to ${formatCurrency(scan.reviewedBalance)}` : ""}
+          {scan.reviewedBalance != null ? `Balance set to ${formatCurrency(scan.reviewedBalance)}` : "Filed"}
           {scan.appliedAt ? ` · ${formatDate(scan.appliedAt.slice(0, 10))}` : ""}
         </p>
       </div>
@@ -477,7 +482,7 @@ export function PaperInClient({
           <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">Recently filed</p>
           <div className="flex flex-col gap-2">
             {done.slice(0, 8).map((s) => (
-              <DoneRow key={s.id} scan={s} />
+              <DoneRow key={s.id} scan={s} accounts={accounts} />
             ))}
           </div>
         </div>
