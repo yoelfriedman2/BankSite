@@ -14,6 +14,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { useToast } from "@/components/Toast";
+import { DateInput } from "@/components/DateInput";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { todayLocalStr } from "@/lib/date";
 import {
@@ -52,10 +53,29 @@ function ReviewCard({
   const toast = useToast();
   const [isPending, startTransition] = useTransition();
   const [accountId, setAccountId] = useState(scan.aiAccountId ?? "");
+  const [bankId, setBankId] = useState(
+    () => accounts.find((a) => a.accountId === scan.aiAccountId)?.bankId ?? "",
+  );
   const [updateBalance, setUpdateBalance] = useState(scan.aiDocType === "statement" && scan.aiBalance != null);
   const [balance, setBalance] = useState(scan.aiBalance != null ? String(scan.aiBalance) : "");
   const [asOfDate, setAsOfDate] = useState(scan.aiAsOfDate ?? todayLocalStr());
   const [viewing, setViewing] = useState(false);
+
+  // Bank first, then the accounts at that bank — a flat "every account at
+  // every bank" list got confusing once there were more than a few banks.
+  const banks = Array.from(new Map(accounts.map((a) => [a.bankId, a.bankName])).entries())
+    .map(([id, name]) => ({ bankId: id, bankName: name }))
+    .sort((a, b) => a.bankName.localeCompare(b.bankName));
+  const accountsAtBank = accounts.filter((a) => a.bankId === bankId);
+  const selectedAccount = accounts.find((a) => a.accountId === accountId);
+
+  function onBankChange(newBankId: string) {
+    setBankId(newBankId);
+    const atBank = accounts.filter((a) => a.bankId === newBankId);
+    // Most banks only have one tracked account — skip the extra click when
+    // there's nothing to actually choose between.
+    setAccountId(atBank.length === 1 ? atBank[0].accountId : "");
+  }
 
   function viewOriginal() {
     setViewing(true);
@@ -114,26 +134,31 @@ function ReviewCard({
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <FileText className="h-4 w-4 text-slate-400" />
-          <span className="text-sm font-medium text-slate-900">{scan.filename}</span>
-          {scan.aiDocType && (
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-              {DOC_TYPE_LABELS[scan.aiDocType] ?? scan.aiDocType}
-            </span>
-          )}
-          {scan.aiConfidence && (
-            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${CONFIDENCE_STYLES[scan.aiConfidence] ?? ""}`}>
-              {scan.aiConfidence} confidence
-            </span>
-          )}
-        </div>
+      <div className="flex min-w-0 items-center gap-2">
+        <FileText className="h-4 w-4 flex-none text-slate-400" />
+        <span
+          className="min-w-0 flex-1 truncate text-sm font-medium text-slate-900"
+          title={scan.filename}
+        >
+          {scan.filename}
+        </span>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {scan.aiDocType && (
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+            {DOC_TYPE_LABELS[scan.aiDocType] ?? scan.aiDocType}
+          </span>
+        )}
+        {scan.aiConfidence && (
+          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${CONFIDENCE_STYLES[scan.aiConfidence] ?? ""}`}>
+            {scan.aiConfidence} confidence
+          </span>
+        )}
         <button
           type="button"
           onClick={viewOriginal}
           disabled={viewing}
-          className="flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline disabled:opacity-50"
+          className="ml-auto flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline disabled:opacity-50"
         >
           {viewing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
           View original
@@ -146,35 +171,50 @@ function ReviewCard({
 
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor={`acct-${scan.id}`}>
-            Which account is this?
+          <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor={`bank-${scan.id}`}>
+            Which bank?
           </label>
           <select
-            id={`acct-${scan.id}`}
-            value={accountId}
-            onChange={(e) => setAccountId(e.target.value)}
+            id={`bank-${scan.id}`}
+            value={bankId}
+            onChange={(e) => onBankChange(e.target.value)}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           >
-            <option value="">Choose an account…</option>
-            {accounts.map((a) => (
-              <option key={a.accountId} value={a.accountId}>
-                {a.bankName} — {a.label}
+            <option value="">Choose a bank…</option>
+            {banks.map((b) => (
+              <option key={b.bankId} value={b.bankId}>
+                {b.bankName}
               </option>
             ))}
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor={`date-${scan.id}`}>
-            As of date
+          <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor={`acct-${scan.id}`}>
+            Which account?
           </label>
-          <input
-            id={`date-${scan.id}`}
-            type="date"
-            value={asOfDate}
-            onChange={(e) => setAsOfDate(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          />
+          <select
+            id={`acct-${scan.id}`}
+            value={accountId}
+            onChange={(e) => setAccountId(e.target.value)}
+            disabled={!bankId}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-400"
+          >
+            <option value="">{bankId ? "Choose an account…" : "Pick a bank first"}</option>
+            {accountsAtBank.map((a) => (
+              <option key={a.accountId} value={a.accountId}>
+                {a.label}
+                {a.last4 ? ` — ending ${a.last4}` : ""}
+              </option>
+            ))}
+          </select>
         </div>
+      </div>
+
+      <div className="mt-3 max-w-[180px]">
+        <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor={`date-${scan.id}`}>
+          As of date
+        </label>
+        <DateInput id={`date-${scan.id}`} value={asOfDate} onChange={setAsOfDate} />
       </div>
 
       <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
@@ -187,17 +227,27 @@ function ReviewCard({
         Also update this account&apos;s balance
       </label>
       {updateBalance && (
-        <div className="mt-2 max-w-[160px]">
-          <div className="flex items-center rounded-lg border border-slate-300 px-3 py-2">
-            <span className="mr-1 text-sm text-slate-400">$</span>
-            <input
-              type="number"
-              step="0.01"
-              value={balance}
-              onChange={(e) => setBalance(e.target.value)}
-              className="w-full text-sm outline-none"
-              placeholder="0.00"
-            />
+        <div className="mt-2 flex flex-wrap items-end gap-2">
+          <div>
+            <span className="mb-1 block text-xs text-slate-500">Current balance</span>
+            <span className="block px-3 py-2 text-sm text-slate-500">
+              {selectedAccount ? formatCurrency(selectedAccount.balance) : "—"}
+            </span>
+          </div>
+          <span className="pb-2.5 text-slate-300">→</span>
+          <div className="max-w-[160px]">
+            <span className="mb-1 block text-xs text-slate-500">New balance</span>
+            <div className="flex items-center rounded-lg border border-slate-300 px-3 py-2">
+              <span className="mr-1 text-sm text-slate-400">$</span>
+              <input
+                type="number"
+                step="0.01"
+                value={balance}
+                onChange={(e) => setBalance(e.target.value)}
+                className="w-full text-sm outline-none"
+                placeholder="0.00"
+              />
+            </div>
           </div>
         </div>
       )}
@@ -218,7 +268,7 @@ function ReviewCard({
           disabled={isPending}
           className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
         >
-          Not useful — dismiss
+          Cancel — don&apos;t file this
         </button>
       </div>
     </div>

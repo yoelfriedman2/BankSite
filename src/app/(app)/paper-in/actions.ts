@@ -43,9 +43,17 @@ export interface ScannedDocumentRow {
 
 export interface PaperInAccountOption {
   accountId: string;
+  bankId: string;
   label: string; // "John · Checking"
   bankName: string;
+  last4: string | null;
   balance: number | null;
+}
+
+function last4(accountNumber: string | null): string | null {
+  if (!accountNumber) return null;
+  const digits = accountNumber.replace(/\D/g, "");
+  return digits.length >= 4 ? digits.slice(-4) : null;
 }
 
 function toRow(s: DemoScannedDocument): ScannedDocumentRow {
@@ -83,8 +91,10 @@ export async function getPaperInAccountOptions(): Promise<PaperInAccountOption[]
     const banks = getDemoBanks();
     return getDemoAccounts().map((a) => ({
       accountId: a.id,
+      bankId: a.bank_id,
       label: accountLabel(a.holder, a.account_type ? ACCOUNT_TYPE_LABELS[a.account_type as AccountType] : null) ?? "Account",
       bankName: banks.find((b) => b.id === a.bank_id)?.name ?? "—",
+      last4: last4(a.account_number),
       balance: a.balance,
     }));
   }
@@ -95,19 +105,23 @@ export async function getPaperInAccountOptions(): Promise<PaperInAccountOption[]
   if (!user) return [];
   const { data } = await supabase
     .from("accounts")
-    .select("id, holder, account_type, balance, bank:banks(name)")
+    .select("id, bank_id, holder, account_type, account_number, balance, bank:banks(name)")
     .is("deleted_at", null)
     .order("created_at", { ascending: true });
   return ((data ?? []) as unknown as {
     id: string;
+    bank_id: string;
     holder: string | null;
     account_type: AccountType | null;
+    account_number: string | null;
     balance: number | null;
     bank: { name: string } | null;
   }[]).map((a) => ({
     accountId: a.id,
+    bankId: a.bank_id,
     label: accountLabel(a.holder, a.account_type ? ACCOUNT_TYPE_LABELS[a.account_type] : null) ?? "Account",
     bankName: a.bank?.name ?? "—",
+    last4: last4(a.account_number),
     balance: a.balance != null ? Number(a.balance) : null,
   }));
 }
@@ -193,12 +207,6 @@ export async function uploadScan(formData: FormData): Promise<{ id?: string; err
 
   revalidate();
   return { id: data.id as string };
-}
-
-function last4(accountNumber: string | null): string | null {
-  if (!accountNumber) return null;
-  const digits = accountNumber.replace(/\D/g, "");
-  return digits.length >= 4 ? digits.slice(-4) : null;
 }
 
 export async function analyzeScan(scanId: string): Promise<{ error?: string }> {

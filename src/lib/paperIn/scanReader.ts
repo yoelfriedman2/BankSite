@@ -87,7 +87,7 @@ function buildTool(candidateCount: number): Anthropic.Tool {
         summary: {
           type: "string",
           description:
-            "One short sentence explaining your read — what evidence you used to match the account (e.g. 'account number ending 4821 matches') and what balance/date you found.",
+            "One short sentence explaining your read — what evidence you used to match the account (e.g. 'account number ending 4821 matches') and what balance/date you found. This is shown directly to the person reviewing it: describe the account by bank name and holder/type only, never by its position or number in the numbered list below (that list is only for picking matched_account_index — its numbers mean nothing to the reader).",
         },
       },
       required: [
@@ -118,7 +118,8 @@ function buildPrompt(candidates: ScanAccountCandidate[]): string {
   return [
     "This is a photo or scan of a piece of mail from a bank. Read it and use the record_statement_read tool to report what you found.",
     "",
-    "The accounts this could belong to (match by account number if visible, otherwise by bank name and/or holder name):",
+    "The accounts this could belong to (match by account number if visible, otherwise by bank name and/or holder name).",
+    "The number before each one is only a list index for you to return as matched_account_index — it is not shown to anyone and has no meaning outside this list, so never mention it in your summary:",
     list || "(no accounts on file — use has_account_match: false)",
     "",
     "If the document doesn't clearly match one of these accounts, set has_account_match to false rather than guessing.",
