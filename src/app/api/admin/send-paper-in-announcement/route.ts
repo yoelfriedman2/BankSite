@@ -145,6 +145,18 @@ async function getRecipients(): Promise<Recipient[]> {
   return recipients;
 }
 
+function filterRecipients(recipients: Recipient[], only: string | null): Recipient[] {
+  if (!only) return recipients;
+  const needle = only.toLowerCase();
+  return recipients.filter(
+    (r) => r.name.toLowerCase().includes(needle) || r.email.toLowerCase().includes(needle),
+  );
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function page(title: string, body: string): NextResponse {
   const html = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>${title}</title>
@@ -168,11 +180,13 @@ function page(title: string, body: string): NextResponse {
   return new NextResponse(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const user = await requireOwner();
   if (!user) return new NextResponse("Not found", { status: 404 });
 
-  const recipients = await getRecipients();
+  const only = new URL(request.url).searchParams.get("only");
+  const all = await getRecipients();
+  const recipients = filterRecipients(all, only);
   const rows = recipients
     .map((r) => `<div class="row"><span class="name">${r.name || "(no name)"}</span><span class="email">${r.email}</span></div>`)
     .join("");
@@ -181,21 +195,35 @@ export async function GET() {
     "Send: Paper in announcement",
     `
     <h1>Subject: ${SUBJECT}</h1>
-    <p class="sub">Nothing has been sent. This lists exactly who would receive it — anyone with "Product update emails" on in Settings.</p>
-    ${rows || '<p style="color:#94a3b8;font-size:13.5px;">No one is opted in right now.</p>'}
-    <form method="POST">
+    <p class="sub">Nothing has been sent. This lists exactly who would receive it${only ? ` — filtered to "${only}"` : ` — anyone with "Product update emails" on in Settings`}.</p>
+    ${rows || '<p style="color:#94a3b8;font-size:13.5px;">No one matches.</p>'}
+    <form method="POST" action="${only ? `?only=${encodeURIComponent(only)}` : ""}">
       <button type="submit"${recipients.length === 0 ? " disabled" : ""}>Send to ${recipients.length} ${recipients.length === 1 ? "person" : "people"}</button>
     </form>
+    ${only ? "" : '<p class="note">A full batch already partially sent once — retry a single missed person instead by adding <code>?only=name</code> to this URL, e.g. <code>?only=david</code>. That\'s the only mode this page accepts sends from now.</p>'}
     <p class="note">This page is a one-off — safe to delete from the repo once you've used it.</p>
   `,
   );
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   const user = await requireOwner();
   if (!user) return new NextResponse("Not found", { status: 404 });
 
-  const recipients = await getRecipients();
+  const only = new URL(request.url).searchParams.get("only");
+  if (!only) {
+    // A full-batch send already went out once (10 of 11 succeeded, one hit
+    // Resend's rate limit) — refusing a bare POST here makes it impossible
+    // to accidentally re-send duplicate emails to everyone who already got
+    // it. Retrying the one missed person now only works via ?only=.
+    return page(
+      "Blocked",
+      `<h1>Refusing to send</h1><p class="sub">A full batch already sent once. Add <code>?only=name</code> to the URL to retry just one missed person.</p>`,
+    );
+  }
+
+  const all = await getRecipients();
+  const recipients = filterRecipients(all, only);
   const results: { recipient: Recipient; ok: boolean; message: string }[] = [];
 
   for (const r of recipients) {
@@ -203,6 +231,10 @@ export async function POST() {
     if (res.error) results.push({ recipient: r, ok: false, message: res.error });
     else if (res.skipped) results.push({ recipient: r, ok: false, message: "RESEND_API_KEY not set" });
     else results.push({ recipient: r, ok: true, message: "sent" });
+    // Resend's rate limit is 10 requests/second — a tight loop with no gap
+    // tripped it on the first real run (David Friedman's send failed this
+    // way). Comfortably under that even for a bigger retry batch.
+    await sleep(150);
   }
 
   const sentCount = results.filter((r) => r.ok).length;
@@ -217,7 +249,7 @@ export async function POST() {
     "Sent: Paper in announcement",
     `
     <h1>${sentCount} of ${results.length} sent</h1>
-    <p class="sub">Subject: ${SUBJECT}</p>
+    <p class="sub">Subject: ${SUBJECT} &mdash; filtered to "${only}"</p>
     ${rows}
     <p class="note">Delete this route from the repo now that it's been used.</p>
   `,
