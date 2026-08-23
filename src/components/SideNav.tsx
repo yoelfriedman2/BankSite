@@ -27,6 +27,7 @@ import {
   Building2,
   History,
   FileSpreadsheet,
+  ScanText,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { GlobalSearch } from "@/components/GlobalSearch";
@@ -58,6 +59,7 @@ const GROUPS: NavGroup[] = [
       { href: "/accounts", label: "Accounts", icon: CreditCard, tour: "accounts" },
       { href: "/up-next", label: "Up next", icon: ListTodo, tour: "up-next" },
       { href: "/documents", label: "Documents", icon: FileText, tour: "documents" },
+      { href: "/paper-in", label: "Paper in", icon: ScanText, tour: "paper-in" },
     ],
   },
   {

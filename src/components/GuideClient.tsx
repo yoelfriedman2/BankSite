@@ -29,6 +29,7 @@ import {
   Building2,
   History,
   FileSpreadsheet,
+  ScanText,
   type LucideIcon,
 } from "lucide-react";
 import { ASSIGNABLE_STATUSES, STATUS_LABELS } from "@/lib/types";
@@ -377,6 +378,22 @@ const TOPICS: Topic[] = [
       "Photos and PDFs are compressed automatically to save space.",
       "Files open through a temporary private link — they're never public.",
       "The Documents page groups every upload by bank, so you don't have to open each account to find one.",
+    ],
+  },
+  {
+    id: "paper-in",
+    icon: ScanText,
+    title: "Paper in",
+    blurb: "Take a photo of a statement or notice — it reads itself.",
+    points: [
+      "Take a photo (or upload a PDF) of anything that came in the mail",
+      "It's read automatically: which account, the balance, and the date",
+      "You review and confirm before anything is filed or a balance changes",
+    ],
+    tips: [
+      "Nothing is applied without your say-so — pick or correct the account, adjust the balance if it's off, then file it.",
+      "Turning on \"Also update this account's balance\" writes the balance you confirm — turn it off to just keep the document on file.",
+      "Once filed, it shows up in that account's regular Documents list, same as anything uploaded by hand.",
     ],
   },
   {

@@ -981,6 +981,93 @@ export type Database = {
         }
         Relationships: []
       }
+      scanned_documents: {
+        Row: {
+          ai_account_id: string | null
+          ai_as_of_date: string | null
+          ai_balance: number | null
+          ai_confidence: string | null
+          ai_doc_type: string | null
+          ai_error: string | null
+          ai_model: string | null
+          ai_summary: string | null
+          applied_at: string | null
+          created_at: string
+          file_size: number | null
+          filename: string
+          id: string
+          mime_type: string | null
+          reviewed_account_id: string | null
+          reviewed_as_of_date: string | null
+          reviewed_balance: number | null
+          status: string
+          storage_path: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_account_id?: string | null
+          ai_as_of_date?: string | null
+          ai_balance?: number | null
+          ai_confidence?: string | null
+          ai_doc_type?: string | null
+          ai_error?: string | null
+          ai_model?: string | null
+          ai_summary?: string | null
+          applied_at?: string | null
+          created_at?: string
+          file_size?: number | null
+          filename: string
+          id?: string
+          mime_type?: string | null
+          reviewed_account_id?: string | null
+          reviewed_as_of_date?: string | null
+          reviewed_balance?: number | null
+          status?: string
+          storage_path: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ai_account_id?: string | null
+          ai_as_of_date?: string | null
+          ai_balance?: number | null
+          ai_confidence?: string | null
+          ai_doc_type?: string | null
+          ai_error?: string | null
+          ai_model?: string | null
+          ai_summary?: string | null
+          applied_at?: string | null
+          created_at?: string
+          file_size?: number | null
+          filename?: string
+          id?: string
+          mime_type?: string | null
+          reviewed_account_id?: string | null
+          reviewed_as_of_date?: string | null
+          reviewed_balance?: number | null
+          status?: string
+          storage_path?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scanned_documents_ai_account_id_fkey"
+            columns: ["ai_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scanned_documents_reviewed_account_id_fkey"
+            columns: ["reviewed_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

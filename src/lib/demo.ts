@@ -271,6 +271,30 @@ export type DemoPersonalLogEntry = {
   created_at: string;
 };
 
+export type DemoScannedDocument = {
+  id: string;
+  user_id: string;
+  storage_path: string;
+  filename: string;
+  file_size: number | null;
+  mime_type: string | null;
+  status: "pending" | "processing" | "ready" | "accepted" | "rejected" | "failed";
+  ai_model: string | null;
+  ai_doc_type: "statement" | "dormancy_warning" | "tax_form" | "other" | null;
+  ai_account_id: string | null;
+  ai_confidence: "high" | "medium" | "low" | null;
+  ai_balance: number | null;
+  ai_as_of_date: string | null;
+  ai_summary: string | null;
+  ai_error: string | null;
+  reviewed_account_id: string | null;
+  reviewed_balance: number | null;
+  reviewed_as_of_date: string | null;
+  applied_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type DemoStore = {
   profile: Profile;
   banks: Bank[];
@@ -281,6 +305,7 @@ type DemoStore = {
   holdingCompanies: HoldingCompany[];
   balanceHistory: DemoBalancePoint[];
   personalActivityLog: DemoPersonalLogEntry[];
+  scannedDocuments: DemoScannedDocument[];
 };
 
 function createInitialStore(): DemoStore {
@@ -468,6 +493,7 @@ function createInitialStore(): DemoStore {
     holdingCompanies: [sampleHoldingCompany],
     balanceHistory,
     personalActivityLog: [],
+    scannedDocuments: [],
   };
 }
 
@@ -789,6 +815,136 @@ export function getKnownHolders(): string[] {
     if (!a.deleted_at && a.holder && a.holder.trim()) seen.add(a.holder.trim());
   }
   return Array.from(seen).sort();
+}
+
+// ---- Paper In (scan a bank document, AI reads it, review, apply) ----
+// No real file ever leaves this sandbox in demo mode (there's no Supabase
+// storage to put it in, and definitely no real AI call to make) — uploading
+// and "reading" a scan are both simulated so the whole review/accept flow
+// is still genuinely click-testable, same shape as the holding-company
+// wizard's own "Load sample data (demo)" shortcut.
+export function getDemoScannedDocuments(): DemoScannedDocument[] {
+  return [...store().scannedDocuments].sort((a, b) =>
+    a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0,
+  );
+}
+
+export function addDemoScannedDocument(filename: string, mimeType: string, fileSize: number): string {
+  const now = new Date().toISOString();
+  const doc: DemoScannedDocument = {
+    id: crypto.randomUUID(),
+    user_id: DEMO_USER.id,
+    storage_path: `${DEMO_USER.id}/paper-in/${crypto.randomUUID()}`,
+    filename,
+    file_size: fileSize,
+    mime_type: mimeType,
+    status: "pending",
+    ai_model: null,
+    ai_doc_type: null,
+    ai_account_id: null,
+    ai_confidence: null,
+    ai_balance: null,
+    ai_as_of_date: null,
+    ai_summary: null,
+    ai_error: null,
+    reviewed_account_id: null,
+    reviewed_balance: null,
+    reviewed_as_of_date: null,
+    applied_at: null,
+    created_at: now,
+    updated_at: now,
+  };
+  store().scannedDocuments = [...store().scannedDocuments, doc];
+  return doc.id;
+}
+
+/** Simulated "AI read" — deterministic, so a demo click-through is
+ *  reproducible. Matches the first active account tied to whichever bank
+ *  the scan's filename mentions (falls back to the first active account
+ *  overall), proposes a balance a few dollars off the account's current
+ *  one, and marks it high-confidence. Real reads go through
+ *  src/lib/paperIn/scanReader.ts instead. */
+export function analyzeDemoScannedDocument(id: string): DemoScannedDocument | null {
+  const scan = store().scannedDocuments.find((s) => s.id === id);
+  if (!scan) return null;
+
+  const active = store().accounts.filter((a) => !a.deleted_at);
+  const lower = scan.filename.toLowerCase();
+  const bankByName = store().banks.find((b) => lower.includes(b.name.toLowerCase().split(" ")[0]));
+  const match =
+    (bankByName && active.find((a) => a.bank_id === bankByName.id)) ?? active[0] ?? null;
+
+  const now = new Date().toISOString();
+  const updated: DemoScannedDocument = {
+    ...scan,
+    status: "ready",
+    ai_model: "claude-haiku-4-5-20251001 (simulated)",
+    ai_doc_type: "statement",
+    ai_account_id: match?.id ?? null,
+    ai_confidence: match ? "high" : "low",
+    ai_balance: match ? Math.round(((match.balance ?? 0) + 4.11) * 100) / 100 : null,
+    ai_as_of_date: scan.created_at.slice(0, 10),
+    ai_summary: match
+      ? `Matched by bank name and account type; ending balance $${(((match.balance ?? 0) + 4.11)).toFixed(2)} as of the statement date.`
+      : "Couldn't confidently match this to one of your accounts — pick one below.",
+    ai_error: null,
+    updated_at: now,
+  };
+  store().scannedDocuments = store().scannedDocuments.map((s) => (s.id === id ? updated : s));
+  return updated;
+}
+
+export function applyDemoScannedDocument(
+  id: string,
+  input: { accountId: string; updateBalance: boolean; balance?: number; asOfDate?: string },
+): { newBalance?: number | null } | null {
+  const scan = store().scannedDocuments.find((s) => s.id === id);
+  if (!scan) return null;
+
+  let newBalance: number | null = null;
+  if (input.updateBalance && input.balance != null) {
+    const account = store().accounts.find((a) => a.id === input.accountId);
+    if (account) {
+      const oldBalance = account.balance ?? 0;
+      newBalance = Math.round(input.balance * 100) / 100;
+      updateDemoAccount(input.accountId, { balance: newBalance });
+      store().balanceHistory = [
+        ...store().balanceHistory,
+        {
+          id: crypto.randomUUID(),
+          account_id: input.accountId,
+          user_id: DEMO_USER.id,
+          as_of_date: input.asOfDate || scan.created_at.slice(0, 10),
+          balance: newBalance,
+          change_amount: Math.round((newBalance - oldBalance) * 100) / 100,
+          reason: "Statement balance — read from a scanned document",
+          type: "correction",
+          created_at: new Date().toISOString(),
+        },
+      ];
+    }
+  }
+
+  const now = new Date().toISOString();
+  store().scannedDocuments = store().scannedDocuments.map((s) =>
+    s.id === id
+      ? {
+          ...s,
+          status: "accepted",
+          reviewed_account_id: input.accountId,
+          reviewed_balance: input.updateBalance ? (input.balance ?? null) : null,
+          reviewed_as_of_date: input.asOfDate ?? null,
+          applied_at: now,
+          updated_at: now,
+        }
+      : s,
+  );
+
+  return { newBalance };
+}
+
+export function deleteDemoScannedDocument(id: string): void {
+  store().scannedDocuments = store().scannedDocuments.filter((s) => s.id !== id);
 }
 
 // ---- Branch locations (road trip planner) ----

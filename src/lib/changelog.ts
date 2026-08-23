@@ -21,6 +21,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-08-23",
+    title: "Paper in — scan a statement or notice and it reads itself",
+    items: [
+      "New Paper in page: take a photo (or upload a PDF) of a statement or notice that came in the mail, and it's read automatically — which account it belongs to, the balance, and the date.",
+      "Nothing is applied until you review and confirm it — pick or correct the account, adjust the balance if needed, then file it (and optionally update the account's balance) in one click.",
+      "Filed documents show up in that account's regular Documents list, same as anything uploaded by hand.",
+    ],
+  },
+  {
     date: "2026-08-21",
     title: "History — a private log of everything you've changed",
     items: [
