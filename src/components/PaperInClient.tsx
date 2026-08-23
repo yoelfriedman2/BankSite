@@ -137,9 +137,14 @@ function ReviewCard({
       <div className="flex min-w-0 items-start gap-2">
         <FileText className="mt-0.5 h-4 w-4 flex-none text-slate-400" />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-slate-900">
-            {selectedAccount ? `${selectedAccount.bankName} — ${selectedAccount.label}` : "Pick an account below"}
-          </p>
+          {selectedAccount ? (
+            <>
+              <p className="truncate text-sm font-medium text-slate-900">{selectedAccount.bankName}</p>
+              <p className="truncate text-sm text-slate-600">{selectedAccount.label}</p>
+            </>
+          ) : (
+            <p className="truncate text-sm font-medium text-slate-900">Pick an account below</p>
+          )}
           <p className="truncate text-xs text-slate-400" title={scan.filename}>
             {scan.filename}
           </p>
@@ -280,12 +285,17 @@ function ReviewCard({
 function DoneRow({ scan, accounts }: { scan: ScannedDocumentRow; accounts: PaperInAccountOption[] }) {
   const account = accounts.find((a) => a.accountId === scan.reviewedAccountId);
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-      <CheckCircle2 className="h-4 w-4 flex-none text-emerald-600" />
+    <div className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+      <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-emerald-600" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm text-slate-600">
-          {account ? `${account.bankName} — ${account.label}` : scan.filename}
-        </p>
+        {account ? (
+          <>
+            <p className="truncate text-sm font-medium text-slate-700">{account.bankName}</p>
+            <p className="truncate text-sm text-slate-600">{account.label}</p>
+          </>
+        ) : (
+          <p className="truncate text-sm text-slate-600">{scan.filename}</p>
+        )}
         <p className="text-xs text-slate-400">
           {scan.reviewedBalance != null ? `Balance set to ${formatCurrency(scan.reviewedBalance)}` : "Filed"}
           {scan.appliedAt ? ` · ${formatDate(scan.appliedAt.slice(0, 10))}` : ""}
