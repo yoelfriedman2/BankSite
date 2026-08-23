@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { MapPin, Phone, Globe, CircleCheck, X } from "lucide-react";
+import Link from "next/link";
+import { MapPin, Phone, Globe, Printer, CircleCheck, X } from "lucide-react";
 import {
   startAddressChange,
   setAddressItemDone,
@@ -201,6 +202,16 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
                 </p>
                 <p className="truncate text-xs text-slate-600">{item.holder ?? "Unassigned"}</p>
               </div>
+              <Link
+                href={`/send?bankId=${encodeURIComponent(item.bank_id)}${
+                  item.holder ? `&holder=${encodeURIComponent(item.holder)}` : ""
+                }&template=address_change&newAddress=${encodeURIComponent(campaign.new_address)}`}
+                title="Print a change-of-address letter for this account, with the bank, holder, and new address already filled in"
+                className="flex shrink-0 items-center gap-1 rounded-lg border border-teal-200 bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-700 hover:bg-teal-100"
+              >
+                <Printer className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Print letter</span>
+              </Link>
               {item.phone && (
                 <span className="hidden shrink-0 items-center gap-1 text-xs text-slate-500 sm:flex">
                   <Phone className="h-3.5 w-3.5" />

@@ -22,6 +22,14 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-08-23",
+    title: "Address Change: print a letter for one account in one click",
+    items: [
+      "Each item on the Address Change checklist now has a \"Print letter\" button that opens Send a letter with that bank, holder, and your new address already filled in — no re-picking anything.",
+      "New \"Signing as\" picker on Send a letter: save a name and return address for each person in the family who signs letters, and switch between them — a letter for someone else's account can default to their own name automatically.",
+    ],
+  },
+  {
+    date: "2026-08-23",
     title: "Paper in — scan a statement or notice and it reads itself",
     items: [
       "New Paper in page: take a photo (or upload a PDF) of a statement or notice that came in the mail, and it's read automatically — which account it belongs to, the balance, and the date.",

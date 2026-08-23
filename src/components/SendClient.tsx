@@ -69,6 +69,18 @@ export interface SendBank {
  *  so a letter can grow a check without starting over. */
 export type SendMode = "letter" | "money";
 
+/** A saved "From" block (name + return address) a letter can be signed as —
+ *  distinct from the account holder token, since one person often signs for
+ *  several holders' accounts. Stored in this browser only. */
+interface SignerProfile {
+  id: string;
+  label: string;
+  text: string;
+}
+const PROFILES_KEY = "bt_send_profiles";
+const ACTIVE_PROFILE_KEY = "bt_send_profile_id";
+const LEGACY_FROM_KEY = "bt_send_from";
+
 const inputCls =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100";
 const labelCls = "mb-1 block text-xs font-medium text-slate-500";
@@ -123,6 +135,10 @@ export function SendClient({
   paymentSources: initialSources,
   sourcesMigrationNeeded,
   defaultDepositPostDays,
+  initialBankId,
+  initialHolder,
+  initialTemplateId,
+  initialNewAddress,
 }: {
   mode: SendMode;
   banks: SendBank[];
@@ -131,6 +147,17 @@ export function SendClient({
   /** The user's own Settings → Alerts & emails preference (or the app-wide
    *  default) for how many days a mailed deposit waits before it auto-posts. */
   defaultDepositPostDays: number;
+  /** Deep-link prefill — set by e.g. the Address Change page's "Print letter"
+   *  link, so a bank/holder/template arrive already picked instead of making
+   *  someone re-pick what's already known. All optional; a plain visit to
+   *  /send or /send/money passes none of these. */
+  initialBankId?: string;
+  /** Also doubles as the signer-profile match key (see "Signing as" below) —
+   *  the account holder and the person who'd naturally sign the letter are
+   *  the same identity for this app's purposes. */
+  initialHolder?: string;
+  initialTemplateId?: LetterTemplateId;
+  initialNewAddress?: string;
 }) {
   const toast = useToast();
   const isMoney = mode === "money";
@@ -201,21 +228,137 @@ export function SendClient({
   // point. "Reset to template" puts it back.
   const [edited, setEdited] = useState(false);
 
+  // ── Who's signing it ────────────────────────────────────────────────────
+  // Several accounts in this app belong to different family members, so the
+  // "From" block (name + return address) is a small set of saved profiles,
+  // not one single value — pick which one a given letter goes out under.
+  // Kept entirely in localStorage (like the old single value it replaces):
+  // this is convenience text, not sensitive data worth a table/migration.
+  const [profiles, setProfiles] = useState<SignerProfile[]>([]);
+  const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [from, setFrom] = useState("");
+  const profilesLoaded = useRef(false);
+
   useEffect(() => {
+    let list: SignerProfile[] = [];
     try {
-      setFrom(localStorage.getItem("bt_send_from") ?? "");
+      const raw = localStorage.getItem(PROFILES_KEY);
+      const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+      if (Array.isArray(parsed)) list = parsed as SignerProfile[];
+    } catch {
+      /* storage blocked or corrupt — fall through to migration below */
+    }
+    if (list.length === 0) {
+      // Migrate the old single "bt_send_from" value, if any, into one profile
+      // rather than losing it the first time this ships.
+      let legacy = "";
+      try {
+        legacy = localStorage.getItem(LEGACY_FROM_KEY) ?? "";
+      } catch {
+        /* storage blocked */
+      }
+      list = [{ id: "default", label: legacy.split("\n")[0]?.trim() || "Me", text: legacy }];
+    }
+
+    let activeId = list[0]?.id ?? null;
+    try {
+      const saved = localStorage.getItem(ACTIVE_PROFILE_KEY);
+      if (saved && list.some((p) => p.id === saved)) activeId = saved;
     } catch {
       /* storage blocked */
     }
+    // Deep-linked from an account whose holder matches a saved signer by
+    // name (e.g. Address Change's "Print letter") — default to that one.
+    if (initialHolder) {
+      const match = list.find(
+        (p) => p.label.trim().toLowerCase() === initialHolder.trim().toLowerCase(),
+      );
+      if (match) activeId = match.id;
+    }
+    const active = list.find((p) => p.id === activeId) ?? list[0] ?? null;
+
+    setProfiles(list);
+    setActiveProfileId(active?.id ?? null);
+    setFrom(active?.text ?? "");
+    profilesLoaded.current = true;
+
+    // Rest of the deep-link prefill — same one-time mount effect since it
+    // only ever matters together with the signer match above.
+    if (initialBankId) {
+      const b = banks.find((bk) => bk.id === initialBankId);
+      if (b) {
+        setBankId(b.id);
+        if (initialHolder) {
+          const acc = b.accounts.find((a) => (a.holder ?? "") === initialHolder);
+          if (acc) setDestAccountId(acc.id);
+        }
+      }
+    }
+    if (initialTemplateId) {
+      setTemplateId(initialTemplateId);
+      setEdited(false);
+    }
+    if (initialNewAddress) setNewAddress(initialNewAddress);
+    // Deliberately mount-only — these are all "as first loaded" inputs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
   useEffect(() => {
+    if (!profilesLoaded.current) return;
     try {
-      localStorage.setItem("bt_send_from", from);
+      localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
     } catch {
       /* storage blocked */
     }
-  }, [from]);
+  }, [profiles]);
+  useEffect(() => {
+    if (!profilesLoaded.current || !activeProfileId) return;
+    try {
+      localStorage.setItem(ACTIVE_PROFILE_KEY, activeProfileId);
+    } catch {
+      /* storage blocked */
+    }
+  }, [activeProfileId]);
+
+  /** Typing in "Your name and return address" edits the active profile. */
+  function updateFromText(text: string) {
+    setFrom(text);
+    setProfiles((prev) => prev.map((p) => (p.id === activeProfileId ? { ...p, text } : p)));
+  }
+
+  function selectProfile(id: string) {
+    const p = profiles.find((pp) => pp.id === id);
+    if (!p) return;
+    setActiveProfileId(id);
+    setFrom(p.text);
+  }
+
+  function addProfile() {
+    const label = window.prompt("Name for this signer (e.g. your name)?")?.trim();
+    if (!label) return;
+    const id = `p_${Date.now()}`;
+    setProfiles((prev) => [...prev, { id, label, text: "" }]);
+    setActiveProfileId(id);
+    setFrom("");
+  }
+
+  function renameProfile() {
+    const current = profiles.find((p) => p.id === activeProfileId);
+    if (!current) return;
+    const label = window.prompt("Rename this signer", current.label)?.trim();
+    if (!label) return;
+    setProfiles((prev) => prev.map((p) => (p.id === activeProfileId ? { ...p, label } : p)));
+  }
+
+  function deleteProfile() {
+    if (profiles.length <= 1) return;
+    const current = profiles.find((p) => p.id === activeProfileId);
+    if (!confirm(`Delete the "${current?.label ?? "this"}" signer? This can't be undone.`)) return;
+    const next = profiles.filter((p) => p.id !== activeProfileId);
+    setProfiles(next);
+    setActiveProfileId(next[0].id);
+    setFrom(next[0].text);
+  }
 
   // ── The check ───────────────────────────────────────────────────────────
   const [includeCheck, setIncludeCheck] = useState(isMoney);
@@ -788,13 +931,55 @@ export function SendClient({
             <p className="text-xs text-slate-500">{getLetterTemplate(templateId).blurb}</p>
 
             <div>
+              {profiles.length > 0 && (
+                <div className="mb-2">
+                  <label className={labelCls}>Signing as</label>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <select
+                      className={`${inputCls} min-w-0 flex-1`}
+                      value={activeProfileId ?? ""}
+                      onChange={(e) => selectProfile(e.target.value)}
+                    >
+                      {profiles.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={renameProfile}
+                      className="shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                    >
+                      Rename
+                    </button>
+                    <button
+                      type="button"
+                      onClick={addProfile}
+                      className="shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                    >
+                      + New
+                    </button>
+                    {profiles.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={deleteProfile}
+                        title="Delete this signer"
+                        className="shrink-0 rounded-lg border border-slate-200 bg-white p-1.5 text-rose-600 hover:bg-rose-50"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
               <label className={labelCls}>Your name and return address</label>
               <textarea
                 className={`${inputCls} font-mono text-xs`}
                 rows={3}
                 placeholder={"Jane Smith\n12 Elm Street\nSpringfield, MA 01101"}
                 value={from}
-                onChange={(e) => setFrom(e.target.value)}
+                onChange={(e) => updateFromText(e.target.value)}
               />
               {from.trim() ? (
                 <p className="mt-1 text-[11px] text-slate-500">Saved on this device for next time.</p>

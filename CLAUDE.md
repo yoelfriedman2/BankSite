@@ -176,6 +176,51 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-08-23, later same day (Address Change gets a "Print letter" shortcut per checklist item; Send
+a letter gains named "Signing as" profiles)** — Direct user request: the Address Change checklist
+already told you which banks needed a new-address letter, but actually writing one still meant going
+to Send a letter and re-picking the same bank/holder/address by hand. Separately, since accounts in
+this app often belong to different family members, the single global "Your name and return address"
+value (one `localStorage` string, used for every letter regardless of who it's actually for) meant
+whoever printed a letter for someone else's account had to overwrite it each time.
+
+- **Address Change**: each checklist item now has a "Print letter" button/link
+  (`AddressChangeClient.tsx`) that opens `/send` with the bank, that item's holder (if any), the
+  `address_change` template, and the campaign's `new_address` already filled in via query params —
+  `?bankId=&holder=&template=address_change&newAddress=`. One click gets you to a letter that's
+  already correct; Print is still a deliberate second click (a fresh page load can't reliably trigger
+  `window.open()` itself — browsers require a real user gesture for that, the same constraint
+  `handlePrint`'s own "browser blocked the print window" toast already exists for).
+- **`SendClient.tsx` reads these as new optional props** (`initialBankId`/`initialHolder`/
+  `initialTemplateId`/`initialNewAddress`), applied once in a mount-only effect — `/send/page.tsx`
+  parses `searchParams` (same `Promise<{...}>` + `await` convention as Banks/Accounts' own `?openId=`
+  deep links) and validates `template` against `LETTER_TEMPLATES` before trusting it. A plain visit to
+  `/send` or `/send/money` passes none of these — nothing here changes default behavior.
+- **New "Signing as" profiles**: the old single `bt_send_from` localStorage value is now a small list
+  of named profiles (`{id, label, text}`, `bt_send_profiles` key) — pick one from a dropdown next to
+  "Your name and return address," add a new one, rename, or delete (down to a minimum of one). The
+  existing single value is migrated into one profile the first time this loads, so nobody's saved
+  return address is lost. Deliberately still pure `localStorage`, no migration/table — this is
+  convenience text, not sensitive data, matching how the single value it replaces was already scoped
+  to "this device."
+- **The two features connect on purpose**: the deep link's `holder` param doubles as a profile match
+  key — if a saved profile's label matches the account holder's name (case-insensitive), it's
+  auto-selected as the active signer. So once each family member has saved their own name/address once,
+  printing a letter for their account (via Address Change or by hand-picking that account on Send)
+  defaults to them signing it, not whoever printed last.
+
+Verification: `tsc --noEmit`, `npm run build`, `npm test` (167, unchanged — no new pure-logic module)
+all clean (temp `xlsx` CDN→npm swap for the sandbox install, restored after — confirmed via `git diff`
+showing nothing). **Not independently click-tested** — this remote session has no browser/DEMO_MODE
+preview tool available, unlike most other sessions in this file; the mount-effect prefill logic, the
+profile migration/matching, and the mobile-safe `flex-wrap` layout for the new "Signing as" row were
+verified by reading the code paths directly (including tracing the effect-ordering/Strict-Mode
+double-invoke risk this file has been bitten by before) rather than a live pass. Flagged here rather
+than silently skipped, per the "manual verification, not just the types check" standing instruction
+above — the next session with the preview tool available should click through both flows (a
+deep-linked print from Address Change, and adding/switching/deleting a signer profile) before treating
+this as fully verified. Changelog and Guide entries added (genuinely new, user-visible capability).
+
 **2026-08-23 (new: Paper in — scan a bank document, an AI reads it, review before anything applies)**
 — Direct follow-up to a feature-ideas conversation: the app already automates every *outbound* piece
 of the maintenance chore (Send money, check printing, mailed-deposit tracking) but had nothing for

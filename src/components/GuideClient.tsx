@@ -264,7 +264,7 @@ const TOPICS: Topic[] = [
       "Two doors, same builder: \"Send money\" opens with a check and deposit ticket switched on, \"Send a letter\" opens with just the letter. You can turn either on or off without starting over.",
       "Pick which account the letter is about and the holder name and account number drop into the letter, the deposit ticket, and the check memo.",
       "The letter types cover a deposit enclosed, a change of address, requesting a statement, keeping an account active, and closing an account — plus a blank page. Edit the wording however you like; \"Reset to template\" puts it back.",
-      "Your name and return address are saved on your device, so you only type them once.",
+      "Your name and return address are saved on your device — and since accounts in this app often belong to different family members, you can save one \"Signing as\" profile per person and switch between them, instead of retyping whoever's actually signing this letter.",
       "A check can be drawn on one of your own accounts — that balance comes down right away and it's added to the check register — or on an outside personal account. Save that outside account once (name, bank, routing and account number) and it's there next time.",
       "The deposit ticket prints with a real MICR line at the bottom, encoding the account the money is going into — the same kind of machine-readable line a check has, so the bank can process it without deciphering handwriting.",
       "Blank vs. pre-printed check stock, and the alignment nudge, are the same settings the Print Checks page uses — line your printer up once and it applies wherever a check prints.",
@@ -307,6 +307,7 @@ const TOPICS: Topic[] = [
     tips: [
       "Only one address change can be in progress at a time — finish or cancel it before starting another.",
       "A bank with two account holders gets two checklist items, since holders usually have separate logins that each need updating.",
+      "Each item has a \"Print letter\" button that opens Send a letter with that bank, holder, and your new address already filled in — if you've saved a \"Signing as\" profile under that holder's name, it's picked automatically too.",
       "This is private to you; it doesn't affect your bank statuses or shared data.",
     ],
   },
