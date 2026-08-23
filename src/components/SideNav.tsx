@@ -26,6 +26,7 @@ import {
   Percent,
   Building2,
   History,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { GlobalSearch } from "@/components/GlobalSearch";
@@ -69,6 +70,7 @@ const GROUPS: NavGroup[] = [
       { href: "/send/money", label: "Send money", icon: Send, tour: "send-money" },
       { href: "/send", label: "Send a letter", icon: Mail, tour: "send-letter", exact: true },
       { href: "/checks", label: "Print Checks", icon: Printer, tour: "checks" },
+      { href: "/quickbooks-export", label: "QuickBooks export", icon: FileSpreadsheet, tour: "quickbooks-export" },
       { href: "/address-change", label: "Address change", icon: MapPin, tour: "address-change" },
       { href: "/fdic-sync", label: "FDIC sync", icon: RefreshCw, tour: "fdic-sync" },
       { href: "/holding-companies", label: "Holding companies", icon: Building2, tour: "holding-companies" },

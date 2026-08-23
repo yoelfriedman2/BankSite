@@ -254,6 +254,7 @@ export type DemoBalancePoint = {
   balance: number;
   change_amount: number | null;
   reason: string | null;
+  qb_exported_at?: string | null;
   type: TransactionType | null;
   created_at: string;
 };
@@ -643,6 +644,23 @@ export function getDemoBalanceHistory(accountId: string): DemoBalancePoint[] {
  *  personal history log can still name the right account/bank afterward. */
 export function getDemoTransactionAccountId(transactionId: string): string | null {
   return store().balanceHistory.find((h) => h.id === transactionId)?.account_id ?? null;
+}
+
+/** Every ledger row across every account — for the QuickBooks export, which
+ *  spans a date range rather than one account. */
+export function getAllDemoBalanceHistory(): DemoBalancePoint[] {
+  return store().balanceHistory;
+}
+
+/** Mirrors the real UPDATE ... where id in (...) the QuickBooks export does
+ *  against account_balance_history.qb_exported_at — marks rows as already
+ *  included in a past export so a later one doesn't duplicate them. */
+export function markDemoTransactionsExported(ids: string[]): void {
+  const idSet = new Set(ids);
+  const now = new Date().toISOString();
+  store().balanceHistory = store().balanceHistory.map((h) =>
+    idSet.has(h.id) ? { ...h, qb_exported_at: now } : h,
+  );
 }
 
 /** Mirrors record_account_transaction (migration 0051): applies a signed

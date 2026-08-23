@@ -36,6 +36,16 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
   yet" rather than crashing the page — so shipping this code doesn't require the migration to run
   first, the page just shows nothing until it does.
 
+- ~~Run migration `0059_quickbooks_export_tracking.sql`~~ — **confirmed run 2026-08-23.** Adds
+  `account_balance_history.qb_exported_at` (nullable timestamptz, additive). Powers the new
+  QuickBooks export page (Tools → QuickBooks export): tracks which transactions have already been
+  included in a downloaded export so re-running it for an overlapping date range doesn't hand back
+  the same rows twice (QuickBooks Desktop's Batch Enter Transactions has no duplicate detection of
+  its own). Originally numbered `0058` when built on its own branch; renumbered to `0059` while
+  merging into `main` after `main` independently claimed `0058` for the new History feature in the
+  meantime — same standing lesson as every prior migration-numbering collision in this file: the SQL
+  the user already ran against production is identical either way, only the filename moved.
+
 - ~~Run migration `0057_walkthrough_seen.sql`~~ — **confirmed run 2026-08-11.** Adds
   `profiles.walkthrough_tour_seen` (nullable text, additive). Fixes the welcome walkthrough popping
   back up on a different browser/device: it was tracked only in that browser's own `localStorage`, so

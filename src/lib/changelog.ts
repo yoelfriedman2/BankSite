@@ -30,6 +30,15 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
+    date: "2026-08-21",
+    title: "Export a month of transactions to QuickBooks Desktop",
+    items: [
+      "New QuickBooks export page: pick a date range and download one ZIP covering every bank at once — deposits and withdrawals split into ready-to-paste files, one per account, plus a README with exact steps.",
+      "Built for QuickBooks Desktop's Batch Enter Transactions (Accountant or Enterprise edition) — no manual retyping, and no need to export one account at a time.",
+      "Remembers what's already been exported so re-running it for an overlapping month won't hand you the same transactions twice.",
+    ],
+  },
+  {
     date: "2026-08-11",
     title: "Report a bug or request a feature, right from the app",
     items: [

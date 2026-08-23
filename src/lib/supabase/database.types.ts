@@ -22,6 +22,7 @@ export type Database = {
           change_amount: number | null
           created_at: string
           id: string
+          qb_exported_at: string | null
           reason: string | null
           type: string | null
           user_id: string
@@ -33,6 +34,7 @@ export type Database = {
           change_amount?: number | null
           created_at?: string
           id?: string
+          qb_exported_at?: string | null
           reason?: string | null
           type?: string | null
           user_id: string
@@ -44,6 +46,7 @@ export type Database = {
           change_amount?: number | null
           created_at?: string
           id?: string
+          qb_exported_at?: string | null
           reason?: string | null
           type?: string | null
           user_id?: string

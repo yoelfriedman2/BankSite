@@ -275,6 +275,107 @@ Changelog and Guide entries added (genuinely new, user-visible feature). `?openI
 distinction are now established conventions — reuse them rather than inventing a new logging shape
 for the next mutation that should show up somewhere.
 
+**2026-08-21 (QuickBooks Desktop export — new Tools page, new pure module, new migration)** — User
+asked whether transactions logged in this app could be imported into QuickBooks Desktop at month-end,
+for a family member who does their real bookkeeping there. Researched QuickBooks Desktop's actual
+import mechanisms (via WebSearch, since this sandbox can't reach quickbooks.intuit.com directly —
+most support-site fetches are egress-blocked here, so this was pieced together from search snippets
+across several queries, not one authoritative fetch) before building anything, since the user
+specifically asked for this to be gotten right, not guessed at:
+
+- **Format chosen: CSV formatted for QuickBooks Desktop's "Batch Enter Transactions"** (Accountant
+  menu — Accountant/Enterprise edition only, confirmed the user has one of these), not QBO/Web Connect
+  (OFX) and not IIF. Reasoning, laid out for the user before building: QBO is one-account-per-file by
+  design and offers no real bulk win on the generation side; IIF matches an account by exact *name*,
+  not routing/account number, which doesn't fit "the account numbers are going to match." Batch Enter
+  Transactions is a raw copy/paste grid — no file format to get validated, and it's genuinely bulk on
+  *this app's* side (one click generates every account's files at once), even though QuickBooks itself
+  still requires one paste per (account × direction) since the bank/card account is chosen via a single
+  dropdown per paste session, confirmed via multiple independent search results — there is no
+  per-row account column for Checks/Deposits that would allow a true one-shot paste across many banks.
+  This constraint is exactly why the export is one CSV per account per direction (Deposits vs.
+  Withdrawals, mapped from the ledger's signed `change_amount`), not one flat file.
+- **New `/quickbooks-export` page** (Tools nav group, both `SideNav.tsx`/`TopNav.tsx`): pick a date
+  range (defaults to the previous full calendar month), see a live preview (per-account deposit/
+  withdrawal counts and totals, plus how many were already exported before), then download one ZIP —
+  a Deposits and/or Withdrawals CSV per account (skipped if empty), plus a bundled README with the
+  exact paste-in steps, QuickBooks edition requirement, and the category-placeholder/duplicate-risk
+  caveats below.
+- **New pure module `src/lib/quickbooksExport.ts`** (independently unit-tested,
+  `quickbooksExport.test.ts` — 19 new tests): date formatting (`'YYYY-MM-DD' → 'MM/DD/YYYY'` via pure
+  string splitting, never a `Date` object — same UX-16-class timezone-shift risk this file has been
+  bitten by before, deliberately avoided here on a date going straight into a bank ledger), plain
+  2-decimal amount formatting (no `$`, no thousands separator — the safest form for QuickBooks to parse
+  on paste), a CSV builder (CRLF + UTF-8 BOM, for Excel), and `QB_CATEGORY_BY_TYPE` — a best-guess
+  QuickBooks "Account" (category) default per this app's own `TransactionType`: `monthly_fee` →
+  "Bank Charges", `interest` → "Interest Income", `opening_balance` → "Opening Balance Equity" (a real
+  QuickBooks special account, auto-created, can't be deleted — confirmed via research), everything else
+  (deposit/withdrawal/correction/other/import/sweep_out/sweep_in) → "Ask My Accountant". **This app has
+  no knowledge of a user's real Chart of Accounts** — every category is a labeled placeholder meant to
+  be reviewed, never asserted as correct; the bundled README says so explicitly, in plain language.
+- **`sweep_out`/`sweep_in` (money moved between the user's own tracked accounts) are flagged, not
+  silently mis-booked**: Batch Enter Transactions has no "Transfer" type, so these can't be entered as
+  a real bank transfer — they're categorized "Ask My Accountant" and the README explicitly suggests
+  re-entering them as a genuine Transfer (Banking → Transfer Funds) instead, so they don't inflate
+  income/expense.
+- **Duplicate-export protection, since QuickBooks itself has none for a raw paste** (confirmed via
+  research — Batch Enter Transactions does not check for duplicates; re-pasting the same file, or
+  exporting an overlapping date range twice, will create duplicate transactions there). New migration
+  **`0059_quickbooks_export_tracking.sql`** (renumbered from `0058` while merging into `main` — see
+  the note at the end of this entry — **confirmed run 2026-08-23**) adds
+  `account_balance_history.qb_exported_at` (nullable timestamptz, additive). Every transaction
+  included in a download is
+  marked exported right when the ZIP is generated — same "the side effect happens at generation time,
+  not at some unverifiable later confirmation" precedent as `claim_check_number` (there's no reliable
+  way to know a client-side file download actually completed, let alone that it was successfully
+  pasted into QuickBooks). A checkbox lets the user deliberately re-include already-exported rows, with
+  an inline warning that doing so risks duplicates on the QuickBooks side. Degrades gracefully before
+  the migration runs: `select("*")` means `qb_exported_at` just comes back `undefined`, which reads
+  identically to "never exported" — the export still works, it just can't remember across runs yet.
+  Large `.in("id", ...)` updates are chunked to 100 ids, same fix already applied to the road-trip
+  planner's own `.in()` lookups (CLAUDE.md, 2026-07-05) — a large `.in()` filter is encoded into the
+  request URL regardless of HTTP method and can be silently truncated past a few hundred ids.
+- **`database.types.ts` hand-patched** for the new column (same standing limitation as every schema
+  change in this sandbox — no live Postgres connection to regenerate from).
+- **Demo mode is fully wired**, not just bypassed: `getAllDemoBalanceHistory()`/
+  `markDemoTransactionsExported()` added to `lib/demo.ts` so the whole flow — preview, download,
+  re-marking, the "already exported" state disabling the button, the override checkbox — is genuinely
+  click-testable, not asserted from a read-through.
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (167 passed, +19 new in
+`quickbooksExport.test.ts` covering every transaction type's category mapping, the date/amount
+formatters, CSV escaping/BOM/CRLF, filename de-duping, and the README builder) all clean. Live DEMO_MODE
+CDP pass (`scratchpad/verify-quickbooks-export.mjs`, new — **27/27**), and this one actually inspects
+the generated file bytes, not just that a download happened: intercepted the download anchor's click
+handler to fetch the blob *before* the app's own `URL.revokeObjectURL()` call (which happens
+synchronously right after `.click()` — fetching from a separate later step hit an already-revoked URL,
+a real test-harness trap, not an app bug, until the fetch was moved inside the click override itself),
+then unzipped the real bytes with `jszip` and asserted on the actual CSV content: correct headers
+(`Date,Received From,Account,Amount,Memo` / `Date,Payee,Account,Amount,Memo`), `MM/DD/YYYY` dates,
+real category names present, no `$`/thousands separators, withdrawal amounts always positive despite
+the underlying ledger delta being negative, and the README containing the Batch Enter Transactions
+steps, the edition requirement, and the no-duplicate-detection warning verbatim. Also confirmed: after
+one export, reloading the same date range shows the rows as already-exported and the Download button
+disables itself (nothing new); checking "include already exported" re-enables it with the duplicate-risk
+warning shown; no 375px overflow; zero console errors throughout. One real methodology trap along the
+way, not an app bug: the demo store is a stateful in-memory singleton that persists across script runs
+within the same dev-server process, so an early test run that partially succeeded (enabled the button,
+clicked, exported) left the "already exported" state behind for the next run against the same server —
+diagnosed by restarting the dev server (fresh demo store) before trusting a clean pass. `DEMO_MODE` was
+flipped to `true` via a temporary `.env.local` (none existed in this fresh environment) and removed
+before finishing, per the standing rule. Changelog and Guide entries added (genuinely new, user-visible
+capability).
+
+**A real migration-numbering collision, caught while merging to `main`, not before.** This branch
+originally numbered its migration `0058_quickbooks_export_tracking.sql`, given directly to the user in
+chat and confirmed run against production before this branch was merged. Merging into `main` found it
+had independently claimed `0058` in the meantime for an unrelated feature (`0058_personal_activity_
+log.sql`, the new History page). Renumbered this branch's file to `0059` (file contents unchanged — the
+SQL the user already ran against production is identical either way, only the filename in this repo
+moved) and updated the TODO.md/CLAUDE.md references to it. Same standing lesson as every prior
+migration-numbering collision in this file: check the next free migration number against `origin/main`
+right before merging, not just against the branch point.
+
 **2026-08-20 (fix: the account view sheet's "Log activity today" menu opened off the bottom of the
 screen)** — User report with a screenshot: opening a non-CD account (from the Accounts page, sheet
 docked to the right at desktop width) and clicking the footer's "Log activity today" button showed
