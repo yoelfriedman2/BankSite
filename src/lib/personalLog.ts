@@ -31,6 +31,7 @@ export type PersonalLogAction =
   | "borrowed_fund_return"
   | "document_add"
   | "document_delete"
+  | "document_scan"
   | "check_print"
   | "check_delete"
   | "reminder_add"

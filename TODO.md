@@ -24,6 +24,21 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
 
 ## One-time setup pending
 
+- **Run migration `0060_paper_in.sql`** — not yet run. New private per-user table
+  (`scanned_documents`) backing the new `/paper-in` page. Full SQL is in that migration file and was
+  also pasted directly into chat when this shipped. Reuses the existing `account-documents` storage
+  bucket (migration 0014) — no new bucket/storage-RLS needed. Degrades gracefully until run:
+  `getScanInbox()` treats a query error as an empty inbox rather than crashing the page, so the page
+  just shows nothing scanned until the migration runs — uploading/reading isn't blocked by this, only
+  the "keep a queue of pending scans across page loads" part is.
+- **Set `ANTHROPIC_API_KEY`** — required for Paper in's actual AI read (`src/lib/paperIn/
+  scanReader.ts`). Without it, uploads still work but every "read this" attempt fails with a friendly
+  "AI document reading isn't set up yet" message instead of erroring the app. Get a key from
+  console.anthropic.com; see `.env.local.example` for the exact variable names (also optional
+  `PAPER_IN_MODEL` to override the default cheap-model choice). Real cost is small — roughly half a
+  cent to a few cents per document read, depending on the model — see the chat discussion where this
+  was scoped for the actual math.
+
 - **Run migration `0058_personal_activity_log.sql`** — not yet run. New private per-user table
   (`personal_activity_log`) backing the new `/history` page: a private record of every change a
   user makes to their own data (bank/account edits — renamed, account number changed, status

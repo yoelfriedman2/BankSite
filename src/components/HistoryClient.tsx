@@ -16,6 +16,7 @@ import {
   Bell,
   Upload,
   RefreshCw,
+  ScanText,
   type LucideIcon,
 } from "lucide-react";
 import { SearchInput } from "@/components/SearchInput";
@@ -46,6 +47,7 @@ const CATEGORY_OF: Record<PersonalLogAction, Category> = {
   borrowed_fund_return: "money",
   document_add: "other",
   document_delete: "other",
+  document_scan: "other",
   check_print: "other",
   check_delete: "other",
   reminder_add: "other",
@@ -84,6 +86,7 @@ const ACTION_META: Record<PersonalLogAction, { icon: LucideIcon; color: string }
   borrowed_fund_return: { icon: Banknote, color: "text-emerald-600" },
   document_add: { icon: FileText, color: "text-emerald-600" },
   document_delete: { icon: FileText, color: "text-rose-500" },
+  document_scan: { icon: ScanText, color: "text-teal-700" },
   check_print: { icon: Printer, color: "text-slate-500" },
   check_delete: { icon: Printer, color: "text-rose-500" },
   reminder_add: { icon: Bell, color: "text-emerald-600" },

@@ -176,6 +176,91 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-08-23 (new: Paper in — scan a bank document, an AI reads it, review before anything applies)**
+— Direct follow-up to a feature-ideas conversation: the app already automates every *outbound* piece
+of the maintenance chore (Send money, check printing, mailed-deposit tracking) but had nothing for
+the *inbound* side — every balance still gets into the app because someone reads a paper statement
+and types a number. Explored a no-AI (pure PDF text-extraction) version first and the user correctly
+rejected it — most of this mail arrives as actual paper, not a downloadable e-statement — then asked
+specifically about cost/feasibility of a real AI read, which was researched and quoted (roughly
+half a cent to a few cents per document on Claude's current API pricing) before building anything.
+
+- **New `/paper-in` page** (Banks & accounts nav group, right after Documents): take a photo (or
+  upload a PDF) of anything that came in the mail. It's read automatically and lands on a review
+  card — proposed account match, doc type (statement/dormancy warning/tax form/other), confidence,
+  extracted balance and date — all editable before anything happens. "File it" (optionally "and
+  update balance") is the only thing that ever writes anything; a document that's just filed with no
+  balance change is a completely valid choice (e.g. a dormancy warning, kept as a record but not fed
+  into the ledger). Same accept-before-anything-applies shape as FDIC sync and holding-company sync.
+- **New `src/lib/paperIn/scanReader.ts`** (server-only) — the one and only place this app calls an
+  external AI API. Sends the photo/PDF straight to Claude (as an image or PDF content block, no OCR
+  step of its own) alongside the caller's own account list (bank, holder, type, last-4, current
+  balance) via a **forced single tool call** (`tool_choice: {type: "tool", ...}`) so the response is
+  always structured, never free text to parse. Defaults to Haiku (`claude-haiku-4-5-20251001`, cheap
+  and plenty for reading a statement) — overridable via `PAPER_IN_MODEL` for a harder document.
+  Degrades to a friendly "not set up yet" error (not a crash) when `ANTHROPIC_API_KEY` is unset, same
+  shape as `RESEND_API_KEY` unset. New dependency `@anthropic-ai/sdk`.
+- **New `scanned_documents` table** (migration **0060_paper_in.sql**, not yet run — see `TODO.md`),
+  private per-user, ordinary "own rows only" RLS — one row per uploaded scan from upload through the
+  AI's proposal through the user's accept/reject decision. Reuses the existing `account-documents`
+  storage bucket (migration 0014) rather than a new one — it already allows the mime types this needs
+  and its storage RLS already scopes by the `${user_id}/...` prefix, so a scan just lives at
+  `${user_id}/paper-in/${uuid}.ext` until reviewed. On accept, a normal `account_documents` row is
+  also inserted (reusing that existing table/pipeline unchanged) so the filed document shows up in
+  the account's regular Documents list too — Paper in is a front door onto existing machinery, not a
+  parallel document system.
+- **Balance updates on accept go through the existing `update_account_balance` RPC** (migration
+  0043, long confirmed live) with reason "Statement balance — read from a scanned document" — same
+  `correction`-type ledger entry an account editor's manual balance override already produces, no new
+  RPC needed. New `PersonalLogAction` value `document_scan` (in `lib/personalLog.ts`) logs one History
+  entry per apply, wired into `HistoryClient.tsx`'s category/icon maps (TypeScript's own exhaustive-
+  `Record` check on those two maps is what caught this needing to be done — a real compiler-enforced
+  reminder, not something that could've been silently skipped).
+- **Demo mode is fully simulated, not a no-op**: `lib/demo.ts` gained `analyzeDemoScannedDocument()` —
+  a deterministic fake "AI read" (matches by bank name in the filename, falls back to the first active
+  account, proposes a balance a few dollars off the account's real one) so the whole upload → read →
+  review → accept/dismiss flow is genuinely click-testable without a real API key or network call,
+  same "Load sample data (demo)" precedent the holding-company wizard already established.
+
+**A real bug caught during verification, not before**: `ReviewCard`'s `accept()` originally called the
+same `onDone()` callback as `dismiss()` to hide the card locally — correct for dismiss (the row is
+truly gone), wrong for accept (the row should reappear in "Recently filed" once `router.refresh()`
+brings back its new `accepted` status, not vanish forever). Since the local hide state never expires,
+a successfully filed document would disappear from the page entirely and never show up in "Recently
+filed" at all — silently discarding the confirmation the whole review screen exists to provide. Fixed
+by only calling the hide callback from `dismiss()` (renamed to `onDismissed` for clarity) and letting
+`accept()` rely purely on the server refresh to move the row from the review list into the filed list.
+
+**Two real CDP-harness traps hit while chasing this, not app bugs** (worth remembering for the next
+session that drives this app's UI): (1) a native `click` event dispatched via CDP's
+`Input.dispatchMouseEvent` **does** reach the DOM correctly (confirmed via a window-level capture
+listener recording the exact right target) — but on a freshly-restarted dev server, clicking a button
+whose route just did its first on-demand compile races Fast Refresh against the in-flight server
+action, and the action silently never resolves. This is the *exact* trap already documented in this
+file's 2026-08-11 entry ("increasing the buffer to ~3.5s made it resolve reliably every time") —
+re-confirmed here on a completely different flow, so it's evidently not a one-off: **warm the target
+route with a plain `curl`/nav first, and/or give a real multi-second settle buffer before the first
+click after a fresh restart**, don't just click as soon as the element appears. (2) `getBoundingClientRect()`
+returned `{}` when read directly via `Runtime.evaluate`'s `returnByValue` — its properties are
+prototype getters, not own-enumerable, so they don't survive JSON serialization; always destructure
+into a plain `{x, y, width, height}` object inside the page-side expression before returning it.
+
+**Verification**: `tsc --noEmit`, `npm run build` (temp `xlsx` CDN→npm swap for the sandbox install —
+`@anthropic-ai/sdk` was added as a real, permanent dependency on top via a full install rather than
+the swap, so no lockfile-restore patch was needed for it, only for `xlsx` — restored after, confirmed
+via `git diff` showing nothing but the intended `xlsx`/`@anthropic-ai/sdk` lines), `npm test` (167,
+unchanged) all clean. Live DEMO_MODE CDP pass, two scripts: **14/14** on the full upload → simulated
+AI read → review → accept flow (doc-type badge, confidence chip, pre-filled account/balance, the
+accept click, the balance actually landing in "Recently filed," zero console errors, no 375px
+overflow) and **3/3** on the dismiss flow, including a genuine full-page reload confirming a dismissed
+scan doesn't resurrect (persisted in the demo store, not just hidden in local React state). Not
+independently verified against a real Anthropic API call or real Supabase (`scanned_documents`
+migration not yet run) — both are real-external-service-only paths with no way to exercise them from
+this sandbox, same accepted limitation as every other real-Supabase/real-third-party-API feature in
+this project's history. `DEMO_MODE` was flipped to `true` via a temporary `.env.local` (none existed
+in this fresh environment) and removed before finishing, per the standing rule. Changelog and Guide
+entries added (genuinely new, user-visible capability).
+
 **2026-08-21 (new: History — a private, per-user change log, separate from the shared Activity feed)**
 — User request: the existing Activity log on /updates only ever shows changes to *shared* data
 (community notes, shared bank-field propagation, bank links — see `lib/audit.ts`'s `audit_log`) —
