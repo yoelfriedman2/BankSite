@@ -222,8 +222,10 @@ specifically asked for this to be gotten right, not guessed at:
 - **Duplicate-export protection, since QuickBooks itself has none for a raw paste** (confirmed via
   research — Batch Enter Transactions does not check for duplicates; re-pasting the same file, or
   exporting an overlapping date range twice, will create duplicate transactions there). New migration
-  **`0058_quickbooks_export_tracking.sql`** adds `account_balance_history.qb_exported_at` (nullable
-  timestamptz, additive — **not yet run, see TODO.md**). Every transaction included in a download is
+  **`0059_quickbooks_export_tracking.sql`** (renumbered from `0058` while merging into `main` — see
+  the note at the end of this entry — **confirmed run 2026-08-23**) adds
+  `account_balance_history.qb_exported_at` (nullable timestamptz, additive). Every transaction
+  included in a download is
   marked exported right when the ZIP is generated — same "the side effect happens at generation time,
   not at some unverifiable later confirmation" precedent as `claim_check_number` (there's no reliable
   way to know a client-side file download actually completed, let alone that it was successfully
@@ -264,6 +266,16 @@ diagnosed by restarting the dev server (fresh demo store) before trusting a clea
 flipped to `true` via a temporary `.env.local` (none existed in this fresh environment) and removed
 before finishing, per the standing rule. Changelog and Guide entries added (genuinely new, user-visible
 capability).
+
+**A real migration-numbering collision, caught while merging to `main`, not before.** This branch
+originally numbered its migration `0058_quickbooks_export_tracking.sql`, given directly to the user in
+chat and confirmed run against production before this branch was merged. Merging into `main` found it
+had independently claimed `0058` in the meantime for an unrelated feature (`0058_personal_activity_
+log.sql`, the new History page). Renumbered this branch's file to `0059` (file contents unchanged — the
+SQL the user already ran against production is identical either way, only the filename in this repo
+moved) and updated the TODO.md/CLAUDE.md references to it. Same standing lesson as every prior
+migration-numbering collision in this file: check the next free migration number against `origin/main`
+right before merging, not just against the branch point.
 
 **2026-08-20 (fix: the account view sheet's "Log activity today" menu opened off the bottom of the
 screen)** — User report with a screenshot: opening a non-CD account (from the Accounts page, sheet
