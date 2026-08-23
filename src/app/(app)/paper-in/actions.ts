@@ -404,6 +404,11 @@ export async function applyScan(
 
 export async function dismissScan(scanId: string): Promise<{ error?: string }> {
   if (DEMO_MODE) {
+    const scan = getDemoScannedDocuments().find((s) => s.id === scanId);
+    if (!scan) return { error: "That scan couldn't be found." };
+    if (scan.status === "accepted") {
+      return { error: "This one's already been filed — manage it from the account's Documents instead." };
+    }
     deleteDemoScannedDocument(scanId);
     revalidate();
     return {};
@@ -417,10 +422,19 @@ export async function dismissScan(scanId: string): Promise<{ error?: string }> {
 
   const { data: scan } = await supabase
     .from("scanned_documents")
-    .select("storage_path")
+    .select("storage_path, status")
     .eq("id", scanId)
     .maybeSingle();
   if (!scan) return { error: "That scan couldn't be found." };
+
+  // A scan that's already been accepted shares its storage_path with a real
+  // account_documents row (inserted by applyScan) — deleting the file here
+  // would silently orphan that filed document. dismissScan is a directly-
+  // callable server action, so this has to be enforced here, not just by
+  // which buttons the UI happens to show.
+  if (scan.status === "accepted") {
+    return { error: "This one's already been filed — manage it from the account's Documents instead." };
+  }
 
   const storagePath = scan.storage_path as string;
   if (!storagePath.startsWith(`${user.id}/`)) return { error: "That scan couldn't be found." };

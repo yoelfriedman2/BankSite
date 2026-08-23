@@ -145,6 +145,26 @@ export async function readScannedDocument(
   }
 
   const isPdf = mimeType === "application/pdf";
+
+  // Claude's image input only accepts these four types — but the upload
+  // bucket (migration 0014) also allows HEIC/HEIF, since those are valid
+  // formats for a plain document photo. An iPhone's camera roll defaults to
+  // HEIC, so "pick an existing photo" (as opposed to "take a new one," which
+  // browsers typically re-encode to JPEG during capture) can easily produce
+  // one — sending it straight through would fail the whole API call with an
+  // opaque error. Caught here with a specific, actionable message instead.
+  const SUPPORTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
+  type SupportedImageType = (typeof SUPPORTED_IMAGE_TYPES)[number];
+  if (!isPdf && !SUPPORTED_IMAGE_TYPES.includes(mimeType as SupportedImageType)) {
+    if (/hei[cf]/i.test(mimeType)) {
+      return {
+        error:
+          "iPhone photos in HEIC format aren't readable yet — in Settings → Camera → Formats, choose \"Most Compatible,\" or share/export the photo as a JPEG first.",
+      };
+    }
+    return { error: `That file type (${mimeType || "unknown"}) isn't readable — try a JPEG, PNG, or PDF.` };
+  }
+
   const client = new Anthropic({ apiKey });
   const model = process.env.PAPER_IN_MODEL || DEFAULT_MODEL;
 
@@ -157,7 +177,7 @@ export async function readScannedDocument(
         type: "image",
         source: {
           type: "base64",
-          media_type: mimeType as "image/jpeg" | "image/png" | "image/webp" | "image/gif",
+          media_type: mimeType as SupportedImageType,
           data: fileBytes.toString("base64"),
         },
       };

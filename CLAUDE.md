@@ -261,6 +261,47 @@ this project's history. `DEMO_MODE` was flipped to `true` via a temporary `.env.
 in this fresh environment) and removed before finishing, per the standing rule. Changelog and Guide
 entries added (genuinely new, user-visible capability).
 
+**Pre-merge review pass (same day, before pushing to `main`)**: ran this branch's diff through the
+`code-review` skill at high effort before merging, specifically because this feature both writes to
+account balances and calls a real paid third-party API — a higher bar than most UI-only features.
+Found and fixed 3 real bugs, all confirmed against the actual code before fixing (not taken on faith):
+1. **HEIC/HEIF photos would hard-fail with an opaque error.** `readScannedDocument` cast the upload's
+   `mimeType` straight into Anthropic's `media_type` field, but Claude's image input only accepts
+   jpeg/png/webp/gif — while the storage bucket (migration 0014) explicitly allows HEIC/HEIF, since
+   those are valid for a plain document photo. An iPhone's camera roll defaults to HEIC, so picking an
+   *existing* photo (as opposed to "Take a photo," which browsers typically re-encode to JPEG during
+   live capture) would trip this. Now caught before the API call with a specific, actionable message
+   ("switch Settings → Camera → Formats to Most Compatible, or share/export as JPEG first") instead of
+   a generic "couldn't read this." **Real HEIC→JPEG conversion was considered and deliberately not
+   attempted** — it would need a new dependency (a WASM HEIC decoder, since nothing already in this
+   project handles it) with no real HEIC file in this sandbox to verify the conversion against; shipping
+   an unverified image-transcoding path into a financial app's data pipeline was judged worse than a
+   clear, correct rejection message. Flagged as a real follow-up if it turns out to matter in practice.
+2. **`dismissScan` could delete a file a filed document still points at.** It's a directly-callable
+   server action (this app's own established SEC-01/INT-01 lesson — not gated by which buttons the UI
+   happens to render) with no check on the scan's own status. Accepting a scan inserts a normal
+   `account_documents` row pointing at the *same* `storage_path` (not a copy) — so calling
+   `dismissScan` on an already-accepted scan would delete the underlying file out from under that
+   filed document, permanently orphaning it (it'd show in the account's Documents list but fail to
+   open). Fixed the same way DATA-21 fixed the analogous "permanent delete without requiring Trash
+   first" gap: `dismissScan` now checks `status !== 'accepted'` before touching storage, in both the
+   real and demo-mode branches, returning "This one's already been filed — manage it from the
+   account's Documents instead." No UI path could reach this today (accepted items render no dismiss
+   button), which is exactly why it needed a server-side check, not a UI-only fix.
+3. **A failed scan's dismiss button could vanish it without telling you if the delete failed.**
+   `FailedRow`'s `onDismiss` fired `dismissScan()` and hid the row locally in the same breath,
+   without awaiting the result or checking `.error` — inconsistent with `ReviewCard`'s own dismiss,
+   which does both. Moved the same await-then-toast-then-hide logic into `FailedRow` itself (reusing
+   its existing `isPending`/`startTransition`), so a failed dismiss now surfaces an error instead of
+   silently disappearing while the row still exists server-side.
+
+Re-verified after all three fixes: `tsc --noEmit`, `npm run build`, `npm test` (167, unchanged) clean,
+and both existing DEMO_MODE CDP scripts re-run fresh — accept flow 14/14, dismiss flow 3/3, no
+regressions. The accepted-status dismiss guard itself isn't independently exercised by either script
+(no UI path reaches it, by design), so it was verified by reading the logic directly rather than a
+live click-test — a plain early-return on a status string, the same shape already proven safe by the
+DATA-21 precedent it mirrors.
+
 **2026-08-21 (new: History — a private, per-user change log, separate from the shared Activity feed)**
 — User request: the existing Activity log on /updates only ever shows changes to *shared* data
 (community notes, shared bank-field propagation, bank links — see `lib/audit.ts`'s `audit_log`) —

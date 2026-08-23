@@ -240,8 +240,23 @@ function DoneRow({ scan }: { scan: ScannedDocumentRow }) {
   );
 }
 
-function FailedRow({ scan, onRetry, onDismiss }: { scan: ScannedDocumentRow; onRetry: () => void; onDismiss: () => void }) {
+function FailedRow({ scan, onRetry, onDismissed }: { scan: ScannedDocumentRow; onRetry: () => void; onDismissed: () => void }) {
+  const router = useRouter();
+  const toast = useToast();
   const [isPending, startTransition] = useTransition();
+
+  function dismiss() {
+    startTransition(async () => {
+      const res = await dismissScan(scan.id);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      router.refresh();
+      onDismissed();
+    });
+  }
+
   return (
     <div className="flex items-start gap-3 rounded-xl border border-rose-100 bg-rose-50 px-4 py-3">
       <AlertTriangle className="mt-0.5 h-4 w-4 flex-none text-rose-600" />
@@ -261,8 +276,9 @@ function FailedRow({ scan, onRetry, onDismiss }: { scan: ScannedDocumentRow; onR
         </button>
         <button
           type="button"
-          onClick={onDismiss}
-          className="rounded-lg border border-rose-200 bg-white p-1 text-rose-700 hover:bg-rose-100"
+          disabled={isPending}
+          onClick={dismiss}
+          className="rounded-lg border border-rose-200 bg-white p-1 text-rose-700 hover:bg-rose-100 disabled:opacity-50"
           aria-label="Dismiss"
         >
           <X className="h-3.5 w-3.5" />
@@ -394,10 +410,7 @@ export function PaperInClient({
               key={s.id}
               scan={s}
               onRetry={() => router.refresh()}
-              onDismiss={() => {
-                dismissScan(s.id).then(() => router.refresh());
-                removeLocally(s.id);
-              }}
+              onDismissed={() => removeLocally(s.id)}
             />
           ))}
         </div>
