@@ -308,6 +308,7 @@ const TOPICS: Topic[] = [
       "Only one address change can be in progress at a time — finish or cancel it before starting another.",
       "A bank with two account holders gets two checklist items, since holders usually have separate logins that each need updating.",
       "Each item has a \"Print letter\" button that opens Send a letter with that bank, holder, and your new address already filled in — if you've saved a \"Signing as\" profile under that holder's name, it's picked automatically too.",
+      "\"Print all remaining letters\" prints every bank you haven't checked off yet in one job — no need to open each one individually. Printing doesn't check anything off for you; check items off yourself once you know a bank actually has your new address.",
       "This is private to you; it doesn't affect your bank statuses or shared data.",
     ],
   },

@@ -18,8 +18,8 @@ import {
 } from "lucide-react";
 import { SearchInput } from "@/components/SearchInput";
 import { useToast } from "@/components/Toast";
-import { formatCurrency, formatDate } from "@/lib/format";
-import { todayLocalStr } from "@/lib/date";
+import { bankAddressBlock, formatCurrency, formatDate } from "@/lib/format";
+import { longDateStr, todayLocalStr } from "@/lib/date";
 import { amountWords, type PrintMode } from "@/lib/checkPrint";
 import { buildMailingHTML } from "@/lib/mailPrint";
 import {
@@ -35,6 +35,14 @@ import {
   type LetterTemplateId,
 } from "@/lib/letterTemplates";
 import { effectiveRoutingNumber } from "@/lib/routingNumber";
+import {
+  findSignerProfileByLabel,
+  loadActiveProfileId,
+  loadSignerProfiles,
+  saveActiveProfileId,
+  saveSignerProfiles,
+  type SignerProfile,
+} from "@/lib/signerProfiles";
 import {
   deletePaymentSource,
   getMailingAddresses,
@@ -69,18 +77,6 @@ export interface SendBank {
  *  so a letter can grow a check without starting over. */
 export type SendMode = "letter" | "money";
 
-/** A saved "From" block (name + return address) a letter can be signed as —
- *  distinct from the account holder token, since one person often signs for
- *  several holders' accounts. Stored in this browser only. */
-interface SignerProfile {
-  id: string;
-  label: string;
-  text: string;
-}
-const PROFILES_KEY = "bt_send_profiles";
-const ACTIVE_PROFILE_KEY = "bt_send_profile_id";
-const LEGACY_FROM_KEY = "bt_send_from";
-
 const inputCls =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100";
 const labelCls = "mb-1 block text-xs font-medium text-slate-500";
@@ -114,19 +110,6 @@ function Section({
 // has no reason to mask it (private, invite-only, single family).
 function maskAccount(num: string | null): string {
   return num ?? "no number on file";
-}
-
-/** "123 Main St / Springfield, MA 01101" as the block that goes in the window. */
-function addressLines(bankName: string, a: MailingAddress | null): string {
-  const parts = [bankName];
-  if (a?.address) parts.push(a.address);
-  const cityLine = [a?.city, [a?.state, a?.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
-  if (cityLine) parts.push(cityLine);
-  return parts.join("\n");
-}
-
-function longDate(): string {
-  return new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
 export function SendClient({
@@ -240,39 +223,12 @@ export function SendClient({
   const profilesLoaded = useRef(false);
 
   useEffect(() => {
-    let list: SignerProfile[] = [];
-    try {
-      const raw = localStorage.getItem(PROFILES_KEY);
-      const parsed = raw ? (JSON.parse(raw) as unknown) : [];
-      if (Array.isArray(parsed)) list = parsed as SignerProfile[];
-    } catch {
-      /* storage blocked or corrupt — fall through to migration below */
-    }
-    if (list.length === 0) {
-      // Migrate the old single "bt_send_from" value, if any, into one profile
-      // rather than losing it the first time this ships.
-      let legacy = "";
-      try {
-        legacy = localStorage.getItem(LEGACY_FROM_KEY) ?? "";
-      } catch {
-        /* storage blocked */
-      }
-      list = [{ id: "default", label: legacy.split("\n")[0]?.trim() || "Me", text: legacy }];
-    }
-
-    let activeId = list[0]?.id ?? null;
-    try {
-      const saved = localStorage.getItem(ACTIVE_PROFILE_KEY);
-      if (saved && list.some((p) => p.id === saved)) activeId = saved;
-    } catch {
-      /* storage blocked */
-    }
+    const list = loadSignerProfiles();
+    let activeId = loadActiveProfileId(list);
     // Deep-linked from an account whose holder matches a saved signer by
     // name (e.g. Address Change's "Print letter") — default to that one.
     if (initialHolder) {
-      const match = list.find(
-        (p) => p.label.trim().toLowerCase() === initialHolder.trim().toLowerCase(),
-      );
+      const match = findSignerProfileByLabel(list, initialHolder);
       if (match) activeId = match.id;
     }
     const active = list.find((p) => p.id === activeId) ?? list[0] ?? null;
@@ -305,19 +261,11 @@ export function SendClient({
 
   useEffect(() => {
     if (!profilesLoaded.current) return;
-    try {
-      localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
-    } catch {
-      /* storage blocked */
-    }
+    saveSignerProfiles(profiles);
   }, [profiles]);
   useEffect(() => {
     if (!profilesLoaded.current || !activeProfileId) return;
-    try {
-      localStorage.setItem(ACTIVE_PROFILE_KEY, activeProfileId);
-    } catch {
-      /* storage blocked */
-    }
+    saveActiveProfileId(activeProfileId);
   }, [activeProfileId]);
 
   /** Typing in "Your name and return address" edits the active profile. */
@@ -508,7 +456,7 @@ export function SendClient({
       holder: destAccount?.holder ?? "",
       account: destAccount?.account_number ?? "",
       amount: amount ? formatCurrency(parseFloat(amount) || 0) : "",
-      date: longDate(),
+      date: longDateStr(),
       me: from.split("\n")[0]?.trim() ?? "",
       newAddress,
     }),
@@ -652,8 +600,8 @@ export function SendClient({
       letter: includeLetter
         ? {
             from: from.trim() || " ",
-            date: longDate(),
-            to: addressLines(bank.name, address),
+            date: longDateStr(),
+            to: bankAddressBlock(bank.name, address),
             body,
           }
         : undefined,
@@ -784,7 +732,7 @@ export function SendClient({
                 </p>
                 <p className="mt-1 whitespace-pre-line text-xs text-slate-600">
                   {address
-                    ? addressLines("", address).trim()
+                    ? bankAddressBlock("", address).trim()
                     : "No mailing address on file — run FDIC sync's branch refresh, or write the address by hand."}
                 </p>
               </div>

@@ -22,6 +22,13 @@ export interface AddressItem {
   website: string | null;
   /** Null when the accounts at this bank have no holder tagged. */
   holder: string | null;
+  /** FDIC cert — null for a manually-added bank with no cert on file. Used to
+   *  look up a mailing address when printing a letter for this item. */
+  cert: number | null;
+  /** The first matching account's number for this (bank, holder) pair — a
+   *  holder can have more than one account at a bank, so this is a
+   *  best-effort pick, same as the "Print letter" deep link's own match. */
+  accountNumber: string | null;
 }
 
 export interface AddressChangeData {
@@ -33,7 +40,13 @@ export interface AddressChangeData {
   eligibleItemCount: number;
 }
 
-type BankJoin = { name: string | null; state: string | null; phone: string | null; website: string | null };
+type BankJoin = {
+  name: string | null;
+  state: string | null;
+  phone: string | null;
+  website: string | null;
+  cert: number | null;
+};
 
 function isMissingTable(message: string | undefined): boolean {
   return !!message && /does not exist|schema cache/i.test(message);
@@ -43,16 +56,22 @@ function isMissingTable(message: string | undefined): boolean {
  *  is its own checklist item, since holders usually have separate logins. */
 async function accountBankHolderPairs(
   supabase: Awaited<ReturnType<typeof createClient>>,
-): Promise<{ bank_id: string; holder: string | null }[]> {
+): Promise<{ bank_id: string; holder: string | null; accountNumber: string | null }[]> {
   const { data: accounts } = await supabase
     .from("accounts")
-    .select("bank_id, holder")
+    .select("bank_id, holder, account_number")
     .is("deleted_at", null);
-  const pairs = new Map<string, { bank_id: string; holder: string | null }>();
+  const pairs = new Map<string, { bank_id: string; holder: string | null; accountNumber: string | null }>();
   for (const a of accounts ?? []) {
     const holder = (a.holder as string | null) ?? null;
     const key = `${a.bank_id}::${holder ?? ""}`;
-    if (!pairs.has(key)) pairs.set(key, { bank_id: a.bank_id as string, holder });
+    if (!pairs.has(key)) {
+      pairs.set(key, {
+        bank_id: a.bank_id as string,
+        holder,
+        accountNumber: (a.account_number as string | null) ?? null,
+      });
+    }
   }
   return [...pairs.values()];
 }
@@ -86,7 +105,7 @@ export async function getAddressChangeData(): Promise<AddressChangeData> {
 
   const { data: rawItems, error: itemsError } = await supabase
     .from("address_campaign_items")
-    .select("id, bank_id, holder, done_at, bank:banks(name, state, phone, website)")
+    .select("id, bank_id, holder, done_at, bank:banks(name, state, phone, website, cert)")
     .eq("campaign_id", campaign.id);
   // "holder" doesn't exist until migration 0028 runs — fall back to one item
   // per bank (the old shape) rather than crashing the page.
@@ -95,14 +114,19 @@ export async function getAddressChangeData(): Promise<AddressChangeData> {
     ? (
         await supabase
           .from("address_campaign_items")
-          .select("id, bank_id, done_at, bank:banks(name, state, phone, website)")
+          .select("id, bank_id, done_at, bank:banks(name, state, phone, website, cert)")
           .eq("campaign_id", campaign.id)
       ).data
     : rawItems;
 
+  // Keyed the same way accountBankHolderPairs dedupes, so a checklist item
+  // (bank, holder) resolves to that pair's own best-effort account number.
+  const acctNumByKey = new Map(pairs.map((p) => [`${p.bank_id}::${p.holder ?? ""}`, p.accountNumber]));
+
   const items: AddressItem[] = (rows ?? [])
     .map((r) => {
       const bank = (Array.isArray(r.bank) ? r.bank[0] : r.bank) as BankJoin | null;
+      const holder = (r as { holder?: string | null }).holder ?? null;
       return {
         id: r.id as string,
         bank_id: r.bank_id as string,
@@ -111,7 +135,9 @@ export async function getAddressChangeData(): Promise<AddressChangeData> {
         state: bank?.state ?? null,
         phone: bank?.phone ?? null,
         website: bank?.website ?? null,
-        holder: (r as { holder?: string | null }).holder ?? null,
+        cert: bank?.cert ?? null,
+        holder,
+        accountNumber: acctNumByKey.get(`${r.bank_id}::${holder ?? ""}`) ?? null,
       };
     })
     .sort((a, b) => {

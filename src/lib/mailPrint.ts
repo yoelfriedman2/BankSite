@@ -159,3 +159,17 @@ export function buildMailingHTML(parts: MailingParts): string | null {
 
   return printDocument(`${checkStyles()}\n${mailStyles()}`, body);
 }
+
+/** Several letters, one per account — as one printable document, one page
+ *  each, same "pagebreak between every page but the last" shape as
+ *  buildMailingHTML's multi-part packet. Used by Address Change's "Print all
+ *  remaining" button so a whole batch prints as a single job instead of one
+ *  popup per bank. Returns null when there's nothing to print. */
+export function buildMultiLetterHTML(letters: LetterDoc[]): string | null {
+  if (letters.length === 0) return null;
+  const pages = letters.map(letterBodyHTML);
+  const body = pages
+    .map((p, i) => (i < pages.length - 1 ? `<div class="pagebreak">${p}</div>` : p))
+    .join("\n");
+  return printDocument(mailStyles(), body);
+}

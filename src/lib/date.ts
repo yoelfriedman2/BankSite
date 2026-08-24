@@ -12,3 +12,10 @@ export function todayLocalStr(): string {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
+
+/** Today's date as "August 24, 2026" — the long form used at the top of a
+ *  printed letter. Same local-calendar reasoning as todayLocalStr: client-side
+ *  only, since a printed letter is dated by whoever's printing it. */
+export function longDateStr(): string {
+  return new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}

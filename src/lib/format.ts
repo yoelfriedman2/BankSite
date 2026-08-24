@@ -57,6 +57,22 @@ export function withScheme(url: string | null | undefined): string {
   return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
+/** "Bank Name / 123 Main St / Springfield, MA 01101" — the recipient block for
+ *  a printed letter. Takes a plain duck-typed address rather than a specific
+ *  MailingAddress type so this stays a dependency-free formatting helper. */
+export function bankAddressBlock(
+  bankName: string,
+  address: { address?: string | null; city?: string | null; state?: string | null; zip?: string | null } | null,
+): string {
+  const parts = [bankName];
+  if (address?.address) parts.push(address.address);
+  const cityLine = [address?.city, [address?.state, address?.zip].filter(Boolean).join(" ")]
+    .filter(Boolean)
+    .join(", ");
+  if (cityLine) parts.push(cityLine);
+  return parts.join("\n");
+}
+
 /** Format total assets, which arrive in thousands of dollars, as $1.8B / $475M. */
 export function formatAssets(thousands: number | null | undefined): string {
   if (thousands === null || thousands === undefined) return "—";

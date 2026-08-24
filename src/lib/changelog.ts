@@ -21,6 +21,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-08-24",
+    title: "Address Change: print every remaining letter in one job",
+    items: [
+      "New \"Print all remaining letters\" button on Address Change — prints a change-of-address letter for every bank you haven't checked off yet, all in one print job instead of one at a time.",
+      "Each letter is still addressed and signed correctly on its own, using the same bank/holder matching (and \"Signing as\" profile, if one matches) as printing a single letter.",
+    ],
+  },
+  {
     date: "2026-08-23",
     title: "Address Change: print a letter for one account in one click",
     items: [

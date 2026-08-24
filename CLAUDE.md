@@ -176,6 +176,70 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-08-24 (Address Change: "Print all remaining letters" — one job, not one popup per bank)** —
+Direct follow-up to the "Print letter" shortcut below: the user wanted the whole remaining checklist
+printed in one shot instead of clicking into `/send` once per bank. A loop of `window.open()` calls
+was ruled out (unreliable across browsers even from a single click, and it's N separate print dialogs
+anyway) in favor of one combined print job — every unchecked item becomes its own letter page in a
+single document, same "one job, several pages" shape `buildMailingHTML` already uses for a letter +
+deposit ticket + check.
+
+- **New `buildMultiLetterHTML(letters: LetterDoc[])`** in `mailPrint.ts` — reuses the existing
+  `letterBodyHTML`/`printDocument`/`mailStyles` pieces `buildMailingHTML` is built from, just fanning
+  out to N letter pages instead of at most one. `window.print()` still fires once (via
+  `printDocument`'s own `onload` script), for the whole batch.
+- **`AddressItem` gained `cert` and `accountNumber`** (`address-change/actions.ts`) so a letter can be
+  built for an item without a second per-item round trip: `cert` (added to the existing `bank:banks(...)`
+  join) drives the mailing-address lookup, and `accountNumber` comes from the same
+  `accountBankHolderPairs()` query that already builds the checklist (extended to also select
+  `account_number` and keep the first match per (bank, holder) — same "first match wins" imprecision
+  the single-item deep link's own account-matching already accepts when one holder has more than one
+  account at a bank).
+- **New "Print all remaining letters (N)" button** (`AddressChangeClient.tsx`), shown whenever at
+  least one item isn't checked off. It fetches each *distinct* bank's mailing address once (not once
+  per item — several holders can share a bank), resolves each item's signer the same way the per-item
+  link does (`findSignerProfileByLabel` against saved "Signing as" profiles, falling back to whichever
+  profile is currently active), builds one `LetterDoc` per item via a new `letterForItem()` helper, and
+  opens a single print window for the whole batch.
+- **Two small shared helpers extracted while wiring this up, since a second caller now needed them**:
+  `bankAddressBlock()` (`lib/format.ts`) — was a private, unexported `addressLines()` inside
+  `SendClient.tsx`, now shared (SendClient.tsx's own two call sites switched to it, nothing else
+  changed there) — and `longDateStr()` (`lib/date.ts`, alongside `todayLocalStr()`) — was a private
+  `longDate()` in the same file, same swap. Neither changed behavior, just moved so Address Change's
+  bulk-print code isn't a second copy of either.
+- **New `src/lib/signerProfiles.ts`** — the localStorage read/write/match logic behind "Signing as"
+  (added earlier today) was entirely inline inside `SendClient.tsx`, which was fine when it had exactly
+  one caller. Pulled out into its own module (`loadSignerProfiles`/`loadActiveProfileId`/
+  `saveSignerProfiles`/`saveActiveProfileId`/`findSignerProfileByLabel`) so Address Change's bulk print
+  can resolve a signer per item without re-deriving the legacy-migration/matching logic a second time.
+  `SendClient.tsx` itself is now a caller of this module rather than the owner of the logic — its
+  "Signing as" UI (add/rename/delete/select) is unchanged, it just calls through to the shared reads/
+  writes instead of touching `localStorage` directly.
+- **Deliberately print-only, same as the single-item link**: this doesn't check any boxes off or log
+  activity (`letter_sent`) the way going through `/send`'s own `recordMailing()` would — printing isn't
+  confirmation a letter actually reached a bank, so checking items off (individually) is still a
+  separate, deliberate step. **Flagged as a real gap, not fixed here**: the single-item "Print letter"
+  deep link *does* log `letter_sent` activity (resetting that account's dormancy clock) once someone
+  reaches `/send` and prints, since it goes through the normal Send flow — the bulk button bypasses
+  that whole flow, so a bulk-printed letter does **not** reset dormancy activity for any of those
+  accounts. Doing so would need the bulk button to resolve each item down to a real `account.id` (not
+  just bank+holder) and call an activity-logging action per account — a real follow-up if it turns out
+  to matter, not attempted this round to keep the change scoped to "print them all."
+- **A bank with no cert on file** (a manually-added bank — see "Shared vs. private bank fields" above)
+  still gets a letter, just with no address block beyond its name — same degrade as the single-item
+  flow's own "No mailing address on file" notice, just without a place to show that notice per-letter
+  in a bulk job. The letter still prints; the address needs writing in by hand or via a real envelope.
+
+Verification: `tsc --noEmit`, `npm run build`, `npm test` (167, unchanged — no new pure-logic module,
+just two functions relocated) all clean (temp `xlsx` CDN→npm swap for the sandbox install, restored
+after — confirmed via `git diff` showing nothing). **Not independently click-tested** — same
+no-browser-tool limitation as the entry below for the per-item link; the multi-page print-document
+assembly, the per-distinct-cert address fetch, and the signer-matching reuse were verified by reading
+the code paths directly (including confirming `buildMultiLetterHTML` produces a page-break-separated
+document identical in shape to `buildMailingHTML`'s existing multi-part packet) rather than a live
+print preview. Flagged here rather than silently skipped. Changelog and Guide entries added (genuinely
+new, user-visible capability).
+
 **2026-08-23, later same day (Address Change gets a "Print letter" shortcut per checklist item; Send
 a letter gains named "Signing as" profiles)** — Direct user request: the Address Change checklist
 already told you which banks needed a new-address letter, but actually writing one still meant going
