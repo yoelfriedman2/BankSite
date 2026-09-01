@@ -176,6 +176,41 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-09-01 (fix: sharing an account's routing number to a bank could get silently reverted by
+the bank drawer's own "Save bank")** — User report: add a routing number to an account, click
+"share ↑" to push it to the bank, then save — and it comes back with nothing pushed, as if the
+share never happened. Root cause: `shareRoutingNumberToBank` (`banks/actions.ts`) does write the
+number straight to the bank row server-side, immediately, independent of any Save click — that
+part was already correct and unconditional. But the *nested* `AccountModal`'s share only updates
+its own local `effectiveBankRouting` state to reflect the change; `BankForm.tsx`'s own drawer-level
+`values.routing_number` (the field bound to the drawer's "Routing number" input, submitted by its
+separate "Save bank" button) was never resynced to the fresh server value. So sharing while the
+bank previously had no routing number, then later clicking "Save bank" on the *drawer itself*
+(a very natural thing to do right after, since the account modal auto-closes on save) resubmitted
+the drawer's still-blank `values.routing_number` and silently overwrote the number that had just
+been shared — from the user's perspective, it never stuck.
+
+This is the identical bug shape `BankForm.tsx` already fixed once before, for `status`
+(2026-07-16 entry above: adding an account through the drawer could auto-promote a bank's status
+server-side, but the drawer's own local `values.status` never picked it up without an explicit
+`useEffect` re-syncing from `initial?.status`). Fixed the same way: added the equivalent effect
+for `routing_number`, keyed on `initial?.routing_number`, syncing `values.routing_number` whenever
+the server value moves out from under the open drawer (e.g. after the nested account modal's
+`onSaved` → `onChanged()` → `router.refresh()` hands down a fresh `initial` prop). No change to
+`shareRoutingNumberToBank` itself or to `AccountModal.tsx` — the push-to-bank write was already
+correct and immediate; only the drawer's own stale local copy needed closing.
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (167, unchanged — no new pure-logic
+module, just one `useEffect` mirroring an already-proven pattern in the same file) all clean (temp
+`xlsx` CDN→npm swap for the sandbox install, restored after both passes — confirmed via `git diff`
+showing nothing but the intended `BankForm.tsx` change). Not independently click-tested against a
+real dev server in this remote session (no browser/DEMO_MODE preview tool available here) — verified
+by reading the fix against the already-live-and-proven `status` sync effect it mirrors exactly, and
+by tracing the exact repro sequence (share while un-set → drawer prop refreshes → "Save bank" no
+longer resubmits a stale blank value) against the diff. Flagged here per the "manual verification,
+not just the types check" standing instruction, rather than silently skipped. Bug fix, no
+changelog/Guide entry per the standing features-only policy.
+
 **2026-08-24 (Address Change: "Print all remaining letters" — one job, not one popup per bank)** —
 Direct follow-up to the "Print letter" shortcut below: the user wanted the whole remaining checklist
 printed in one shot instead of clicking into `/send` once per bank. A loop of `window.open()` calls

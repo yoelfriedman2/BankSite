@@ -369,6 +369,21 @@ export function BankForm({
     }
   }, [initial?.status]);
 
+  // Sharing an account's routing number to this bank (via the nested
+  // AccountModal's "share ↑") writes it straight to the bank row server-side,
+  // independent of this drawer's own "Save bank" — but `values.routing_number`
+  // is local form state that otherwise wouldn't pick up that write, same gap
+  // the status effect above already closed once. Without this, a subsequent
+  // "Save bank" click resubmits the drawer's still-blank `values.routing_number`
+  // and silently overwrites the number that was just shared.
+  useEffect(() => {
+    if (initial?.routing_number) {
+      setValues((v) =>
+        v.routing_number === initial.routing_number ? v : { ...v, routing_number: initial.routing_number ?? "" },
+      );
+    }
+  }, [initial?.routing_number]);
+
   // Search for related banks as user types
   useEffect(() => {
     const cert = initial?.cert;
