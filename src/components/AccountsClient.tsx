@@ -669,7 +669,7 @@ export function AccountsClient({
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Accounts</h1>
           <p className="text-sm text-slate-500">
-            {rows.length} accounts · {attentionCount} need attention
+            {rows.length} account{rows.length === 1 ? "" : "s"} · {attentionCount} need attention
           </p>
         </div>
         <button
@@ -852,8 +852,9 @@ export function AccountsClient({
                       e.stopPropagation();
                       setEditing(r);
                     }}
-                    className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-700"
+                    className="rounded-md p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-700"
                     title="Edit"
+                    aria-label={`Edit ${r.holder || r.bankName || "account"}`}
                   >
                     <Pencil className="h-4 w-4" />
                   </button>
@@ -1040,8 +1041,9 @@ export function AccountsClient({
                             setEditFromView(false);
                             setEditing(r);
                           }}
-                          className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-700"
+                          className="rounded-md p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-700"
                           title="Edit"
+                          aria-label={`Edit ${r.holder || r.bankName || "account"}`}
                         >
                           <Pencil className="h-4 w-4" />
                         </button>

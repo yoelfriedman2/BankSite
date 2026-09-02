@@ -535,8 +535,27 @@ export function BankForm({
   function handleDeleteAccount(a: Account) {
     if (!window.confirm("Delete this account?")) return;
     setBusyAcctId(a.id);
+    // A stalled request here (a slow/stuck server call) used to leave the
+    // trash icon spinning forever with zero feedback and no way to retry —
+    // reported as the delete "hanging" with no recourse. This bounds the wait
+    // so the user always gets a clear outcome instead of an indefinite hang;
+    // if the original call does eventually resolve after the timeout fires,
+    // the result is still applied rather than silently dropped.
+    let timedOut = false;
+    const timeoutId = window.setTimeout(() => {
+      timedOut = true;
+      setBusyAcctId(null);
+      toast.error(
+        "This is taking longer than expected. It may still be deleting in the background — wait a moment and check again, or try once more.",
+      );
+    }, 15000);
     startTransition(async () => {
       const res = await deleteAccount(a.id);
+      window.clearTimeout(timeoutId);
+      if (timedOut) {
+        if (!res.error) onChanged();
+        return;
+      }
       setBusyAcctId(null);
       if (res.error) {
         toast.error(res.error);
@@ -844,21 +863,25 @@ export function BankForm({
                               {a.balance != null ? ` · ${formatCurrency(a.balance)}` : ""}
                             </div>
                           </div>
-                          <div className="flex shrink-0 items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
                             <button type="button" onClick={() => { setViewingAccount(null); setAcctModal({ account: a }); }}
-                              className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-700" title="Edit">
+                              className="rounded-md p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-700"
+                              title="Edit" aria-label={`Edit ${a.holder || "account"}`}>
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
                             <button type="button" onClick={() => setPrintCheck(a)}
-                              className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-700" title="Print check">
+                              className="rounded-md p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-700"
+                              title="Print check" aria-label={`Print a check for ${a.holder || "account"}`}>
                               <Printer className="h-3.5 w-3.5" />
                             </button>
                             <button type="button" onClick={() => handleDuplicate(a)} disabled={busyAcctId === a.id}
-                              className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50" title="Duplicate">
+                              className="rounded-md p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+                              title="Duplicate" aria-label={`Duplicate ${a.holder || "account"}`}>
                               <Copy className="h-3.5 w-3.5" />
                             </button>
                             <button type="button" onClick={() => handleDeleteAccount(a)} disabled={busyAcctId === a.id}
-                              className="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50" title="Delete">
+                              className="rounded-md p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                              title="Delete" aria-label={`Delete ${a.holder || "account"}`}>
                               {busyAcctId === a.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                             </button>
                           </div>

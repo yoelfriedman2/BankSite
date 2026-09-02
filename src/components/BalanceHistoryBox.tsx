@@ -311,7 +311,13 @@ function TransactionForm({
     direction === "withdrawal" ? WITHDRAWAL_REASON_SUGGESTIONS : DEPOSIT_REASON_SUGGESTIONS;
 
   const parsed = Number(amount);
-  const canSubmit = amount.trim() !== "" && parsed > 0 && direction !== null && !pending;
+  const hasValidAmount = amount.trim() !== "" && parsed > 0;
+  // Tracks a real submit attempt with no direction chosen, so the missing
+  // choice reads as a required-field error (not just a muted, easy-to-miss
+  // hint) — the button used to stay silently disabled with no clear reason
+  // once amount/date/reason were already filled in.
+  const [directionTouched, setDirectionTouched] = useState(false);
+  const showDirectionError = directionTouched && direction === null;
 
   return (
     <div className="mt-2 space-y-2 rounded-lg border border-emerald-200 bg-white p-2.5">
@@ -319,10 +325,13 @@ function TransactionForm({
         <button
           type="button"
           onClick={() => setDirection("deposit")}
+          aria-invalid={showDirectionError}
           className={`flex-1 rounded-lg border px-3 py-1.5 text-sm font-medium ${
             direction === "deposit"
               ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-              : "border-slate-300 bg-white text-slate-600"
+              : showDirectionError
+                ? "border-rose-300 bg-white text-slate-600 ring-2 ring-rose-200"
+                : "border-slate-300 bg-white text-slate-600"
           }`}
         >
           Deposit
@@ -330,17 +339,24 @@ function TransactionForm({
         <button
           type="button"
           onClick={() => setDirection("withdrawal")}
+          aria-invalid={showDirectionError}
           className={`flex-1 rounded-lg border px-3 py-1.5 text-sm font-medium ${
             direction === "withdrawal"
               ? "border-rose-300 bg-rose-50 text-rose-700"
-              : "border-slate-300 bg-white text-slate-600"
+              : showDirectionError
+                ? "border-rose-300 bg-white text-slate-600 ring-2 ring-rose-200"
+                : "border-slate-300 bg-white text-slate-600"
           }`}
         >
           Withdrawal
         </button>
       </div>
       {direction === null && (
-        <p className="text-xs text-slate-500">Choose deposit or withdrawal above.</p>
+        <p className={`text-xs ${showDirectionError ? "font-medium text-rose-600" : "text-slate-500"}`}>
+          {showDirectionError
+            ? "Choose deposit or withdrawal — this is required before it can be added."
+            : "Choose deposit or withdrawal above."}
+        </p>
       )}
       {/* flex-wrap, matching the Activity history add-row's own established
        *  pattern in AccountModal — the narrow (28rem) docked bank-drawer lane
@@ -389,9 +405,12 @@ function TransactionForm({
         </button>
         <button
           type="button"
-          disabled={!canSubmit}
+          disabled={!hasValidAmount || pending}
           onClick={async () => {
-            if (!direction) return;
+            if (!direction) {
+              setDirectionTouched(true);
+              return;
+            }
             setPending(true);
             setError(null);
             const err = await onSubmit(parsed, direction, reason, date);
