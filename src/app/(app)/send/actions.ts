@@ -219,10 +219,16 @@ export interface MailingResult {
   depositTracked?: boolean;
 }
 
-/** Moves a balance atomically (migration 0043's RPC), falling back to the
- *  original two-step write so a missing migration can't block a real mailing.
- *  Returns a warning string on failure rather than throwing — the paper is
- *  already printed by the time this runs. */
+/** Moves a balance by a signed delta, atomically and race-free
+ *  (record_account_transaction, migration 0051 — the same "current + amount,
+ *  computed server-side under a row lock" RPC the account ledger's own "+ Add
+ *  transaction" uses), falling back to a read-then-write two-step so a
+ *  missing migration can't block a real mailing. The RPC path can't lose a
+ *  concurrent change (a cron fee/interest post, another mailing, a manual
+ *  edit) the way a plain "read balance, then set it to X" would — see
+ *  CLAUDE.md's 2026-08-09 entry for why 0051 was built. Returns a warning
+ *  string on failure rather than throwing — the paper is already printed by
+ *  the time this runs. */
 async function applyBalanceChange(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
@@ -231,30 +237,38 @@ async function applyBalanceChange(
   reason: string,
   label: string,
 ): Promise<string | null> {
+  const type: "deposit" | "withdrawal" = delta >= 0 ? "deposit" : "withdrawal";
+  const today = todayLocalStr();
+
+  const { data: newBalance, error: rpcErr } = await supabase.rpc("record_account_transaction", {
+    p_account_id: accountId,
+    p_amount: delta,
+    p_type: type,
+    p_reason: reason,
+    p_as_of_date: today,
+  });
+  if (!rpcErr) {
+    // RLS/the function's own auth.uid() check returns no row for an account
+    // that isn't the caller's own.
+    if (newBalance == null) return `Couldn't update the ${label} balance — the account wasn't found.`;
+    return null;
+  }
+
+  console.warn(
+    `[recordMailing] record_account_transaction RPC unavailable (migration 0051 not run yet?), falling back for account ${accountId}:`,
+    rpcErr.message,
+  );
+
   const { data: acct, error: readErr } = await supabase
     .from("accounts")
     .select("balance")
     .eq("id", accountId)
     .maybeSingle();
-  // RLS returns no row for an account that isn't the caller's own.
   if (readErr || !acct) return `Couldn't update the ${label} balance — the account wasn't found.`;
 
   const old = acct.balance != null ? Number(acct.balance) : 0;
   const next = Math.round((old + delta) * 100) / 100;
-  const today = todayLocalStr();
 
-  const { error: rpcErr } = await supabase.rpc("update_account_balance", {
-    p_account_id: accountId,
-    p_new_balance: next,
-    p_as_of_date: today,
-    p_reason: reason,
-  });
-  if (!rpcErr) return null;
-
-  console.warn(
-    `[recordMailing] update_account_balance RPC unavailable (migration 0043 not run yet?), falling back for account ${accountId}:`,
-    rpcErr.message,
-  );
   const { error: updErr } = await supabase.from("accounts").update({ balance: next }).eq("id", accountId);
   if (updErr) return `Couldn't update the ${label} balance: ${friendlyDbError(updErr.message)}`;
 
@@ -265,6 +279,7 @@ async function applyBalanceChange(
     balance: next,
     change_amount: Number(delta.toFixed(2)),
     reason,
+    type,
   });
   if (histErr) {
     console.error(`[recordMailing] balance-history fallback insert failed for account ${accountId}:`, histErr.message);
