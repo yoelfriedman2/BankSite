@@ -39,6 +39,30 @@ function defaultRange(): { start: string; end: string } {
   };
 }
 
+/** The current, in-progress calendar month — the natural companion to
+ *  "Last full month" for whoever wants to export what's posted so far. */
+function currentMonthRange(): { start: string; end: string } {
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = today.getMonth();
+  const lastDay = new Date(y, m + 1, 0).getDate();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return {
+    start: `${y}-${pad(m + 1)}-01`,
+    end: `${y}-${pad(m + 1)}-${pad(lastDay)}`,
+  };
+}
+
+/** "YYYY-MM-DD" -> "Aug 31" — built from the Y/M/D components (never a plain
+ *  `new Date("2026-08-31")` string parse, which reads as UTC midnight and can
+ *  roll back a day in a negative-offset timezone), so a date range reads
+ *  correctly in copy like "No transactions from Aug 1 – Aug 31." */
+function formatShortDate(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  if (!y || !m || !d) return ymd;
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 export function QuickBooksExportClient() {
   const toast = useToast();
   const [range, setRange] = useState(defaultRange);
@@ -110,8 +134,15 @@ export function QuickBooksExportClient() {
           </label>
           <button
             type="button"
+            onClick={() => setRange(currentMonthRange())}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+          >
+            This month
+          </button>
+          <button
+            type="button"
             onClick={() => setRange(defaultRange())}
-            className="col-span-2 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 sm:col-span-1"
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
           >
             Last full month
           </button>
@@ -130,7 +161,9 @@ export function QuickBooksExportClient() {
         ) : error ? (
           <p className="text-sm text-rose-600">{error}</p>
         ) : !preview || preview.rows.length === 0 ? (
-          <p className="text-sm text-slate-600">No transactions in that range.</p>
+          <p className="text-sm text-slate-600">
+            No transactions from {formatShortDate(range.start)} – {formatShortDate(range.end)}.
+          </p>
         ) : (
           <>
             <div className="overflow-x-auto">
@@ -202,7 +235,12 @@ export function QuickBooksExportClient() {
           {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
           Download ZIP
         </button>
-        {hasNothingNew && !includeExported && !loadingPreview && !error && (
+        {/* Only when there were real rows in range that got excluded for
+         *  already being exported — otherwise this stacked with "No
+         *  transactions in that range" above for a genuinely empty range
+         *  (zero rows trivially means zero *new* rows too), which read like
+         *  a sync failure rather than what it actually was: nothing there. */}
+        {hasNothingNew && preview && preview.rows.length > 0 && !includeExported && !loadingPreview && !error && (
           <p className="mt-2 text-sm text-slate-500">
             Everything in this range was already exported — nothing new to download.
           </p>

@@ -158,6 +158,18 @@ export function AccountModal({
   const inheritingRouting = hasBankRouting && values.routing_number.trim() === "";
   const overridingRouting = hasBankRouting && values.routing_number.trim() !== "";
   const routingError = routingNumberError(values.routing_number);
+  // Native min/max on the fee-day <input type="number"> silently blocks
+  // submission with a browser bubble that doesn't reliably render inside this
+  // dialog's scrollable body — a real, reported "the modal just refuses to
+  // save with no error" bug. This mirrors that same constraint (1-28, matching
+  // the DB check + the server's own clamp in monthlyFeeFields) as an explicit,
+  // always-visible inline error instead of relying on the native bubble alone.
+  const feeDayRaw = values.monthly_fee_day.trim();
+  const feeDayNum = feeDayRaw === "" ? null : Number(feeDayRaw);
+  const feeDayError =
+    feeDayNum != null && (!Number.isInteger(feeDayNum) || feeDayNum < 1 || feeDayNum > 28)
+      ? "Day must be between 1 and 28."
+      : null;
   // Only offered when the bank has nothing on file: if it already has a
   // (possibly different) number, sharing would silently overwrite whatever
   // every other family member is currently using — that case goes through
@@ -350,6 +362,10 @@ export function AccountModal({
     setError(null);
     if (routingError) {
       setError(routingError);
+      return;
+    }
+    if (feeDayError) {
+      setError(feeDayError);
       return;
     }
     startTransition(async () => {
@@ -605,18 +621,29 @@ export function AccountModal({
                     <input
                       aria-label="Day of month charged"
                       type="number"
-                      min="1"
-                      max="28"
+                      // Deliberately no native min/max: this dialog's body
+                      // scrolls (max-h-[70vh] overflow-y-auto), and a native
+                      // out-of-range bubble doesn't reliably render inside a
+                      // scrolled container — it can silently block submission
+                      // with zero visible feedback. The explicit inline error
+                      // below (feeDayError) and the handleSubmit guard cover
+                      // this instead.
                       placeholder="Day (1-28)"
                       className={inputCls}
                       value={values.monthly_fee_day}
                       onChange={(e) => set("monthly_fee_day", e.target.value)}
+                      aria-invalid={!!feeDayError}
+                      aria-describedby={feeDayError ? "acct_fee_day_error" : undefined}
                     />
                   </div>
                 </div>
-                <p className="mt-1 text-xs text-slate-600">
-                  Set both to auto-deduct this amount every month on that day. Leave either blank to turn it off.
-                </p>
+                {feeDayError ? (
+                  <p id="acct_fee_day_error" className="mt-1 text-xs text-rose-600">{feeDayError}</p>
+                ) : (
+                  <p className="mt-1 text-xs text-slate-600">
+                    Set both to auto-deduct this amount every month on that day. Leave either blank to turn it off.
+                  </p>
+                )}
               </div>
               <div>
                 <label className={labelCls} htmlFor="interest_rate">Interest rate (APY %)</label>
