@@ -1136,6 +1136,15 @@ export type Database = {
       return_sweep: { Args: { p_sweep_id: string }; Returns: undefined }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      soft_delete_account: {
+        Args: { p_account_id: string }
+        Returns: {
+          holder: string | null
+          account_type: string | null
+          bank_name: string
+          bank_cert: number | null
+        }[]
+      }
       swap_queue_positions: {
         Args: {
           p_bank_a: string

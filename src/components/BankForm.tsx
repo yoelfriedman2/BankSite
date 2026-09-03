@@ -235,6 +235,10 @@ export function BankForm({
   );
   const [printCheck, setPrintCheck] = useState<Account | null>(null);
   const [busyAcctId, setBusyAcctId] = useState<string | null>(null);
+  // Which account is pending a delete confirmation, if any — see
+  // handleDeleteAccount below for why this is a real in-app dialog and not
+  // window.confirm().
+  const [deleteConfirmAccount, setDeleteConfirmAccount] = useState<Account | null>(null);
 
   // Community notes
   const [comments, setComments] = useState<BankComment[]>([]);
@@ -532,15 +536,33 @@ export function BankForm({
     });
   }
 
+  // Opens the confirm step — nothing else runs here. Was `window.confirm(...)`
+  // directly; switched to a real in-app dialog (DeleteAccountConfirmModal,
+  // rendered below) because a native browser dialog can sit stuck, unanswered,
+  // behind an earlier one still open in the same session — a real trap this
+  // project's own CDP test driver has documented needing to work around
+  // (see cdp.mjs) — and from the outside that reads exactly like an
+  // indefinite hang: no dialog ever visibly appears, nothing responds. An
+  // in-app dialog is ordinary React state with zero dependency on the
+  // browser's native dialog queue, so it can't get stuck that way.
   function handleDeleteAccount(a: Account) {
-    if (!window.confirm("Delete this account?")) return;
+    setDeleteConfirmAccount(a);
+  }
+
+  function confirmDeleteAccount() {
+    const a = deleteConfirmAccount;
+    if (!a) return;
+    setDeleteConfirmAccount(null);
     setBusyAcctId(a.id);
     // A stalled request here (a slow/stuck server call) used to leave the
-    // trash icon spinning forever with zero feedback and no way to retry —
-    // reported as the delete "hanging" with no recourse. This bounds the wait
-    // so the user always gets a clear outcome instead of an indefinite hang;
-    // if the original call does eventually resolve after the timeout fires,
-    // the result is still applied rather than silently dropped.
+    // trash icon spinning forever with zero feedback and no way to retry.
+    // deleteAccount itself now runs through a Postgres function with its own
+    // bounded statement_timeout (migration 0061), so a stuck row lock fails
+    // fast server-side with a clear error instead of hanging indefinitely —
+    // this client-side timer is defense in depth on top of that, for
+    // anything else that could still stall (a slow/cold connection before
+    // the query even starts). If the original call does eventually resolve
+    // after the timer fires, the result is still applied, not dropped.
     let timedOut = false;
     const timeoutId = window.setTimeout(() => {
       timedOut = true;
@@ -863,24 +885,28 @@ export function BankForm({
                               {a.balance != null ? ` · ${formatCurrency(a.balance)}` : ""}
                             </div>
                           </div>
-                          <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          {/* h-11/w-11 (44px — WCAG 2.5.5 / Material's minimum tap
+                           *  target) fixes the box size directly rather than
+                           *  scaling icon+padding math, so the icon glyphs
+                           *  (h-3.5 w-3.5) stay exactly as they were. */}
+                          <div className="flex shrink-0 items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
                             <button type="button" onClick={() => { setViewingAccount(null); setAcctModal({ account: a }); }}
-                              className="rounded-md p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-700"
+                              className="flex h-11 w-11 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-slate-700"
                               title="Edit" aria-label={`Edit ${a.holder || "account"}`}>
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
                             <button type="button" onClick={() => setPrintCheck(a)}
-                              className="rounded-md p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-700"
+                              className="flex h-11 w-11 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-slate-700"
                               title="Print check" aria-label={`Print a check for ${a.holder || "account"}`}>
                               <Printer className="h-3.5 w-3.5" />
                             </button>
                             <button type="button" onClick={() => handleDuplicate(a)} disabled={busyAcctId === a.id}
-                              className="rounded-md p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+                              className="flex h-11 w-11 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
                               title="Duplicate" aria-label={`Duplicate ${a.holder || "account"}`}>
                               <Copy className="h-3.5 w-3.5" />
                             </button>
                             <button type="button" onClick={() => handleDeleteAccount(a)} disabled={busyAcctId === a.id}
-                              className="rounded-md p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                              className="flex h-11 w-11 items-center justify-center rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
                               title="Delete" aria-label={`Delete ${a.holder || "account"}`}>
                               {busyAcctId === a.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                             </button>
@@ -1501,6 +1527,15 @@ export function BankForm({
         />
       )}
 
+      {deleteConfirmAccount && (
+        <DeleteAccountConfirmModal
+          account={deleteConfirmAccount}
+          busy={busyAcctId === deleteConfirmAccount.id}
+          onConfirm={confirmDeleteAccount}
+          onCancel={() => setDeleteConfirmAccount(null)}
+        />
+      )}
+
       {cannotOpenPrompt && initial?.cert != null && (
         <CannotOpenPromptModal
           bankName={initial.name}
@@ -1513,6 +1548,71 @@ export function BankForm({
           onClose={() => setCannotOpenPrompt(false)}
         />
       )}
+    </div>
+  );
+}
+
+/** Delete-account confirmation — a real in-app dialog, not window.confirm().
+ *  See handleDeleteAccount's comment for why: a native dialog can end up
+ *  stuck behind an earlier unanswered one with nothing ever visibly
+ *  appearing, which reads exactly like an indefinite hang. Split out from
+ *  BankForm so useFocusTrap only mounts for the dialog's actual on-screen
+ *  lifetime (same reasoning as CannotOpenPromptModal below, UX-01). */
+function DeleteAccountConfirmModal({
+  account,
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  account: Account;
+  busy: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const dialogRef = useFocusTrap<HTMLDivElement>(onCancel);
+  const label = account.holder
+    ? `${account.holder}${account.account_type ? ` · ${ACCOUNT_TYPE_LABELS[account.account_type]}` : ""}`
+    : "this account";
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/50 p-4"
+      onMouseDown={(e) => { e.stopPropagation(); onCancel(); }}
+    >
+      <div
+        ref={dialogRef}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="delete-account-title"
+        className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <h2 id="delete-account-title" className="text-base font-semibold text-slate-900">
+          Delete this account?
+        </h2>
+        <p className="mt-1.5 text-sm text-slate-600">
+          <span className="font-medium text-slate-800">{label}</span> moves to Trash — you can
+          restore it later if this was a mistake.
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+          >
+            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+            Delete
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

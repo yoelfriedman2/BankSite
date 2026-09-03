@@ -276,13 +276,18 @@ function QuickLogButton({
   }, [open]);
 
   return (
-    <div ref={ref} className="relative" onClick={(e) => e.stopPropagation()}>
+    <div ref={ref} className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         disabled={pending}
-        className="flex items-center rounded-md p-1.5 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 disabled:opacity-50"
+        // h-11/min-w-11 (44px, Tailwind's exact token for the WCAG 2.5.5 /
+        // Material minimum tap target) rather than relying on icon size +
+        // padding — the icon+chevron pair's own content width is narrower
+        // than that, so the box is centered around it instead of sized to it.
+        className="flex h-11 min-w-11 items-center justify-center gap-0.5 rounded-md px-2 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 disabled:opacity-50"
         title="Log activity today"
+        aria-label="Log activity today"
       >
         {pending ? (
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -852,7 +857,7 @@ export function AccountsClient({
                       e.stopPropagation();
                       setEditing(r);
                     }}
-                    className="rounded-md p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-700"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-slate-700"
                     title="Edit"
                     aria-label={`Edit ${r.holder || r.bankName || "account"}`}
                   >
@@ -891,25 +896,30 @@ export function AccountsClient({
           {/* Two column sets: with a sheet docked there is only 730px left at
               1440px, which is exactly the full table minus Account # and CD
               maturity. Percentages re-normalise to 100 in the folded set. */}
+          {/* The last column widened (5% -> 15%, 4% -> 14%) to fit two real
+              44px tap targets (QuickLogButton + Edit) side by side — it used
+              to only need to fit two ~28-32px icon buttons. Taken
+              proportionally from the other columns, which still comfortably
+              fit their own content. */}
           {folded ? (
             <colgroup>
-              <col className="w-[28%]" />
+              <col className="w-[23%]" />
+              <col className="w-[15%]" />
+              <col className="w-[14%]" />
+              <col className="w-[15%]" />
               <col className="w-[18%]" />
               <col className="w-[15%]" />
-              <col className="w-[15%]" />
-              <col className="w-[19%]" />
-              <col className="w-[5%]" />
             </colgroup>
           ) : (
             <colgroup>
-              <col className="w-[20%]" />
-              <col className="w-[13%]" />
-              <col className="w-[11%]" />
-              <col className="w-[11%]" />
-              <col className="w-[11%]" />
-              <col className="w-[14%]" />
               <col className="w-[16%]" />
-              <col className="w-[4%]" />
+              <col className="w-[11%]" />
+              <col className="w-[11%]" />
+              <col className="w-[10%]" />
+              <col className="w-[10%]" />
+              <col className="w-[13%]" />
+              <col className="w-[15%]" />
+              <col className="w-[14%]" />
             </colgroup>
           )}
           <thead>
@@ -1026,8 +1036,8 @@ export function AccountsClient({
                         )}
                       </td>
                     )}
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1">
+                    <td className="px-2 py-3">
+                      <div className="flex items-center justify-end gap-0.5">
                         {r.account_type !== "cd" && (
                           <QuickLogButton
                             pending={logPendingId === r.id}
@@ -1041,7 +1051,7 @@ export function AccountsClient({
                             setEditFromView(false);
                             setEditing(r);
                           }}
-                          className="rounded-md p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-700"
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-slate-700"
                           title="Edit"
                           aria-label={`Edit ${r.holder || r.bankName || "account"}`}
                         >
