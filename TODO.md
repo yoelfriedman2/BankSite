@@ -39,15 +39,6 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
   cent to a few cents per document read, depending on the model — see the chat discussion where this
   was scoped for the actual math.
 
-- **Run migration `0061_soft_delete_account_timeout.sql`** — not yet run. Adds
-  `soft_delete_account(p_account_id uuid)`, a Postgres function that does the account-delete row
-  lock + update with its own `SET LOCAL statement_timeout` (8s), so a stuck lock on that row fails
-  fast with a clear error instead of `deleteAccount()`'s previous plain select-then-update pair
-  hanging indefinitely if something else is holding the lock. Reported as a real "delete just hangs,
-  never reaches Trash" bug. Additive, degrades gracefully until run: `deleteAccount()` falls back to
-  the original two-step path on "function does not exist," so deleting still works either way — this
-  migration only adds the bounded-timeout protection on top.
-
 - **Run migration `0058_personal_activity_log.sql`** — not yet run. New private per-user table
   (`personal_activity_log`) backing the new `/history` page: a private record of every change a
   user makes to their own data (bank/account edits — renamed, account number changed, status
