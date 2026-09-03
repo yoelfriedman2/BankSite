@@ -902,7 +902,7 @@ export function AccountModal({
                       type="button"
                       onClick={() => removeEntry(i)}
                       aria-label="Remove this activity entry"
-                      className="shrink-0 text-slate-400 hover:text-rose-600"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center text-slate-400 hover:text-rose-600"
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>

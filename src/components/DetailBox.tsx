@@ -28,7 +28,13 @@ export function BoxHeader({
         <button
           type="button"
           onClick={onEdit}
-          className="flex items-center gap-1 rounded-md p-1 text-slate-600 hover:bg-amber-50 hover:text-amber-700"
+          // min-h-11 (44px — the same WCAG 2.5.5 / Material minimum used
+          // elsewhere this session): this button previously sized purely to
+          // its label text, landing well under 44px tall for a short label
+          // like "+ Log activity". Width stays text-driven — it's a labeled
+          // button, not an icon-only control, so the height is what
+          // mattered here.
+          className="flex min-h-11 items-center gap-1 rounded-md px-2 text-slate-600 hover:bg-amber-50 hover:text-amber-700"
         >
           {editLabel ? (
             <span className="text-xs font-semibold">{editLabel}</span>

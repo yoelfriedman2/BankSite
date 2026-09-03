@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -414,9 +414,29 @@ function NewBorrowedModal({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const dialogRef = useFocusTrap<HTMLDivElement>(onClose);
+  const sourceRef = useRef<HTMLInputElement>(null);
+  const amountRef = useRef<HTMLInputElement>(null);
+  const reasonRef = useRef<HTMLInputElement>(null);
 
+  // Same fix as NewMoveModal above: was purely `disabled`-gated with no
+  // feedback on which required field was missing.
   function handleSubmit() {
     setError(null);
+    if (!sourceName.trim()) {
+      setError("Enter who you borrowed from — it's required.");
+      sourceRef.current?.focus();
+      return;
+    }
+    if (!(Number(amount) > 0)) {
+      setError("Enter an amount greater than $0.");
+      amountRef.current?.focus();
+      return;
+    }
+    if (!reason.trim()) {
+      setError("Enter a reason before adding this — it's required.");
+      reasonRef.current?.focus();
+      return;
+    }
     const amt = Number(amount);
     startTransition(async () => {
       const res = await addBorrowedFund({
@@ -463,10 +483,13 @@ function NewBorrowedModal({
                 Borrowed from
               </label>
               <input
+                ref={sourceRef}
                 className={inputClass}
                 placeholder="e.g. Dad, HELOC"
                 value={sourceName}
                 onChange={(e) => setSourceName(e.target.value)}
+                required
+                aria-required="true"
                 autoFocus
               />
             </div>
@@ -475,22 +498,30 @@ function NewBorrowedModal({
                 Amount
               </label>
               <input
+                ref={amountRef}
                 type="number"
                 min="0"
                 className={inputClass}
                 placeholder="amount"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
+                required
+                aria-required="true"
               />
             </div>
             <div className="col-span-2">
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Reason</label>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">
+                Reason <span className="normal-case text-slate-400">(required)</span>
+              </label>
               <input
+                ref={reasonRef}
                 className={inputClass}
                 list="borrowed-reasons"
                 placeholder="e.g. Winchester Savings IPO"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
+                required
+                aria-required="true"
               />
               <datalist id="borrowed-reasons">
                 {existingReasons.map((r) => (
@@ -533,7 +564,7 @@ function NewBorrowedModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={isPending || !sourceName.trim() || !reason.trim() || !(Number(amount) > 0)}
+            disabled={isPending}
             className="flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
           >
             {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -563,6 +594,7 @@ function NewMoveModal({
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const reasonRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -576,8 +608,24 @@ function NewMoveModal({
   const total = selected.reduce((s, [, v]) => s + Number(v), 0);
   const dialogRef = useFocusTrap<HTMLDivElement>(onClose);
 
+  // Was gated purely by `disabled` on the submit button, with no indication
+  // of *why* — a blank required Reason left the button inert with zero
+  // feedback, no inline error, no focus move, and the field itself wasn't
+  // marked required. Now the button is always clickable; a real validation
+  // step here shows a clear error and moves focus to the field that needs
+  // it, matching the required-field pattern already used for Add
+  // transaction's direction choice (BalanceHistoryBox.tsx).
   function handleSubmit() {
     setError(null);
+    if (!reason.trim()) {
+      setError("Enter a reason before moving money — it's required.");
+      reasonRef.current?.focus();
+      return;
+    }
+    if (selected.length === 0) {
+      setError("Enter an amount for at least one account.");
+      return;
+    }
     const items = selected.map(([accountId, v]) => ({
       accountId,
       amount: Number(v),
@@ -616,13 +664,19 @@ function NewMoveModal({
         <div className="space-y-4 px-6 py-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Reason</label>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">
+                Reason <span className="normal-case text-slate-400">(required)</span>
+              </label>
               <input
+                ref={reasonRef}
                 className={inputClass}
                 list="sweep-reasons"
                 placeholder="e.g. Winchester Savings IPO"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
+                required
+                aria-required="true"
+                aria-invalid={!!error && !reason.trim()}
                 autoFocus
               />
               <datalist id="sweep-reasons">
@@ -707,7 +761,7 @@ function NewMoveModal({
             </button>
             <button
               onClick={handleSubmit}
-              disabled={isPending || selected.length === 0 || !reason.trim()}
+              disabled={isPending}
               className="flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
             >
               {isPending && <Loader2 className="h-4 w-4 animate-spin" />}

@@ -285,8 +285,21 @@ export function BankForm({
 
   const dialogRef = useFocusTrap<HTMLFormElement>(attemptClose);
 
-  // Private reminders (per-bank, never shared)
-  const today = todayLocalStr();
+  // Private reminders (per-bank, never shared). `today` is computed client-
+  // side only, after mount — this component can be part of the initial SSR
+  // pass (e.g. a bank opened via the ?openId=/?cert= deep-link convention),
+  // and the server has no single user's timezone to compute "today" against
+  // (todayLocalStr() is documented client-only for exactly that reason).
+  // Starting at null keeps the first client render identical to the
+  // server's (every reminder renders as not-yet-overdue on both), avoiding
+  // a real hydration mismatch on the `overdue` className whenever the
+  // visitor's local date differs from the server's UTC date — true for most
+  // of the day in any negative-offset timezone. Same "start neutral, correct
+  // after mount" fix as DashboardReminders' identical pattern.
+  const [today, setToday] = useState<string | null>(null);
+  useEffect(() => {
+    setToday(todayLocalStr());
+  }, []);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [reminderNote, setReminderNote] = useState("");
   const [reminderDate, setReminderDate] = useState("");
@@ -764,7 +777,7 @@ export function BankForm({
                   <ul className="space-y-1.5">
                     {reminders.map((r) => {
                       const done = !!r.done_at;
-                      const overdue = !done && r.due_date < today;
+                      const overdue = !done && today != null && r.due_date < today;
                       return (
                         <li
                           key={r.id}

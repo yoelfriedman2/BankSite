@@ -413,7 +413,13 @@ export function SettingsForm({
       <h1 className="mb-4 text-2xl font-semibold text-slate-900">Settings</h1>
 
       {/* ── Tabs ── */}
-      <div role="tablist" aria-label="Settings sections" className="mb-6 flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+      {/* flex-wrap, not overflow-x-auto: at 375px the 4 tabs (esp. "Alerts &
+          emails") don't all fit in one row, and a horizontally-scrollable
+          strip with no visible affordance just looked like "Account" was
+          cut off ("A" clipped at the edge) rather than reachable by
+          scrolling. Wrapping to a second row keeps every tab always
+          visible, no affordance needed. */}
+      <div role="tablist" aria-label="Settings sections" className="mb-6 flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
         {TABS.map((t, i) => (
           <button
             key={t.id}

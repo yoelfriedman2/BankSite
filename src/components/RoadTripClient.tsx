@@ -841,13 +841,23 @@ export function RoadTripClient({ data, canRefreshBranches }: { data: RoadTripDat
                         overBudget ? "border-rose-100 bg-rose-50/50" : "border-slate-100"
                       }`}
                     >
-                      <span className="min-w-0 truncate">
-                        <span className={overBudget ? "text-slate-600" : "font-medium text-slate-700"}>{bank.name}</span>
-                        <span className="ml-2 text-xs text-slate-600">
-                          {bank.city}, {bank.state}
+                      {/* Name gets its own truncating line instead of sharing
+                          one forced single line with city/state and the
+                          duration — at 375px a long name used to eat the
+                          whole line's width, ellipsizing the city/state text
+                          that's often the only thing telling two similarly-
+                          named banks apart. */}
+                      <span className="min-w-0 flex-1">
+                        <span className={`block truncate ${overBudget ? "text-slate-600" : "font-medium text-slate-700"}`}>
+                          {bank.name}
                         </span>
-                        <span className={`ml-2 text-xs font-medium ${overBudget ? "text-rose-500" : "text-slate-500"}`}>
-                          +{fmtDuration(totalCost)}
+                        <span className="flex items-center gap-2">
+                          <span className="min-w-0 truncate text-xs text-slate-600">
+                            {bank.city}, {bank.state}
+                          </span>
+                          <span className={`shrink-0 text-xs font-medium ${overBudget ? "text-rose-500" : "text-slate-500"}`}>
+                            +{fmtDuration(totalCost)}
+                          </span>
                         </span>
                       </span>
                       <button

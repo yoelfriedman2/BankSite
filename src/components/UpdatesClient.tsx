@@ -130,7 +130,18 @@ export function UpdatesClient({
                       <span className="block break-words text-sm text-slate-700">
                         {e.summary}
                       </span>
-                      <span className="mt-0.5 block text-xs text-slate-600">
+                      {/* suppressHydrationWarning: derived from Date.now() at
+                          render time, so the server-rendered value can
+                          legitimately differ from the client's by a few
+                          seconds ("4 min ago" vs "5 min ago") — a real,
+                          narrow hydration-mismatch risk, same as
+                          HistoryClient's identical timeAgo(). Harmless: it
+                          self-corrects the instant React hydrates. */}
+                      <span
+                        className="mt-0.5 block text-xs text-slate-600"
+                        title={new Date(e.created_at).toLocaleString()}
+                        suppressHydrationWarning
+                      >
                         {timeAgo(e.created_at)}
                       </span>
                     </span>
