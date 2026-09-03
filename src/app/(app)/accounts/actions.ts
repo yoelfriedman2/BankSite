@@ -568,6 +568,39 @@ export async function deleteAccount(id: string): Promise<{ error?: string }> {
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
+  // Tries the atomic, timeout-bounded RPC first (migration 0061,
+  // soft_delete_account — SET LOCAL statement_timeout inside one locked
+  // update, instead of a plain select-then-update pair with no bound at
+  // all on how long the update waits for a row lock). Falls back to the
+  // original two-step path if that migration hasn't been run yet, same
+  // 2-tier convention as every other RPC-gated write in this app.
+  const rpc = await supabase.rpc("soft_delete_account", { p_account_id: id });
+  if (!rpc.error) {
+    const row = rpc.data?.[0];
+    if (row) {
+      const label = accountLabel(
+        row.holder as string | null,
+        row.account_type ? ACCOUNT_TYPE_LABELS[row.account_type as AccountType] : null,
+      );
+      await logPersonalActivity(supabase, {
+        userId: user.id,
+        action: "account_delete",
+        summary: `Moved ${label ?? "an account"} at ${row.bank_name ?? "—"} to Trash`,
+        entityType: "account",
+        entityId: id,
+        cert: (row.bank_cert as number | null) ?? null,
+        bankName: (row.bank_name as string | null) ?? null,
+        accountLabel: label,
+      });
+    }
+    revalidate();
+    return {};
+  }
+  if (!/function .*soft_delete_account.* does not exist/i.test(rpc.error.message)) {
+    return { error: friendlyDbError(rpc.error.message) };
+  }
+
+  // Migration 0061 not run yet — original path.
   const { data: prev } = await supabase
     .from("accounts")
     .select("holder, account_type, bank:banks(name, cert)")
