@@ -669,12 +669,12 @@ export async function restoreAccount(id: string): Promise<{ error?: string }> {
   // account sitting under a soft-deleted bank (INT-04) — the Trash page shows
   // banks and accounts as separate lists, so restoring just the account
   // (without also restoring its bank) is an easy way to end up in exactly
-  // that inconsistent state. Block it with a clear reason instead. Also
-  // fetches holder/account_type/bank name+cert here (one query) so the
-  // personal-log entry below doesn't need a second round trip.
+  // that inconsistent state. Block it with a clear reason instead. This is a
+  // plain read of `banks`, not the (possibly lock-contended) accounts row
+  // the fix below is protecting — no need for the same timeout bound here.
   const { data: acc } = await supabase
     .from("accounts")
-    .select("bank_id, holder, account_type, bank:banks(name, cert, deleted_at)")
+    .select("bank_id, bank:banks(deleted_at)")
     .eq("id", id)
     .maybeSingle();
   const accBank = acc ? (Array.isArray(acc.bank) ? acc.bank[0] : acc.bank) : null;
@@ -682,25 +682,65 @@ export async function restoreAccount(id: string): Promise<{ error?: string }> {
     return { error: "This account's bank is also in Trash — restore the bank first." };
   }
 
+  // Same fix as deleteAccount above (migration 0062, restore_account): a
+  // stuck lock on this row previously left restoreAccount hanging
+  // indefinitely too, once delete's own fix (0061) meant the account
+  // actually reached Trash but a subsequent restore attempt then hung with
+  // no bound at all. Falls back to the original plain update if 0062 hasn't
+  // been run yet.
+  const rpc = await supabase.rpc("restore_account", { p_account_id: id });
+  if (!rpc.error) {
+    const row = rpc.data?.[0];
+    if (row) {
+      const label = accountLabel(
+        row.holder as string | null,
+        row.account_type ? ACCOUNT_TYPE_LABELS[row.account_type as AccountType] : null,
+      );
+      await logPersonalActivity(supabase, {
+        userId: user.id,
+        action: "account_restore",
+        summary: `Restored ${label ?? "an account"} at ${row.bank_name ?? "—"} from Trash`,
+        entityType: "account",
+        entityId: id,
+        cert: (row.bank_cert as number | null) ?? null,
+        bankName: (row.bank_name as string | null) ?? null,
+        accountLabel: label,
+      });
+    }
+    revalidate();
+    return {};
+  }
+  if (!/function .*restore_account.* does not exist/i.test(rpc.error.message)) {
+    return { error: friendlyDbError(rpc.error.message) };
+  }
+
+  // Migration 0062 not run yet — original path.
+  const { data: prevInfo } = await supabase
+    .from("accounts")
+    .select("holder, account_type, bank:banks(name, cert)")
+    .eq("id", id)
+    .maybeSingle();
+  const prevBank = prevInfo ? (Array.isArray(prevInfo.bank) ? prevInfo.bank[0] : prevInfo.bank) : null;
+
   const { error } = await supabase
     .from("accounts")
     .update({ deleted_at: null })
     .eq("id", id);
   if (error) return { error: friendlyDbError(error.message) };
 
-  if (acc) {
+  if (prevInfo) {
     const label = accountLabel(
-      acc.holder as string | null,
-      acc.account_type ? ACCOUNT_TYPE_LABELS[acc.account_type as AccountType] : null,
+      prevInfo.holder as string | null,
+      prevInfo.account_type ? ACCOUNT_TYPE_LABELS[prevInfo.account_type as AccountType] : null,
     );
     await logPersonalActivity(supabase, {
       userId: user.id,
       action: "account_restore",
-      summary: `Restored ${label ?? "an account"} at ${accBank?.name ?? "—"} from Trash`,
+      summary: `Restored ${label ?? "an account"} at ${prevBank?.name ?? "—"} from Trash`,
       entityType: "account",
       entityId: id,
-      cert: (accBank?.cert as number | null) ?? null,
-      bankName: (accBank?.name as string | null) ?? null,
+      cert: (prevBank?.cert as number | null) ?? null,
+      bankName: (prevBank?.name as string | null) ?? null,
       accountLabel: label,
     });
   }
@@ -737,7 +777,36 @@ export async function permanentlyDeleteAccount(
   } = await supabase.auth.getUser();
   if (!user) return { error: "You are not signed in." };
 
-  // Read the label/bank before deleting — nothing to look up afterward.
+  // Same fix as restoreAccount/deleteAccount above (migration 0062,
+  // permanently_delete_account) — the plain unbounded delete below has the
+  // identical stuck-lock exposure. Falls back to it if 0062 hasn't run yet.
+  const rpc = await supabase.rpc("permanently_delete_account", { p_account_id: id });
+  if (!rpc.error) {
+    const row = rpc.data?.[0];
+    if (!row) {
+      return { error: "That account isn't in Trash (or was already removed)." };
+    }
+    const label = accountLabel(
+      row.holder as string | null,
+      row.account_type ? ACCOUNT_TYPE_LABELS[row.account_type as AccountType] : null,
+    );
+    await logPersonalActivity(supabase, {
+      userId: user.id,
+      action: "account_permanent_delete",
+      summary: `Permanently deleted ${label ?? "an account"} at ${row.bank_name ?? "—"} — cannot be undone`,
+      cert: (row.bank_cert as number | null) ?? null,
+      bankName: (row.bank_name as string | null) ?? null,
+      accountLabel: label,
+    });
+    revalidate();
+    return {};
+  }
+  if (!/function .*permanently_delete_account.* does not exist/i.test(rpc.error.message)) {
+    return { error: friendlyDbError(rpc.error.message) };
+  }
+
+  // Migration 0062 not run yet — original path. Read the label/bank before
+  // deleting — nothing to look up afterward.
   const { data: prev } = await supabase
     .from("accounts")
     .select("holder, account_type, bank:banks(name, cert)")

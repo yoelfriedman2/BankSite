@@ -255,7 +255,7 @@ export function TransactionHistoryBox({ tx }: { tx: TransactionEntryState }) {
                   onClick={() => tx.openEdit(p.id)}
                   aria-label="Edit this transaction"
                   title="Edit this transaction"
-                  className="shrink-0 text-slate-400 hover:text-emerald-700"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center text-slate-400 hover:text-emerald-700"
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
@@ -265,7 +265,7 @@ export function TransactionHistoryBox({ tx }: { tx: TransactionEntryState }) {
                 onClick={() => tx.deleteTx(p)}
                 aria-label="Delete this transaction"
                 title="Delete this transaction"
-                className="shrink-0 text-slate-400 hover:text-rose-600"
+                className="flex h-11 w-11 shrink-0 items-center justify-center text-slate-400 hover:text-rose-600"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>

@@ -125,8 +125,21 @@ export function BalancesClient({
         </span>
       </div>
 
+      {/* table-fixed + an explicit colgroup, not table-auto's default
+          content-based sizing — table-auto let a long bank name (or just
+          four columns' natural content width) push the table past 375px
+          with nothing to shrink, clipping "Current" off the right edge even
+          though the wrapper's overflow-x-auto was already there. Fixed
+          percentage columns force every column to actually fit, with
+          truncation on the text ones instead of silent horizontal scroll. */}
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-        <table className="min-w-full text-sm">
+        <table className="w-full table-fixed text-sm">
+          <colgroup>
+            <col className="w-[32%]" />
+            <col className="w-[20%]" />
+            <col className="w-[24%]" />
+            <col className="w-[24%]" />
+          </colgroup>
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="px-4 py-3 font-medium">Bank</th>
@@ -146,10 +159,10 @@ export function BalancesClient({
               filtered.map((r) => (
                 <tr key={r.accountId} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70">
                   <td className="px-4 py-3">
-                    <div className="font-medium text-slate-900">{r.bankName}</div>
-                    {r.bankState && <div className="text-xs text-slate-600">{r.bankState}</div>}
+                    <div className="truncate font-medium text-slate-900" title={r.bankName}>{r.bankName}</div>
+                    {r.bankState && <div className="truncate text-xs text-slate-600">{r.bankState}</div>}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
+                  <td className="truncate px-4 py-3 text-slate-600" title={r.holder || undefined}>
                     {r.holder || <span className="text-slate-300">—</span>}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">

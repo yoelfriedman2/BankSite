@@ -78,7 +78,8 @@ export function CalendarClient({ events }: { events: CalEvent[] }) {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setCursor(new Date(year, month - 1, 1))}
-            className="rounded-lg border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50"
+            aria-label="Previous month"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -87,7 +88,8 @@ export function CalendarClient({ events }: { events: CalEvent[] }) {
           </span>
           <button
             onClick={() => setCursor(new Date(year, month + 1, 1))}
-            className="rounded-lg border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50"
+            aria-label="Next month"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -116,8 +118,15 @@ export function CalendarClient({ events }: { events: CalEvent[] }) {
         </div>
       )}
 
+      {/* No unconditional min-width below sm — at 375px this used to force a
+          640px-wide grid inside an overflow-x-auto wrapper, so only
+          Sun-Wed were ever actually visible (Thu-Sat sat behind a scrollbar
+          with no visible affordance, while the month controls above still
+          rendered fine, so the page looked correct at a glance). The 7-col
+          grid is naturally responsive without a forced minimum — it just
+          needs room to actually shrink. */}
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-        <div className="min-w-[640px]">
+        <div className="sm:min-w-[640px]">
           <div className="grid grid-cols-7 border-b border-slate-200 text-xs font-medium uppercase tracking-wide text-slate-600">
             {WEEKDAYS.map((w) => (
               <div key={w} className="px-2 py-2 text-center">

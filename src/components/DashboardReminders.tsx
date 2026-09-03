@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Bell, Check } from "lucide-react";
 import { toggleReminderDone, type OpenReminder } from "@/app/(app)/reminders";
@@ -11,7 +11,23 @@ import { useToast } from "@/components/Toast";
 export function DashboardReminders({ reminders }: { reminders: OpenReminder[] }) {
   const toast = useToast();
   const [items, setItems] = useState(reminders);
-  const today = todayLocalStr();
+  // Computed client-side only, after mount — this component is server-
+  // rendered for the first paint, and the server has no single user's
+  // timezone to compute "today" against (todayLocalStr() is documented
+  // client-only for exactly this reason). Starting at null keeps the first
+  // client render identical to the server's (both render every reminder as
+  // not-yet-overdue), then this flips to the real local date a moment
+  // later — the same "start neutral, correct after mount" fix already used
+  // for BalancesClient's own today/UTC mismatch (UX-16). Computing it
+  // directly in the render body instead would make `overdue`'s className
+  // differ between server and client any time the visitor's local date
+  // doesn't match the server's UTC date (true for most of the day in any
+  // negative-offset timezone) — a real, structural hydration mismatch, not
+  // just a cosmetic one a moment of "5 min ago" text can shrug off.
+  const [today, setToday] = useState<string | null>(null);
+  useEffect(() => {
+    setToday(todayLocalStr());
+  }, []);
 
   function markDone(id: string) {
     const before = items;
@@ -44,7 +60,7 @@ export function DashboardReminders({ reminders }: { reminders: OpenReminder[] })
       </div>
       <ul>
         {items.map((r) => {
-          const overdue = r.due_date < today;
+          const overdue = today != null && r.due_date < today;
           return (
             <li
               key={r.id}
