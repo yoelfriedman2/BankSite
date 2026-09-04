@@ -176,6 +176,67 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-09-04 (live QA pass on banktracker.app — restore-from-Trash hang fixed at the DB layer,
+real hydration mismatches found and fixed, 8 mobile/a11y bugs fixed)** — Direct follow-up to the
+2026-09-01/earlier account-delete-hang work: a live QA pass against the deployed site found delete
+now worked (confirmed the earlier fix landed) but **restoring that same account from Trash hung
+indefinitely** — tab froze, the account stayed stuck in Trash. The QA report also flagged React
+hydration errors ("#418", "Cannot read properties of null (reading 'parentNode')") on almost every
+page navigation and asked whether the two were related.
+
+- **Root cause, once traced**: `restoreAccount()`/`permanentlyDeleteAccount()`
+  (`accounts/actions.ts`) still had the exact unbounded plain-update/plain-delete shape that
+  migration 0061 (`soft_delete_account`) had only fixed for the *delete* path — a stuck lock on
+  that same accounts row (from whatever the original root cause was) had no bound on how long
+  either of the other two Trash operations would wait for it either. New migration **0062**
+  (`restore_account`, `permanently_delete_account`) mirrors 0061 exactly: one call, one
+  `SET LOCAL statement_timeout` (8s), so a stuck lock now fails fast with a clear error on every
+  account-Trash operation, not just delete. **Confirmed run by the user 2026-09-04** — both actions
+  now use it, with the original 2-tier fallback to the plain path if it ever needs to run before the
+  migration is applied. `TrashClient.tsx`'s four actions (restore/delete × bank/account) also
+  switched from `window.confirm()` to the same in-app `ConfirmDialog` (new,
+  `src/components/ConfirmDialog.tsx` — now the shared pattern for any future destructive-action
+  confirm, alongside `BankForm.tsx`'s account-delete dialog) plus the same 15s client-side timeout
+  guard as account delete — same reasoning as before: a native dialog can end up stuck behind an
+  earlier unanswered one in a way that reads exactly like an indefinite hang.
+- **The hydration-error investigation turned up two real, distinct bugs**, both fixed: (1)
+  `UpdatesClient.tsx`'s `timeAgo()` was the one instance this file's own 2026-08-21 History entry
+  had already flagged as unfixed-but-exposed after fixing the identical bug in `HistoryClient.tsx`
+  — same `suppressHydrationWarning` fix applied. (2) `DashboardReminders.tsx` and `BankForm.tsx`
+  both computed `today` via `todayLocalStr()` directly in a client component's render body —
+  that function is documented client-only (server has no single user's timezone), but both
+  components are server-rendered for the first paint, so a reminder's `overdue` className could
+  genuinely differ between server (UTC) and client (local) — a real structural mismatch, not just
+  cosmetic text, true for most of the day in any negative-UTC-offset timezone. Fixed by deferring to
+  `useEffect` (start `today` at `null` so the first client render matches the server's, correct
+  after mount) — the same pattern `BalancesClient.tsx` already used correctly for its own UTC/local
+  date fetch (UX-16). **Not confirmed as the exact production cause** — no production access from
+  this sandbox to verify against the live error — but both are real, now-fixed bugs, and a DEMO_MODE
+  sweep across every page came back with zero console errors either way.
+- **8 mobile/accessibility bugs from the same QA pass, all fixed**: Calendar was desktop-width-only
+  on mobile (forced 640px min-width grid, now responsive below `sm`) and its prev/next buttons grew
+  from ~34×34 to 44×44 with real `aria-label`s; Settings' tab strip overflowed at 375px
+  (`overflow-x-auto` with no scroll affordance → `flex-wrap`, every tab always visible); Trash's
+  Restore/Delete-forever actions were unreachable at 375px (added the same mobile-card-list pattern
+  Banks/Accounts already use); Balance-by-date's table overflowed at 375px (`table-auto` → fixed
+  colgroup + truncation, same fix shape as the Holding-companies-era Banks-table squish bug);
+  Money-moved's sweep and borrowed-money modals accepted an incomplete submit with zero feedback
+  (required fields were purely `disabled`-gated — now always-clickable with a real inline error +
+  focus move, matching the pattern already used for Add-transaction's direction choice);
+  icon-only controls in the account editor (activity-history remove, balance-history edit/delete,
+  "+ Log activity") were 14×14–24px tall, brought to the same 44×44 minimum as the earlier
+  delete/edit/print/duplicate fixes; Road trip's "Add more banks nearby" list crammed name +
+  city/state + drive-time onto one forced truncating line (a long name could ellipsize the
+  city/state text that's often the only thing distinguishing two similarly-named banks) — name now
+  gets its own line.
+
+Verification: `tsc --noEmit` and the full test suite (167 tests) clean throughout. Every fix
+live-tested via a CDP driver against DEMO_MODE — the full delete→Trash→restore round trip (confirm
+dialog opens in <1s, restore actually completes, zero console errors), a 6-page hydration sweep
+(zero errors), and a mobile-overflow + touch-target sweep across every touched page at 375px (zero
+overflow, zero errors, every checked control ≥44×44). Bug fixes / accessibility hardening only — no
+changelog/Guide entries, per the standing features-only policy.
+
 **2026-09-01 (fix: sharing an account's routing number to a bank could get silently reverted by
 the bank drawer's own "Save bank")** — User report: add a routing number to an account, click
 "share ↑" to push it to the bank, then save — and it comes back with nothing pushed, as if the

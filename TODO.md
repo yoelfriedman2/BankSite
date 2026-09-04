@@ -24,13 +24,6 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
 
 ## One-time setup pending
 
-- **Run migration `0062_restore_and_permadelete_account_timeout.sql`** — not yet run. Adds
-  `restore_account`/`permanently_delete_account`, the same bounded-`statement_timeout` pattern as
-  migration 0061 (soft_delete_account, confirmed run), applied to the other two account-Trash
-  operations. Reported bug: restoring an account from Trash hung indefinitely (a stuck lock on that
-  same accounts row, the identical exposure 0061 fixed for delete, just on the next two operations
-  that touch it). Additive, degrades gracefully until run — both actions fall back to their original
-  plain update/delete path.
 - **Run migration `0060_paper_in.sql`** — not yet run. New private per-user table
   (`scanned_documents`) backing the new `/paper-in` page. Full SQL is in that migration file and was
   also pasted directly into chat when this shipped. Reuses the existing `account-documents` storage
