@@ -28,7 +28,18 @@ import { useToast } from "@/components/Toast";
 /** Builds one letter for a checklist item, resolving its own signer (matched
  *  by holder name against saved "Signing as" profiles, same as the per-item
  *  "Print letter" deep link) and its own bank address (from the already
- *  fetched cert → addresses map, main office preferred). */
+ *  fetched cert → addresses map, main office preferred).
+ *
+ *  When a holder is known but doesn't match any saved profile, this
+ *  deliberately does NOT fall back to whichever profile happens to be
+ *  "currently active" — that's shared, mutable, app-wide state (it's also
+ *  updated just by following someone else's single-item "Print letter" link,
+ *  see SendClient.tsx), so a batch could silently end up signed by a
+ *  different family member than the one each letter is actually for. Falls
+ *  back to the holder's own name instead (no return address, since we don't
+ *  have one) — an incomplete signature is a visible gap; a wrong name isn't.
+ *  Only an item with no holder at all (nothing better to go on) uses the
+ *  active profile, same as before. */
 function letterForItem(
   item: AddressItem,
   newAddress: string,
@@ -36,11 +47,12 @@ function letterForItem(
   addressesByCert: Map<number, MailingAddress[]>,
   signerProfiles: ReturnType<typeof loadSignerProfiles>,
   defaultSignerText: string,
-): LetterDoc {
+): { letter: LetterDoc; unmatchedHolder: boolean } {
   const addresses = item.cert != null ? addressesByCert.get(item.cert) ?? [] : [];
   const mainAddr = addresses.find((a) => a.main_office) ?? addresses[0] ?? null;
   const signer = item.holder ? findSignerProfileByLabel(signerProfiles, item.holder) : undefined;
-  const fromText = signer?.text ?? defaultSignerText;
+  const unmatchedHolder = !!item.holder && !signer;
+  const fromText = signer?.text ?? (item.holder || defaultSignerText);
   const body = renderLetter(getLetterTemplate("address_change").body, {
     bank: item.bankName,
     holder: item.holder ?? "",
@@ -50,10 +62,13 @@ function letterForItem(
     newAddress,
   });
   return {
-    from: fromText.trim() || " ",
-    date,
-    to: bankAddressBlock(item.bankName, mainAddr),
-    body,
+    letter: {
+      from: fromText.trim() || " ",
+      date,
+      to: bankAddressBlock(item.bankName, mainAddr),
+      body,
+    },
+    unmatchedHolder,
   };
 }
 
@@ -178,9 +193,11 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
       }
 
       const date = longDateStr();
-      const letters = remaining.map((item) =>
+      const built = remaining.map((item) =>
         letterForItem(item, campaign.new_address, date, addressesByCert, signerProfiles, defaultProfile?.text ?? ""),
       );
+      const letters = built.map((b) => b.letter);
+      const unmatchedCount = built.filter((b) => b.unmatchedHolder).length;
 
       const html = buildMultiLetterHTML(letters);
       if (!html) return;
@@ -191,6 +208,11 @@ export function AddressChangeClient({ data }: { data: AddressChangeData }) {
       }
       win.document.write(html);
       win.document.close();
+      if (unmatchedCount > 0) {
+        toast.error(
+          `${unmatchedCount} letter${unmatchedCount === 1 ? "" : "s"} printed signed with just the account holder's name — no saved "Signing as" profile matched them, so there's no return address. Save one for them on the Send page and reprint if needed.`,
+        );
+      }
     } finally {
       setPrintingAll(false);
     }
