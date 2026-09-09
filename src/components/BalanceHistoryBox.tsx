@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -75,6 +75,17 @@ export function useTransactionEntry(
   const [loaded, setLoaded] = useState(false);
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // True for the whole span of an add/edit/delete's server round trip. A
+  // caller with its own separate Save button (AccountModal) uses this to
+  // block that button — and Enter-key submission of the form it lives in —
+  // for as long as this is true. Without it, clicking "Add" (a real network
+  // call) and then clicking the outer Save fast enough to beat the response
+  // submits Save with the account's still-stale balance; upsertAccount can't
+  // tell that apart from a deliberate manual correction, so it silently logs
+  // an equal-and-opposite entry that cancels the deposit/withdrawal just
+  // added out from under it. onBalanceChange (below) closes the gap once the
+  // request resolves — this closes the gap *while it's still in flight*.
+  const [busy, setBusy] = useState(false);
 
   function refresh() {
     if (!accountId) return;
@@ -111,25 +122,35 @@ export function useTransactionEntry(
 
   async function submitAdd(amount: number, direction: Direction, reason: string, date: string) {
     if (!accountId) return "That account isn't saved yet.";
-    const res = await recordAccountTransaction(accountId, amount, direction, reason, date);
-    if (res.error) return res.error;
-    if (res.newBalance != null) onBalanceChange?.(res.newBalance);
-    closeForms();
-    refresh();
-    router.refresh();
-    return null;
+    setBusy(true);
+    try {
+      const res = await recordAccountTransaction(accountId, amount, direction, reason, date);
+      if (res.error) return res.error;
+      if (res.newBalance != null) onBalanceChange?.(res.newBalance);
+      closeForms();
+      refresh();
+      router.refresh();
+      return null;
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function submitEdit(amount: number, direction: Direction, reason: string, date: string) {
     if (!latest) return "Nothing to edit.";
     const signed = direction === "withdrawal" ? -amount : amount;
-    const res = await editLastAccountTransaction(latest.id, signed, reason, date);
-    if (res.error) return res.error;
-    if (res.newBalance != null) onBalanceChange?.(res.newBalance);
-    closeForms();
-    refresh();
-    router.refresh();
-    return null;
+    setBusy(true);
+    try {
+      const res = await editLastAccountTransaction(latest.id, signed, reason, date);
+      if (res.error) return res.error;
+      if (res.newBalance != null) onBalanceChange?.(res.newBalance);
+      closeForms();
+      refresh();
+      router.refresh();
+      return null;
+    } finally {
+      setBusy(false);
+    }
   }
 
   /** Deletes any row, any age. Confirms the delete itself, then — only if
@@ -152,14 +173,19 @@ export function useTransactionEntry(
         )} effect?\n\nOK = remove it from the log AND correct the balance.\nCancel = just remove it from the log, leave the balance as-is.`,
       );
     }
-    const res = await deleteAccountTransaction(point.id, adjustBalance);
-    if (res.error) {
-      window.alert(res.error);
-      return;
+    setBusy(true);
+    try {
+      const res = await deleteAccountTransaction(point.id, adjustBalance);
+      if (res.error) {
+        window.alert(res.error);
+        return;
+      }
+      if (res.newBalance != null) onBalanceChange?.(res.newBalance);
+      refresh();
+      router.refresh();
+    } finally {
+      setBusy(false);
     }
-    if (res.newBalance != null) onBalanceChange?.(res.newBalance);
-    refresh();
-    router.refresh();
   }
 
   return {
@@ -169,6 +195,7 @@ export function useTransactionEntry(
     editingId,
     latest,
     latestEditable,
+    busy,
     openAdd,
     openEdit,
     closeForms,
@@ -231,44 +258,70 @@ export function TransactionHistoryBox({ tx }: { tx: TransactionEntryState }) {
           {tx.history.map((p, i) => (
             <li
               key={p.id}
-              className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm ${TRANSACTION_TYPE_STYLES[p.type]}`}
+              className={`space-y-1 rounded-md px-2 py-1.5 text-sm ${TRANSACTION_TYPE_STYLES[p.type]}`}
             >
-              <span className="w-16 shrink-0 text-xs text-slate-500">{formatDate(p.as_of_date)}</span>
-              <span className="shrink-0 rounded-full bg-white/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
-                {TRANSACTION_TYPE_LABELS[p.type]}
-              </span>
-              <span className="flex-1 truncate text-xs text-slate-600">{p.reason ?? ""}</span>
-              {p.change_amount != null && (
-                <span
-                  className={`shrink-0 text-xs tabular-nums ${p.change_amount < 0 ? "text-rose-500" : "text-emerald-700"}`}
-                >
-                  {p.change_amount < 0 ? "−" : "+"}
-                  {formatCurrency(Math.abs(p.change_amount))}
+              {/* Two lines, not one — the docked account editor's lane (as
+               *  narrow as ~380px) doesn't have room for date + type +
+               *  reason + amount + balance + edit + delete side by side.
+               *  Packed onto one line, the fixed-width columns alone (before
+               *  a single character of reason text) already needed more
+               *  width than that, so the browser was silently overflowing
+               *  the row — by an amount that varied with the type label's
+               *  own width ("Opening balance" vs "Deposit") — which is what
+               *  actually caused the delete button to drift row to row. */}
+              <div className="flex items-center gap-2">
+                <span className="w-16 shrink-0 text-xs text-slate-500">{formatDate(p.as_of_date)}</span>
+                <span className="shrink-0 rounded-full bg-white/60 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                  {TRANSACTION_TYPE_LABELS[p.type]}
                 </span>
-              )}
-              <span className="w-24 shrink-0 text-right font-medium tabular-nums text-slate-800">
-                {formatCurrency(p.balance)}
-              </span>
-              {i === 0 && tx.latestEditable && !tx.editingId && !tx.adding && (
+                <span className="flex-1 truncate text-xs text-slate-600">{p.reason ?? ""}</span>
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                {/* Fixed-width, like the pencil slot below — a row with no
+                 *  dollar amount (e.g. the seeded "opening balance" entry)
+                 *  used to omit this span entirely, which shifted every
+                 *  column after it left on that one row. */}
+                <span
+                  className={`w-20 shrink-0 text-right text-xs tabular-nums ${
+                    p.change_amount == null
+                      ? ""
+                      : p.change_amount < 0
+                        ? "text-rose-500"
+                        : "text-emerald-700"
+                  }`}
+                >
+                  {p.change_amount != null &&
+                    `${p.change_amount < 0 ? "−" : "+"}${formatCurrency(Math.abs(p.change_amount))}`}
+                </span>
+                <span className="w-24 shrink-0 text-right font-medium tabular-nums text-slate-800">
+                  {formatCurrency(p.balance)}
+                </span>
+                {/* Always reserve this 44px slot, even on rows with no edit
+                 *  button (every row but the newest) — otherwise the delete
+                 *  button shifts right by 44px on those rows. */}
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center">
+                  {i === 0 && tx.latestEditable && !tx.editingId && !tx.adding && (
+                    <button
+                      type="button"
+                      onClick={() => tx.openEdit(p.id)}
+                      aria-label="Edit this transaction"
+                      title="Edit this transaction"
+                      className="flex h-11 w-11 items-center justify-center text-slate-400 hover:text-emerald-700"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </span>
                 <button
                   type="button"
-                  onClick={() => tx.openEdit(p.id)}
-                  aria-label="Edit this transaction"
-                  title="Edit this transaction"
-                  className="flex h-11 w-11 shrink-0 items-center justify-center text-slate-400 hover:text-emerald-700"
+                  onClick={() => tx.deleteTx(p)}
+                  aria-label="Delete this transaction"
+                  title="Delete this transaction"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center text-slate-400 hover:text-rose-600"
                 >
-                  <Pencil className="h-3.5 w-3.5" />
+                  <Trash2 className="h-3.5 w-3.5" />
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={() => tx.deleteTx(p)}
-                aria-label="Delete this transaction"
-                title="Delete this transaction"
-                className="flex h-11 w-11 shrink-0 items-center justify-center text-slate-400 hover:text-rose-600"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+              </div>
             </li>
           ))}
         </ul>
@@ -318,6 +371,31 @@ function TransactionForm({
   // once amount/date/reason were already filled in.
   const [directionTouched, setDirectionTouched] = useState(false);
   const showDirectionError = directionTouched && direction === null;
+
+  async function handleAdd() {
+    if (!direction) {
+      setDirectionTouched(true);
+      return;
+    }
+    setPending(true);
+    setError(null);
+    const err = await onSubmit(parsed, direction, reason, date);
+    setPending(false);
+    if (err) setError(err);
+  }
+
+  // This whole form lives nested inside AccountModal's own outer <form>
+  // (there's no <form> of its own here — just a styled <div>), so a bare
+  // Enter keypress in the Amount/Reason inputs below would otherwise fall
+  // through to the browser's native submit and trigger the *account*
+  // editor's "Save account" button instead of adding the transaction — the
+  // same class of bug DateInput's own Enter handler already guards against
+  // for its field (which handles its own Enter itself, so isn't wired here).
+  function submitOnEnter(e: KeyboardEvent) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    if (hasValidAmount && !pending) void handleAdd();
+  }
 
   return (
     <div className="mt-2 space-y-2 rounded-lg border border-emerald-200 bg-white p-2.5">
@@ -372,6 +450,7 @@ function TransactionForm({
             placeholder="Amount"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
+            onKeyDown={submitOnEnter}
             className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
           />
         </div>
@@ -383,6 +462,7 @@ function TransactionForm({
           placeholder="Reason (optional)"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
+          onKeyDown={submitOnEnter}
           className="min-w-[7rem] flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
         />
         {/* Native combo-box suggestions, not a second control — same input,
@@ -406,17 +486,7 @@ function TransactionForm({
         <button
           type="button"
           disabled={!hasValidAmount || pending}
-          onClick={async () => {
-            if (!direction) {
-              setDirectionTouched(true);
-              return;
-            }
-            setPending(true);
-            setError(null);
-            const err = await onSubmit(parsed, direction, reason, date);
-            setPending(false);
-            if (err) setError(err);
-          }}
+          onClick={handleAdd}
           className="rounded-lg bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
         >
           {pending ? "Saving…" : submitLabel}

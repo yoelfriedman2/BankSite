@@ -885,15 +885,27 @@ export function BankForm({
                             <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-slate-200" />
                           )}
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5 text-sm font-medium text-slate-800">
+                            {/* A long holder name (e.g. "Sarah Friedman") with no
+                             *  truncation would wrap onto a second line in this
+                             *  narrow column — and since the icon block beside it
+                             *  is vertically centered against the row as a whole,
+                             *  that wrapped second line visually lands right under
+                             *  the pencil/print/etc. buttons. Single-line +
+                             *  ellipsis (title carries the full text) avoids the
+                             *  wrap entirely, same fix shape as the Banks-table
+                             *  long-name squish (see CLAUDE.md, 2026-08-04). */}
+                            <div
+                              className="truncate text-sm font-medium text-slate-800"
+                              title={`${a.holder || "—"}${a.account_type ? ` · ${ACCOUNT_TYPE_LABELS[a.account_type]}` : ""}`}
+                            >
                               {a.holder || "—"}
                               {a.account_type && (
                                 <span className="font-normal text-slate-600">
-                                  · {ACCOUNT_TYPE_LABELS[a.account_type]}
+                                  {" "}· {ACCOUNT_TYPE_LABELS[a.account_type]}
                                 </span>
                               )}
                             </div>
-                            <div className="text-[11px] text-slate-600">
+                            <div className="truncate text-[11px] text-slate-600">
                               {a.account_number ? maskAccountNumber(a.account_number) : "no account #"}
                               {a.balance != null ? ` · ${formatCurrency(a.balance)}` : ""}
                             </div>

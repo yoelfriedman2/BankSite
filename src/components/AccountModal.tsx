@@ -360,6 +360,17 @@ export function AccountModal({
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    // A transaction add/edit/delete still in flight means `values.balance`
+    // hasn't been resynced to the ledger's real result yet (see tx.busy's
+    // own comment) — saving right now would submit that stale figure as a
+    // deliberate manual correction and silently cancel the transaction out
+    // from under it. The Save button below is already disabled for the same
+    // reason; this is the same guard for a submit that reaches here anyway
+    // (e.g. Enter pressed in a field before React re-renders the button).
+    if (tx.busy) {
+      setError("Still saving that transaction — try again in a moment.");
+      return;
+    }
     if (routingError) {
       setError(routingError);
       return;
@@ -980,11 +991,12 @@ export function AccountModal({
           </button>
           <button
             type="submit"
-            disabled={isPending}
+            disabled={isPending || tx.busy}
+            title={tx.busy ? "Finishing that transaction first…" : undefined}
             className="flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60"
           >
-            {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-            {initial ? "Save account" : "Add account"}
+            {(isPending || tx.busy) && <Loader2 className="h-4 w-4 animate-spin" />}
+            {tx.busy ? "Finishing transaction…" : initial ? "Save account" : "Add account"}
           </button>
         </div>
       </form>

@@ -176,6 +176,70 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-09-09 (fix: adding a transaction then Save could still silently cancel it out — a race the
+2026-08-14 fix didn't fully close; plus two real layout-overlap bugs in the account editor)** — User
+report with two screenshots: (1) the "My accounts" list inside a bank drawer showed the edit pencil
+overlapping the account holder/type text, and (2) — the money bug — adding a deposit and hitting
+"Save account" right after could still make the deposit "add itself and subtract itself right away,"
+intermittently (reproduced once earlier that day, not on a later retest). The 2026-08-14 entry above
+already fixed the *steady-state* version of this (the account editor's Balance field re-syncing to
+the ledger's real value once a transaction finishes) — this was the *in-flight* version it left open.
+
+- **Root cause of the money bug, confirmed by reproducing it under artificial network latency, not
+  guessed**: `AccountModal`'s outer "Save account" button was never blocked while a "+ Add
+  transaction"/edit/delete was still in flight. Clicking "Add" kicks off a real server round trip
+  (`recordAccountTransaction`); if "Save account" is clicked fast enough to beat that response —
+  exactly what "I added, and then I saved right away" describes — the outer form submits
+  `values.balance` while it's still the pre-deposit figure, and `upsertAccount` can't tell that apart
+  from a deliberate manual correction: it silently writes an equal-and-opposite `correction` row that
+  cancels the deposit out. Fixed by giving `useTransactionEntry` (`BalanceHistoryBox.tsx`) a new
+  `busy` flag, true for the whole span of an add/edit/delete's round trip. `AccountModal`'s Save
+  button is now `disabled` (and relabels to "Finishing transaction…") while `tx.busy`, and
+  `handleSubmit` itself also early-returns on `tx.busy` as a second guard in case a submit reaches it
+  anyway. Verified by simulating the exact race under 1.2s artificial network latency (`Network.
+  emulateNetworkConditions`): rapid Save clicks fired while the deposit was still in flight were all
+  blocked (button disabled, modal stayed open); once the deposit resolved, Save re-enabled with the
+  now-correct balance, and a real Save afterward produced exactly one clean "Deposit" history row —
+  **no phantom correction**, confirmed by reopening the account and reading the actual history list.
+- **A second, related gap in the same form**: the "Amount"/"Reason" inputs inside the nested
+  "+ Add transaction" form have no `<form>` of their own (they're a styled `<div>` living inside
+  `AccountModal`'s *outer* `<form>`) — pressing Enter in either field would fall through to the
+  browser's native submit and trigger the *account* editor's Save instead of adding the transaction,
+  the same class of bug `DateInput`'s own Enter handler already guards against for its own field
+  (which wasn't affected, since it handles Enter itself). Both inputs now go through a shared
+  `submitOnEnter` that calls the same `handleAdd()` the button uses, instead of leaking through.
+- **The two layout bugs, both confirmed by measuring real DOM rects in DEMO_MODE, not eyeballed**:
+  (1) `BankForm.tsx`'s "My accounts" row (the bank drawer's amber column) had no `truncate` on the
+  holder+type text — reproduced exactly by renaming a demo account's holder to "Sarah Friedman": the
+  text wrapped onto a second line in the narrow (~320-380px) column, and since the icon block beside
+  it is vertically centered against the row as a whole, that wrapped second line visually landed
+  right under the pencil button, matching the screenshot precisely. Fixed with `truncate` + a `title`
+  tooltip on both text lines, same fix shape as the Banks-table long-name squish (2026-08-04 entry
+  above). (2) `BalanceHistoryBox.tsx`'s "Balance history" rows had their delete button drift
+  horizontally row to row — traced (by dumping every child's computed rect, not assumed) to the row's
+  fixed-width columns (date + type badge + amount + balance + edit-slot + delete, six columns plus
+  five gaps plus padding) simply not fitting in the docked account editor's ~380px-wide lane even
+  before a single character of reason text — the flex-1 "reason" span was clamping to a **literal
+  zero pixels** on every row, and the excess silently overflowed the box by an amount that varied with
+  the type label's own width ("Opening balance" vs "Deposit"), which is what actually pushed the
+  delete button around. Restructured each row from one line into two (date/type/reason on top,
+  amount/balance/edit/delete right-aligned below) — verified this drops every row's delete-button
+  `left` position to the exact same pixel across a 4-row history with varying type labels and a
+  null-`change_amount` row, in both the docked bank-drawer lane and the standalone Accounts-page
+  popup, with no horizontal overflow at 375px either.
+
+**Verification**: `tsc --noEmit`, `npm run build`, `npm test` (167, unchanged — no new pure-logic
+module, all three fixes are UI/state-flow changes in already-covered components) all clean (temp
+`xlsx` CDN→npm swap for the sandbox install, restored after — confirmed via `git diff` showing
+nothing but the three intended component files). Every fix was live-tested against a real DEMO_MODE
+dev server via the CDP driver, not just read through: the money-race fix via the artificial-latency
+repro described above (the one genuinely hard-to-verify-without-real-timing case in this session, and
+it *was* verified, not skipped); both layout fixes by measuring actual `getBoundingClientRect()`
+values before/after (not screenshots alone) in the exact narrow width the bug reproduces in, plus the
+standalone Accounts-page popup and a 375px mobile pass on every touched surface (bank drawer, account
+editor, read-only account view) — zero overflow, zero console errors throughout. Bug fixes only, no
+changelog/Guide entries per the standing features-only policy.
+
 **2026-09-04 (live QA pass on banktracker.app — restore-from-Trash hang fixed at the DB layer,
 real hydration mismatches found and fixed, 8 mobile/a11y bugs fixed)** — Direct follow-up to the
 2026-09-01/earlier account-delete-hang work: a live QA pass against the deployed site found delete
