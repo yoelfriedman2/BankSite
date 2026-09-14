@@ -176,6 +176,38 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-09-14 (fix: a stale Server Action across a deploy could leave a user stuck on the error
+screen)** — Sentry reported an unhandled `Failed to find Server Action` error on `POST /login/page`
+(a real family member's Chromebook). This is the standard Next.js deploy-skew failure: a Server
+Action's id is baked into the exact build it was compiled in, so a browser tab left open (or a page
+served from a cache) across a deploy submits an id the newly-deployed server has never heard of —
+not a bug in any one page's code, and not preventable outright, but the app's own recovery from it
+was worse than it needed to be. Both segment error boundaries (`src/app/error.tsx`, covering
+`/login` and every other route outside `(app)`; `src/app/(app)/error.tsx`, covering the whole
+signed-in app, where every page's mutations go through a Server Action per this file's own
+architecture) only ever offered "Try again," which calls `reset()` — that just re-renders the same
+already-loaded (stale) JS bundle and hits the identical error again, leaving no real way out short
+of the user knowing to manually refresh.
+
+New `src/lib/staleServerAction.ts`: `isStaleServerActionError()` matches the exact Next.js message,
+and `reloadForStaleServerAction()` does a real navigation to fetch the current deployment's HTML/JS
+— deliberately `location.replace(pathname + search)`, not `location.reload()`, since a plain reload
+can silently resubmit the original POST if the current document was itself reached via a native
+(no-JS) form-POST fallback, while `replace()` is always a fresh GET. Guarded with a 10s
+`sessionStorage` cooldown so a deployment that's genuinely still broken (not just stale) shows the
+normal error UI on the second attempt instead of loop-reloading forever. Wired into both error
+boundaries' existing `Sentry.captureException` effect (unchanged — still want telemetry on how often
+this happens) alongside a new effect that triggers the reload when this specific error is detected.
+
+**Verification**: `tsc --noEmit`, `npm run build` (temp `xlsx` CDN→npm swap for the sandbox install,
+restored after — confirmed via `git diff` showing nothing but the intended three files), `npm test`
+(167, unchanged — no new pure-logic module) all clean. Not independently click-tested against a real
+mid-deploy race (that needs two live deployments running at once, which isn't reproducible from this
+sandbox or safely from a single dev server) — verified instead by reading the fix against the exact
+error message Next.js documents for this case and confirming `reloadForStaleServerAction`'s
+navigation targets the current path with no method/body carried over from whatever triggered the
+error. Bug fix, no changelog/Guide entry per the standing features-only policy.
+
 **2026-09-09 (fix: adding a transaction then Save could still silently cancel it out — a race the
 2026-08-14 fix didn't fully close; plus two real layout-overlap bugs in the account editor)** — User
 report with two screenshots: (1) the "My accounts" list inside a bank drawer showed the edit pencil
