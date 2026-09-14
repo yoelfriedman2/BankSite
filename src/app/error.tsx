@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import * as Sentry from "@sentry/nextjs";
 import { Logo } from "@/components/Logo";
+import { isStaleServerActionError, reloadForStaleServerAction } from "@/lib/staleServerAction";
 
 export default function Error({
   error,
@@ -14,6 +15,13 @@ export default function Error({
 }) {
   useEffect(() => {
     Sentry.captureException(error);
+  }, [error]);
+
+  // A stale Server Action reference (e.g. a /login tab left open across a
+  // deploy) can't be fixed by `reset()` — it needs a real navigation to pick
+  // up the current deployment's JS. See lib/staleServerAction.ts.
+  useEffect(() => {
+    if (isStaleServerActionError(error)) reloadForStaleServerAction();
   }, [error]);
 
   return (
