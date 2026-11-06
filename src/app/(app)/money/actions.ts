@@ -15,7 +15,7 @@ import {
 } from "@/lib/demo";
 import { friendlyDbError } from "@/lib/friendlyError";
 import { formatCurrency } from "@/lib/format";
-import { todayLocalStr } from "@/lib/date";
+import { todayInAppTimeZone } from "@/lib/date";
 import { inferTransactionType, type TransactionType } from "@/lib/transactionType";
 import { logPersonalActivity, accountLabel } from "@/lib/personalLog";
 import { ACCOUNT_TYPE_LABELS, type AccountType } from "@/lib/types";
@@ -271,11 +271,11 @@ export async function returnBorrowedFund(id: string): Promise<{ error?: string }
     .eq("id", id)
     .maybeSingle();
 
-  // Server-side "today" — no single user timezone to reference here, same
-  // convention as every other server-stamped date in this app (see lib/date.ts).
+  // "Today" on the app's calendar (America/New_York), not the server's UTC
+  // date, so an evening return isn't stamped as tomorrow (see lib/date.ts).
   const { error } = await supabase
     .from("borrowed_funds")
-    .update({ returned_at: new Date().toISOString().slice(0, 10) })
+    .update({ returned_at: todayInAppTimeZone() })
     .eq("id", id)
     .is("returned_at", null);
   if (error) return { error: friendlyDbError(error.message) };
@@ -824,7 +824,7 @@ export async function markMailedDepositPosted(id: string): Promise<{ error?: str
 
   const { data, error } = await supabase.rpc("post_mailed_deposit", {
     p_deposit_id: id,
-    p_posted_on: todayLocalStr(),
+    p_posted_on: todayInAppTimeZone(),
   });
   if (error) return { error: friendlyDbError(error.message) };
   // null means the row wasn't found, wasn't this caller's, or was already

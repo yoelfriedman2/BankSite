@@ -36,6 +36,8 @@ import {
   type ImportRow,
 } from "@/lib/demo";
 import { BANKS_SEED } from "@/lib/banks-seed";
+import { todayInAppTimeZone } from "@/lib/date";
+import { filterApprovedRecipients } from "@/lib/noteRecipients";
 import {
   OPEN_METHOD_LABELS,
   ELIGIBILITY_LABELS,
@@ -1244,7 +1246,7 @@ export async function importBanks(
     // imported account isn't invisible on Balance-by-date until it's later
     // edited by hand. Best-effort: a history-write failure shouldn't undo an
     // otherwise-successful import.
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayInAppTimeZone();
     const historyRows = (insertedAccounts ?? [])
       .filter((a) => a.balance != null)
       .map((a) => ({
@@ -1621,14 +1623,11 @@ export async function addBankComment(
         .neq("id", user.id);
 
       if (profiles?.length) {
-        // Exclude pending/denied users — this broadcast goes out through the
+        // Approved users only — this broadcast goes out through the
         // service-role client, which bypasses the RLS that normally stops an
         // un-approved user from reading community notes in the app itself.
-        // Without this check, a brand-new signup (default notify flags: true,
-        // access_status: pending) would receive full note content by email
-        // before ever being let in. Queried separately, same fail-open-on-
-        // missing-column pattern as elsewhere, so a migration-0036-not-run-yet
-        // deployment still sends normally instead of silently emailing no one.
+        // Fails CLOSED (SEC-03): if the status lookup errors, nobody is
+        // emailed, rather than everyone (pending/denied users included).
         const { data: statuses, error: statusErr } = await admin
           .from("profiles")
           .select("id, access_status")
@@ -1636,14 +1635,10 @@ export async function addBankComment(
             "id",
             profiles.map((p) => p.id),
           );
-        const blocked = new Set(
-          statusErr
-            ? []
-            : (statuses ?? [])
-                .filter((s) => s.access_status && s.access_status !== "approved")
-                .map((s) => s.id),
-        );
-        const recipients = profiles.filter((p) => !blocked.has(p.id));
+        if (statusErr) {
+          console.error("[addBankComment] access-status lookup failed; skipping note emails:", statusErr.message);
+        }
+        const recipients = filterApprovedRecipients(profiles, statuses, !!statusErr);
 
         if (recipients.length) {
           const { data: authData } = await admin.auth.admin.listUsers({ perPage: 1000 });

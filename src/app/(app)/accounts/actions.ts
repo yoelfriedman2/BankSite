@@ -30,6 +30,7 @@ import { friendlyDbError } from "@/lib/friendlyError";
 import { normalizeRoutingNumber, routingNumberError } from "@/lib/routingNumber";
 import { formatCurrency } from "@/lib/format";
 import { logPersonalActivity, accountLabel } from "@/lib/personalLog";
+import { todayInAppTimeZone } from "@/lib/date";
 
 export type AccountFormValues = {
   id?: string;
@@ -333,7 +334,7 @@ export async function upsertAccount(
   const bankName = (ownedBank.name as string) ?? "—";
   const bankCert = (ownedBank.cert as number | null) ?? null;
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayInAppTimeZone();
   const now = new Date();
   if (values.id) {
     // Record a dated balance point when the balance changes, so the
@@ -1086,7 +1087,7 @@ export async function logActivityToday(
   id: string,
   type: ActivityType | null = null,
 ): Promise<{ error?: string }> {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayInAppTimeZone();
 
   if (DEMO_MODE) {
     const acc = getDemoAccounts().find((a) => a.id === id);
