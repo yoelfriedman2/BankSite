@@ -28,11 +28,15 @@ function accountNote(r: InterestYearAccountRow): string | null {
   }
 }
 
-function Split({ earned, projected }: { earned: number; projected: number }) {
+/** Total, with its earned / projected split underneath (beside it on a phone). */
+function Amounts({ total, earned, projected }: { total: number; earned: number; projected: number }) {
   return (
-    <p className="text-xs text-slate-600">
-      {formatCurrency(earned)} earned · {formatCurrency(projected)} projected
-    </p>
+    <div className="flex shrink-0 items-baseline justify-between gap-2 sm:block sm:text-right">
+      <p className="text-sm font-semibold text-emerald-700">{formatCurrency(total)}</p>
+      <p className="text-xs text-slate-600">
+        {formatCurrency(earned)} earned · {formatCurrency(projected)} projected
+      </p>
+    </div>
   );
 }
 
@@ -66,26 +70,32 @@ export function InterestYearCard({
       )}
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <div className="rounded-md bg-slate-50 px-3 py-2">
-          <p className="text-xs text-slate-600">Earned so far</p>
+        <div className="flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2 sm:block">
+          <div>
+            <p className="text-xs text-slate-600">Earned so far</p>
+            <p className="text-xs text-slate-500 ">Jan 1 – {formatDateShort(today)}</p>
+          </div>
           <p className="text-lg font-semibold text-slate-900">{formatCurrency(summary.earned)}</p>
-          <p className="text-xs text-slate-500">Jan 1 – {formatDateShort(today)}</p>
         </div>
-        <div className="rounded-md bg-slate-50 px-3 py-2">
-          <p className="text-xs text-slate-600">Projected rest of year</p>
+        <div className="flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2 sm:block">
+          <div>
+            <p className="text-xs text-slate-600">Projected rest of year</p>
+            <p className="text-xs text-slate-500">
+              {remainingCredits === 0
+                ? "no more credits this year"
+                : `${remainingCredits} more monthly credit${remainingCredits === 1 ? "" : "s"}`}
+            </p>
+          </div>
           <p className="text-lg font-semibold text-slate-900">
             {formatCurrency(summary.projected)}
           </p>
-          <p className="text-xs text-slate-500">
-            {remainingCredits === 0
-              ? "no more credits this year"
-              : `${remainingCredits} more monthly credit${remainingCredits === 1 ? "" : "s"}`}
-          </p>
         </div>
-        <div className="rounded-md bg-emerald-50 px-3 py-2">
-          <p className="text-xs text-emerald-800">Total for {year}</p>
+        <div className="flex items-center justify-between gap-3 rounded-md bg-emerald-50 px-3 py-2 sm:block">
+          <div>
+            <p className="text-xs text-emerald-800">Total for {year}</p>
+            <p className="text-xs text-emerald-800/80">earned + projected</p>
+          </div>
           <p className="text-lg font-semibold text-emerald-700">{formatCurrency(summary.total)}</p>
-          <p className="text-xs text-emerald-800/80">earned + projected</p>
         </div>
       </div>
 
@@ -103,7 +113,7 @@ export function InterestYearCard({
             {banks.map((b) => (
               <li
                 key={b.bank_id}
-                className="flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2"
+                className="flex flex-col gap-1 rounded-md bg-slate-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-slate-700">{b.bankName}</p>
@@ -111,12 +121,7 @@ export function InterestYearCard({
                     {b.accountCount} account{b.accountCount === 1 ? "" : "s"}
                   </p>
                 </div>
-                <div className="shrink-0 text-right">
-                  <p className="text-sm font-semibold text-emerald-700">
-                    {formatCurrency(b.total)}
-                  </p>
-                  <Split earned={b.earned} projected={b.projected} />
-                </div>
+                <Amounts total={b.total} earned={b.earned} projected={b.projected} />
               </li>
             ))}
           </ul>
@@ -131,7 +136,7 @@ export function InterestYearCard({
                 return (
                   <li
                     key={r.id}
-                    className="flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2"
+                    className="flex flex-col gap-1 rounded-md bg-slate-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-slate-700">
@@ -144,15 +149,10 @@ export function InterestYearCard({
                           : ""}
                         {formatCurrency(r.balance)}
                         {r.rate != null ? ` · ${r.rate}% APY` : ""}
-                        {note ? ` · ${note}` : ""}
                       </p>
+                      {note && <p className="text-xs text-slate-500">{note}</p>}
                     </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-sm font-semibold text-emerald-700">
-                        {formatCurrency(r.total)}
-                      </p>
-                      <Split earned={r.earned} projected={r.projected} />
-                    </div>
+                    <Amounts total={r.total} earned={r.earned} projected={r.projected} />
                   </li>
                 );
               })}
