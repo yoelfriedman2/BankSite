@@ -52,14 +52,22 @@ export function FeedbackButton({
   const popoverRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
 
-  function openPopover() {
+  /** Where the popover goes, from the trigger's current on-screen box.
+   *  Null when the trigger isn't rendered (e.g. the other breakpoint's copy). */
+  function computePos(): { top: number; left: number } | null {
     const r = triggerRef.current?.getBoundingClientRect();
-    if (!r) return;
+    if (!r || (r.width === 0 && r.height === 0)) return null;
     const left =
       align === "left"
         ? r.left
         : Math.max(8, r.right - POPOVER_WIDTH);
-    setPos({ top: r.bottom + 8, left });
+    return { top: r.bottom + 8, left };
+  }
+
+  function openPopover() {
+    const p = computePos();
+    if (!p) return;
+    setPos(p);
     setOpen(true);
   }
 
@@ -75,10 +83,15 @@ export function FeedbackButton({
       e.stopPropagation();
       setOpen(false);
     }
-    // Closes rather than tracks — this popover is small and short-lived, so
-    // a stale position after scrolling isn't worth reflowing for.
+    // Follows the trigger instead of closing. It used to close on any
+    // scroll or resize, which made it unusable on phones: the browser fires
+    // those on its own when the address bar slides, when the keyboard opens
+    // for the textarea, and when iOS zooms/scrolls to the focused field, so
+    // the popover vanished the moment you tried to type.
     function onScroll() {
-      setOpen(false);
+      const p = computePos();
+      if (p) setPos(p);
+      else setOpen(false);
     }
     document.addEventListener("pointerdown", onDown);
     document.addEventListener("keydown", onKey, true);
@@ -155,12 +168,14 @@ export function FeedbackButton({
                 </button>
               ))}
             </div>
+            {/* 16px on phones: iOS zooms the page into any field smaller than
+                that, which shoved the popover out of place. */}
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder={kind === "bug" ? "What happened?" : "What would help?"}
               rows={3}
-              className="w-full resize-none rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+              className="w-full resize-none rounded-lg border border-slate-300 px-2 py-1.5 text-base text-slate-900 md:text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
             />
             {error && <p className="mt-1.5 text-[11px] text-rose-600">{error}</p>}
             <button
