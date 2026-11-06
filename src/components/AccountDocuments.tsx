@@ -3,6 +3,8 @@
 import { useRef, useState, useEffect } from "react";
 import { Camera, Upload, Eye, Trash2, FileText, Image as ImgIcon, Loader2 } from "lucide-react";
 import { formatDate } from "@/lib/format";
+import { CameraCapture } from "@/components/CameraCapture";
+import { browserCameraEnv, shouldUseInPageCamera } from "@/lib/camera";
 import {
   getAccountDocuments,
   uploadDocument,
@@ -116,6 +118,14 @@ export function AccountDocuments({ accountId }: { accountId: string }) {
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
+
+  // Android's installed app ignores `capture` and shows the file picker, so
+  // there we open the camera in-page; everywhere else, the native input.
+  function openCamera() {
+    if (shouldUseInPageCamera(browserCameraEnv())) setCameraOpen(true);
+    else cameraRef.current?.click();
+  }
 
   useEffect(() => {
     getAccountDocuments(accountId).then(setDocs).catch(() => {});
@@ -189,6 +199,13 @@ export function AccountDocuments({ accountId }: { accountId: string }) {
           {statusLabel && (
             <span className="text-[11px] text-slate-600">{statusLabel}</span>
           )}
+          {cameraOpen && (
+            <CameraCapture
+              onCapture={(f) => handleFile(f)}
+              onClose={() => setCameraOpen(false)}
+              onFallback={() => cameraRef.current?.click()}
+            />
+          )}
           <input
             ref={cameraRef}
             type="file"
@@ -207,7 +224,7 @@ export function AccountDocuments({ accountId }: { accountId: string }) {
           <button
             type="button"
             disabled={busy}
-            onClick={() => cameraRef.current?.click()}
+            onClick={openCamera}
             className="flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
           >
             <Camera className="h-3.5 w-3.5" />

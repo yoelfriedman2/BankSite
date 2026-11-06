@@ -14,6 +14,8 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { useToast } from "@/components/Toast";
+import { CameraCapture } from "@/components/CameraCapture";
+import { browserCameraEnv, shouldUseInPageCamera } from "@/lib/camera";
 import { DateInput } from "@/components/DateInput";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { todayLocalStr } from "@/lib/date";
@@ -366,6 +368,14 @@ export function PaperInClient({
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const cameraRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
+
+  // Android's installed app ignores `capture` and shows the file picker, so
+  // there we open the camera in-page; everywhere else, the native input.
+  function openCamera() {
+    if (shouldUseInPageCamera(browserCameraEnv())) setCameraOpen(true);
+    else cameraRef.current?.click();
+  }
 
   async function handleFile(file: File) {
     setBusy(true);
@@ -426,12 +436,19 @@ export function PaperInClient({
             e.target.value = "";
           }}
         />
+        {cameraOpen && (
+          <CameraCapture
+            onCapture={(f) => handleFile(f)}
+            onClose={() => setCameraOpen(false)}
+            onFallback={() => cameraRef.current?.click()}
+          />
+        )}
         <p className="mb-3 text-sm text-slate-500">Photo of a statement, notice, or letter — or a PDF</p>
         <div className="flex items-center justify-center gap-2">
           <button
             type="button"
             disabled={busy}
-            onClick={() => cameraRef.current?.click()}
+            onClick={openCamera}
             className="flex items-center gap-1.5 rounded-lg bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800 disabled:opacity-50"
           >
             <Camera className="h-4 w-4" />

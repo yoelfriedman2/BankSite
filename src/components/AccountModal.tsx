@@ -252,6 +252,9 @@ export function AccountModal({
       const node = dialogRef.current;
       const target = e.target as Element | null;
       if (!node || !target || node.contains(target)) return;
+      // The in-page camera (CameraCapture) is portaled to <body>; a tap in
+      // it isn't a click outside this editor.
+      if (target.closest?.("[data-camera-capture]")) return;
       attemptClose({ immediate: !!target.closest?.("[data-account-row]") });
     }
     document.addEventListener("mousedown", onOutside, true);
