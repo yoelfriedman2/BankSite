@@ -15,6 +15,8 @@ import {
   type DemoScannedDocument,
 } from "@/lib/demo";
 import { friendlyDbError } from "@/lib/friendlyError";
+import { getApprovedUser } from "@/lib/access";
+import { todayInAppTimeZone } from "@/lib/date";
 import { logPersonalActivity, accountLabel } from "@/lib/personalLog";
 import { ACCOUNT_TYPE_LABELS, type AccountType } from "@/lib/types";
 import { readScannedDocument, type ScanAccountCandidate, type ScanDocType, type ScanConfidence } from "@/lib/paperIn/scanReader";
@@ -172,11 +174,12 @@ export async function uploadScan(formData: FormData): Promise<{ id?: string; err
     return { id };
   }
 
+  // Approved users only (not merely signed in): this uploads into storage
+  // through the service-role client and leads to a paid AI read, so a
+  // pending/denied sign-up must not reach it. Same guard as other actions.
+  const user = await getApprovedUser();
+  if (!user) return { error: "Not authorized." };
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You are not signed in." };
 
   const ext = file.name.includes(".") ? file.name.split(".").pop() : "";
   const storagePath = `${user.id}/paper-in/${crypto.randomUUID()}${ext ? `.${ext}` : ""}`;
@@ -217,11 +220,10 @@ export async function analyzeScan(scanId: string): Promise<{ error?: string }> {
     return {};
   }
 
+  // Approved users only — this runs a paid AI read (see uploadScan).
+  const user = await getApprovedUser();
+  if (!user) return { error: "Not authorized." };
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "You are not signed in." };
 
   const { data: scan } = await supabase
     .from("scanned_documents")
@@ -347,7 +349,7 @@ export async function applyScan(
     .maybeSingle();
   if (!account) return { error: "That account couldn't be found." };
 
-  const asOfDate = input.asOfDate || new Date().toISOString().slice(0, 10);
+  const asOfDate = input.asOfDate || todayInAppTimeZone();
   let newBalance: number | null = null;
 
   if (input.updateBalance && input.balance != null) {

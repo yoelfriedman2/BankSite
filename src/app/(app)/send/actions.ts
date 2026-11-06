@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { DEMO_MODE, getDemoBranches } from "@/lib/demo";
 import { friendlyDbError } from "@/lib/friendlyError";
-import { todayLocalStr } from "@/lib/date";
+import { todayInAppTimeZone } from "@/lib/date";
 import { addDaysToDateStr, clampPostDays } from "@/lib/mailedDeposits";
 import type { ActivityType } from "@/lib/types";
 
@@ -238,7 +238,7 @@ async function applyBalanceChange(
   label: string,
 ): Promise<string | null> {
   const type: "deposit" | "withdrawal" = delta >= 0 ? "deposit" : "withdrawal";
-  const today = todayLocalStr();
+  const today = todayInAppTimeZone();
 
   const { data: newBalance, error: rpcErr } = await supabase.rpc("record_account_transaction", {
     p_account_id: accountId,
@@ -391,7 +391,7 @@ export async function recordMailing(input: MailingInput): Promise<MailingResult>
       // both reflect reality (the account it's about, not the day it was
       // mailed). Falls back to the old immediate behavior only if the
       // migration that adds this tracking hasn't been run yet.
-      const today = todayLocalStr();
+      const today = todayInAppTimeZone();
       const days = clampPostDays(input.deposit.postAfterDays);
       const { error: insertErr } = await supabase.from("mailed_deposits").insert({
         user_id: user.id,
@@ -427,7 +427,7 @@ export async function recordMailing(input: MailingInput): Promise<MailingResult>
     } else if (input.logActivity) {
       // No check — a plain letter's own activity has no financial outcome to
       // wait on, so it logs immediately, same as before.
-      const today = todayLocalStr();
+      const today = todayInAppTimeZone();
       const { error: rpcErr } = await supabase.rpc("append_activity_log", {
         p_account_id: destId,
         p_date: today,

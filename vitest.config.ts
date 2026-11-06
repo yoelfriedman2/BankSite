@@ -1,6 +1,12 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  // Same "@/..." import alias as tsconfig.json, so tests can import (and
+  // mock) modules that use it.
+  resolve: {
+    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+  },
   test: {
     environment: "node",
     // Several tested modules (monthlyFee, interestAccrual, dormancy) read
