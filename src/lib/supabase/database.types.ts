@@ -984,8 +984,12 @@ export type Database = {
       scanned_documents: {
         Row: {
           ai_account_id: string | null
+          ai_account_last4: string | null
+          ai_account_type: string | null
           ai_as_of_date: string | null
           ai_balance: number | null
+          ai_bank_name: string | null
+          ai_bank_state: string | null
           ai_confidence: string | null
           ai_doc_type: string | null
           ai_error: string | null
@@ -1007,8 +1011,12 @@ export type Database = {
         }
         Insert: {
           ai_account_id?: string | null
+          ai_account_last4?: string | null
+          ai_account_type?: string | null
           ai_as_of_date?: string | null
           ai_balance?: number | null
+          ai_bank_name?: string | null
+          ai_bank_state?: string | null
           ai_confidence?: string | null
           ai_doc_type?: string | null
           ai_error?: string | null
@@ -1030,8 +1038,12 @@ export type Database = {
         }
         Update: {
           ai_account_id?: string | null
+          ai_account_last4?: string | null
+          ai_account_type?: string | null
           ai_as_of_date?: string | null
           ai_balance?: number | null
+          ai_bank_name?: string | null
+          ai_bank_state?: string | null
           ai_confidence?: string | null
           ai_doc_type?: string | null
           ai_error?: string | null

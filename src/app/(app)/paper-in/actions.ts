@@ -20,6 +20,16 @@ import { todayInAppTimeZone } from "@/lib/date";
 import { logPersonalActivity, accountLabel } from "@/lib/personalLog";
 import { ACCOUNT_TYPE_LABELS, type AccountType } from "@/lib/types";
 import { readScannedDocument, type ScanAccountCandidate, type ScanDocType, type ScanConfidence } from "@/lib/paperIn/scanReader";
+import { findBankMatches, type BankRowLite } from "@/lib/paperIn/bankMatch";
+import {
+  toScanBankCandidates,
+  isMissingScanBankColumnsError,
+  type ScanBankCandidate,
+  type ScanAccountTypeGuess,
+} from "@/lib/paperIn/bankPrompt";
+import { OPEN_STATUSES, type BankStatus } from "@/lib/types";
+import { setBankStatus } from "@/app/(app)/banks/actions";
+import { upsertAccount, type AccountFormValues } from "@/app/(app)/accounts/actions";
 
 const BUCKET = "account-documents";
 
@@ -41,6 +51,16 @@ export interface ScannedDocumentRow {
   reviewedBalance: number | null;
   appliedAt: string | null;
   createdAt: string;
+  /** What the AI read off the page about the bank itself (migration 0064) —
+   *  null on scans read before that, or before the migration is run. */
+  aiBankName: string | null;
+  aiBankState: string | null;
+  aiAccountLast4: string | null;
+  aiAccountType: ScanAccountTypeGuess | null;
+  /** For a ready scan the AI couldn't tie to an account: the user's own
+   *  bank rows whose name matches aiBankName, best first. Drives the
+   *  "this bank isn't in your tracker yet — add it?" prompt. */
+  bankCandidates: ScanBankCandidate[];
 }
 
 export interface PaperInAccountOption {
@@ -77,6 +97,11 @@ function toRow(s: DemoScannedDocument): ScannedDocumentRow {
     reviewedBalance: s.reviewed_balance,
     appliedAt: s.applied_at,
     createdAt: s.created_at,
+    aiBankName: null,
+    aiBankState: null,
+    aiAccountLast4: null,
+    aiAccountType: null,
+    bankCandidates: [],
   };
 }
 
@@ -140,7 +165,7 @@ export async function getScanInbox(): Promise<ScannedDocumentRow[]> {
     .select("*")
     .order("created_at", { ascending: false });
   if (error) return []; // migration not run yet — degrade to an empty inbox
-  return (data ?? []).map((s) => ({
+  const rows: ScannedDocumentRow[] = (data ?? []).map((s) => ({
     id: s.id,
     filename: s.filename,
     fileSize: s.file_size,
@@ -158,7 +183,47 @@ export async function getScanInbox(): Promise<ScannedDocumentRow[]> {
     reviewedBalance: s.reviewed_balance != null ? Number(s.reviewed_balance) : null,
     appliedAt: s.applied_at,
     createdAt: s.created_at,
+    aiBankName: s.ai_bank_name ?? null,
+    aiBankState: s.ai_bank_state ?? null,
+    aiAccountLast4: s.ai_account_last4 ?? null,
+    aiAccountType: (s.ai_account_type as ScanAccountTypeGuess | null) ?? null,
+    bankCandidates: [],
   }));
+
+  // Only when some scan needs it: look up which of the user's bank rows
+  // match the bank name the AI read, for the "add this bank?" prompt.
+  const needsBank = rows.filter((r) => r.status === "ready" && !r.aiAccountId && r.aiBankName);
+  if (needsBank.length > 0) {
+    const { banks, bankIdsWithAccounts } = await loadBankRows(supabase);
+    for (const r of needsBank) {
+      r.bankCandidates = toScanBankCandidates(
+        findBankMatches(r.aiBankName ?? "", banks, { state: r.aiBankState }),
+        bankIdsWithAccounts,
+      );
+    }
+  }
+  return rows;
+}
+
+/** The caller's own (RLS-scoped) bank rows, not trashed, plus which of them
+ *  already hold at least one account. */
+async function loadBankRows(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<{ banks: BankRowLite[]; bankIdsWithAccounts: Set<string> }> {
+  const [{ data: bankRows }, { data: accountRows }] = await Promise.all([
+    supabase.from("banks").select("id, name, city, state, status, cert").is("deleted_at", null),
+    supabase.from("accounts").select("bank_id").is("deleted_at", null),
+  ]);
+  const banks: BankRowLite[] = (bankRows ?? []).map((b) => ({
+    id: b.id as string,
+    name: b.name as string,
+    city: (b.city as string | null) ?? null,
+    state: (b.state as string | null) ?? null,
+    status: b.status as BankStatus,
+    cert: (b.cert as number | null) ?? null,
+  }));
+  const bankIdsWithAccounts = new Set((accountRows ?? []).map((a) => a.bank_id as string));
+  return { banks, bankIdsWithAccounts };
 }
 
 export async function uploadScan(formData: FormData): Promise<{ id?: string; error?: string }> {
@@ -283,24 +348,167 @@ export async function analyzeScan(scanId: string): Promise<{ error?: string }> {
   const r = outcome.result;
   const matchedAccountId = r.matchedIndex != null ? candidates[r.matchedIndex]?.accountId ?? null : null;
 
-  const { error } = await supabase
+  const readUpdate = {
+    status: "ready",
+    ai_model: process.env.PAPER_IN_MODEL || "claude-haiku-4-5-20251001",
+    ai_doc_type: r.docType,
+    ai_account_id: matchedAccountId,
+    ai_confidence: r.confidence,
+    ai_balance: r.balance,
+    ai_as_of_date: r.statementDate,
+    ai_summary: r.summary,
+    ai_error: null,
+  };
+  let { error } = await supabase
     .from("scanned_documents")
     .update({
-      status: "ready",
-      ai_model: process.env.PAPER_IN_MODEL || "claude-haiku-4-5-20251001",
-      ai_doc_type: r.docType,
-      ai_account_id: matchedAccountId,
-      ai_confidence: r.confidence,
-      ai_balance: r.balance,
-      ai_as_of_date: r.statementDate,
-      ai_summary: r.summary,
-      ai_error: null,
+      ...readUpdate,
+      ai_bank_name: r.bankName,
+      ai_bank_state: r.bankState,
+      ai_account_last4: r.accountLast4,
+      ai_account_type: r.accountType,
     })
     .eq("id", scanId);
+  if (error && isMissingScanBankColumnsError(error.message)) {
+    // Migration 0064 not run yet — save the read without the detected-bank
+    // fields (the scan then just shows today's manual chooser).
+    ({ error } = await supabase.from("scanned_documents").update(readUpdate).eq("id", scanId));
+  }
   if (error) return { error: friendlyDbError(error.message) };
 
   revalidate();
   return {};
+}
+
+/** Search box inside the "add this bank" prompt: the caller's bank rows
+ *  matching what they typed, when the AI's reading wasn't right. */
+export async function searchBanksForScan(query: string, state?: string | null): Promise<ScanBankCandidate[]> {
+  const q = (query ?? "").trim().slice(0, 100);
+  if (q.length < 2) return [];
+  let banks: BankRowLite[];
+  let bankIdsWithAccounts: Set<string>;
+  if (DEMO_MODE) {
+    banks = getDemoBanks().map((b) => ({
+      id: b.id,
+      name: b.name,
+      city: b.city,
+      state: b.state,
+      status: b.status,
+      cert: b.cert,
+    }));
+    bankIdsWithAccounts = new Set(getDemoAccounts().map((a) => a.bank_id));
+  } else {
+    const user = await getApprovedUser();
+    if (!user) return [];
+    const supabase = await createClient();
+    ({ banks, bankIdsWithAccounts } = await loadBankRows(supabase));
+  }
+  return toScanBankCandidates(
+    findBankMatches(q, banks, { state, substring: true, minScore: 0.3, limit: 8 }),
+    bankIdsWithAccounts,
+  );
+}
+
+function newAccountForm(
+  bankId: string,
+  fields: { holder: string; accountType: string; accountNumber: string },
+): AccountFormValues {
+  return {
+    bank_id: bankId,
+    holder: fields.holder,
+    account_type: fields.accountType,
+    account_number: fields.accountNumber,
+    routing_number: "",
+    // Left empty on purpose: the statement's balance goes in through the
+    // normal "File it & update balance" step right after, which records the
+    // dated balance-history point the same way any other filed scan does.
+    balance: "",
+    last_activity_date: "",
+    dormancy_months_override: "",
+    cd_maturity_date: "",
+    cd_term_months: "",
+    cd_auto_renew: null,
+    date_opened: "",
+    notes: "",
+    online_url: "",
+    username: "",
+    password: "",
+    access_notes: "",
+    activity_log: [],
+    monthly_fee: "",
+    monthly_fee_day: "",
+    interest_rate: "",
+    exclude_min_balance: false,
+  };
+}
+
+/** "We found <bank> on this statement, but it's not in your tracker — add
+ *  it?" → Add. Marks the bank as open for this user (the same setBankStatus
+ *  the Banks page uses) and creates the account the statement is for (the
+ *  same upsertAccount the account editor uses), then points the scan at
+ *  that account so it files like any matched scan. Nothing else changes and
+ *  nothing is shared with other users' copies of the bank. */
+export async function addBankFromScan(
+  scanId: string,
+  input: { bankId: string; holder?: string; accountType?: string; accountNumber?: string },
+): Promise<{ error?: string; accountId?: string; bankId?: string; bankName?: string; label?: string }> {
+  if (!input.bankId) return { error: "Pick which bank this is." };
+  const accountType =
+    input.accountType && Object.prototype.hasOwnProperty.call(ACCOUNT_TYPE_LABELS, input.accountType)
+      ? input.accountType
+      : "";
+  const holder = (input.holder ?? "").trim().slice(0, 200);
+  const accountNumber = (input.accountNumber ?? "").trim().slice(0, 64);
+
+  let bank: { id: string; name: string; status: BankStatus } | null = null;
+  let supabase: Awaited<ReturnType<typeof createClient>> | null = null;
+  if (DEMO_MODE) {
+    const b = getDemoBanks().find((x) => x.id === input.bankId);
+    bank = b ? { id: b.id, name: b.name, status: b.status } : null;
+  } else {
+    const user = await getApprovedUser();
+    if (!user) return { error: "Not authorized." };
+    supabase = await createClient();
+    const { data: scan } = await supabase
+      .from("scanned_documents")
+      .select("id, status")
+      .eq("id", scanId)
+      .maybeSingle();
+    if (!scan) return { error: "That scan couldn't be found." };
+    if (scan.status === "accepted") {
+      return { error: "This one's already been filed — manage it from the account's Documents instead." };
+    }
+    // RLS-scoped: only ever the caller's own copy of the bank.
+    const { data: b } = await supabase
+      .from("banks")
+      .select("id, name, status")
+      .eq("id", input.bankId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    bank = b ? { id: b.id as string, name: b.name as string, status: b.status as BankStatus } : null;
+  }
+  if (!bank) return { error: "Bank not found." };
+
+  if (!OPEN_STATUSES.includes(bank.status)) {
+    const statusRes = await setBankStatus(bank.id, "open");
+    if (statusRes.error) return { error: statusRes.error };
+  }
+
+  const saved = await upsertAccount(newAccountForm(bank.id, { holder, accountType, accountNumber }));
+  if (saved.error || !saved.id) return { error: saved.error ?? "Could not add the account." };
+
+  if (supabase) {
+    // So the card comes back (after refresh) with this account preselected.
+    await supabase.from("scanned_documents").update({ ai_account_id: saved.id }).eq("id", scanId);
+  }
+
+  revalidate();
+  return {
+    accountId: saved.id,
+    bankId: bank.id,
+    bankName: bank.name,
+    label: accountLabel(holder || null, accountType ? ACCOUNT_TYPE_LABELS[accountType as AccountType] : null) ?? "Account",
+  };
 }
 
 const DOC_TYPE_LABELS: Record<ScanDocType, string> = {

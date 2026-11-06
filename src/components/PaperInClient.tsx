@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Camera,
@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { useToast } from "@/components/Toast";
 import { CameraCapture } from "@/components/CameraCapture";
+import { ScanBankPrompt, type AddedScanAccount } from "@/components/ScanBankPrompt";
+import { decideBankPrompt } from "@/lib/paperIn/bankPrompt";
 import { browserCameraEnv, shouldUseInPageCamera } from "@/lib/camera";
 import { DateInput } from "@/components/DateInput";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -54,9 +56,31 @@ function ReviewCard({
   const router = useRouter();
   const toast = useToast();
   const [isPending, startTransition] = useTransition();
-  const [accountId, setAccountId] = useState(scan.aiAccountId ?? "");
+  // The AI read a bank name but matched no account: either that bank is
+  // already tracked with accounts (preselect it) or it isn't (prompt to add).
+  const bankDecision = useMemo(
+    () =>
+      decideBankPrompt({
+        aiAccountId: scan.aiAccountId,
+        aiBankName: scan.aiBankName,
+        aiBankState: scan.aiBankState,
+        candidates: scan.bankCandidates ?? [],
+      }),
+    [scan.aiAccountId, scan.aiBankName, scan.aiBankState, scan.bankCandidates],
+  );
+  const [promptOpen, setPromptOpen] = useState(bankDecision.kind === "add" || bankDecision.kind === "unknown");
+  // An account just created from the prompt, shown right away rather than
+  // waiting for router.refresh() to bring it back in `accounts`.
+  const [added, setAdded] = useState<AddedScanAccount | null>(null);
+  const bankSelectRef = useRef<HTMLSelectElement>(null);
+  const preselectBankId = bankDecision.kind === "preselect" ? bankDecision.bankId : "";
+  const [accountId, setAccountId] = useState(() => {
+    if (scan.aiAccountId) return scan.aiAccountId;
+    const atBank = preselectBankId ? accounts.filter((a) => a.bankId === preselectBankId) : [];
+    return atBank.length === 1 ? atBank[0].accountId : "";
+  });
   const [bankId, setBankId] = useState(
-    () => accounts.find((a) => a.accountId === scan.aiAccountId)?.bankId ?? "",
+    () => accounts.find((a) => a.accountId === scan.aiAccountId)?.bankId ?? preselectBankId,
   );
   const [updateBalance, setUpdateBalance] = useState(scan.aiDocType === "statement" && scan.aiBalance != null);
   const [balance, setBalance] = useState(scan.aiBalance != null ? String(scan.aiBalance) : "");
@@ -65,15 +89,43 @@ function ReviewCard({
 
   // Bank first, then the accounts at that bank — a flat "every account at
   // every bank" list got confusing once there were more than a few banks.
-  const banks = Array.from(new Map(accounts.map((a) => [a.bankId, a.bankName])).entries())
+  const allAccounts: PaperInAccountOption[] =
+    added && !accounts.some((a) => a.accountId === added.accountId)
+      ? [
+          ...accounts,
+          {
+            accountId: added.accountId,
+            bankId: added.bankId,
+            label: added.label,
+            bankName: added.bankName,
+            last4: null,
+            balance: null,
+          },
+        ]
+      : accounts;
+  const banks = Array.from(new Map(allAccounts.map((a) => [a.bankId, a.bankName])).entries())
     .map(([id, name]) => ({ bankId: id, bankName: name }))
     .sort((a, b) => a.bankName.localeCompare(b.bankName));
-  const accountsAtBank = accounts.filter((a) => a.bankId === bankId);
-  const selectedAccount = accounts.find((a) => a.accountId === accountId);
+  const accountsAtBank = allAccounts.filter((a) => a.bankId === bankId);
+  const selectedAccount = allAccounts.find((a) => a.accountId === accountId);
+
+  function onBankAdded(acct: AddedScanAccount) {
+    setAdded(acct);
+    setBankId(acct.bankId);
+    setAccountId(acct.accountId);
+    setPromptOpen(false);
+    router.refresh();
+  }
+
+  function pickDifferentBank() {
+    setPromptOpen(false);
+    // Hand the user straight to the existing bank chooser below.
+    setTimeout(() => bankSelectRef.current?.focus(), 0);
+  }
 
   function onBankChange(newBankId: string) {
     setBankId(newBankId);
-    const atBank = accounts.filter((a) => a.bankId === newBankId);
+    const atBank = allAccounts.filter((a) => a.bankId === newBankId);
     // Most banks only have one tracked account — skip the extra click when
     // there's nothing to actually choose between.
     setAccountId(atBank.length === 1 ? atBank[0].accountId : "");
@@ -178,12 +230,27 @@ function ReviewCard({
         <p className="mt-2 text-xs text-slate-500">{scan.aiSummary}</p>
       )}
 
+      {promptOpen && (bankDecision.kind === "add" || bankDecision.kind === "unknown") && (
+        <ScanBankPrompt
+          scan={scan}
+          decision={bankDecision}
+          onAdded={onBankAdded}
+          onUseExistingBank={(id) => {
+            setPromptOpen(false);
+            onBankChange(id);
+          }}
+          onPickDifferent={pickDifferentBank}
+          onSkip={() => setPromptOpen(false)}
+        />
+      )}
+
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor={`bank-${scan.id}`}>
             Which bank?
           </label>
           <select
+            ref={bankSelectRef}
             id={`bank-${scan.id}`}
             value={bankId}
             onChange={(e) => onBankChange(e.target.value)}

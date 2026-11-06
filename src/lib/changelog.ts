@@ -22,6 +22,14 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-11-06",
+    title: "Paper in: add a bank straight from a statement",
+    items: [
+      "When you scan a statement from a bank that isn't in your tracker yet, Paper in now reads the bank's name off the page and asks: add it as a bank you have an account with? One tap marks the bank as open, adds the account, and the statement files as usual.",
+      "If a few banks have similar names, you pick the right one (with city and state shown), or search the bank list yourself. \"Pick a different bank\" and \"Skip\" leave everything as it was.",
+    ],
+  },
+  {
+    date: "2026-11-06",
     title: "Fees & interest: this year's interest, for tax time",
     items: [
       "New \"This year's interest\" card at the top of Fees & interest: the interest posted to your accounts since Jan 1, what your rates should still add by Dec 31, and the total for the year — roughly what your 1099-INTs will add up to, so you can plan before year end.",
