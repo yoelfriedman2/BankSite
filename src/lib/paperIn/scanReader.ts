@@ -9,6 +9,7 @@
 // is ever wanted for a harder document.
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
+import { readDetectedBank, type ScanAccountTypeGuess } from "@/lib/paperIn/bankPrompt";
 
 const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 
@@ -34,7 +35,17 @@ export interface ScanReadResult {
   balance: number | null;
   statementDate: string | null; // YYYY-MM-DD
   summary: string;
+  /** The bank's name as printed on the document — read even when it matches
+   *  none of the user's accounts, so Paper in can offer to add that bank. */
+  bankName: string | null;
+  /** Two-letter state from the bank's printed address, if shown. */
+  bankState: string | null;
+  /** Last 4 digits of the account number, if visible. */
+  accountLast4: string | null;
+  accountType: ScanAccountTypeGuess | null;
 }
+
+export type { ScanAccountTypeGuess };
 
 const TOOL_NAME = "record_statement_read";
 
@@ -84,6 +95,25 @@ function buildTool(candidateCount: number): Anthropic.Tool {
           type: "string",
           description: "The statement/as-of date as YYYY-MM-DD, if has_date is true. Ignored otherwise — still pass an empty string.",
         },
+        bank_name: {
+          type: "string",
+          description:
+            "The name of the bank or credit union that sent this document, exactly as printed (e.g. its letterhead or logo text), whether or not it matches any listed account. Empty string if no bank name is visible.",
+        },
+        bank_state: {
+          type: "string",
+          description:
+            "The two-letter US state of the bank's own printed address (not the customer's), e.g. \"ME\". Empty string if not shown.",
+        },
+        account_last4: {
+          type: "string",
+          description: "The last 4 digits of the account number if visible (even if partly masked). Empty string if not visible.",
+        },
+        account_type: {
+          type: "string",
+          enum: ["checking", "savings", "cd", "money_market", "other", "unknown"],
+          description: "What kind of account the document is about, if it says. unknown if it doesn't.",
+        },
         summary: {
           type: "string",
           description:
@@ -99,6 +129,10 @@ function buildTool(candidateCount: number): Anthropic.Tool {
         "ending_balance",
         "has_date",
         "statement_date",
+        "bank_name",
+        "bank_state",
+        "account_last4",
+        "account_type",
         "summary",
       ],
     },
@@ -123,6 +157,7 @@ function buildPrompt(candidates: ScanAccountCandidate[]): string {
     list || "(no accounts on file — use has_account_match: false)",
     "",
     "If the document doesn't clearly match one of these accounts, set has_account_match to false rather than guessing.",
+    "Always fill in bank_name with the bank's name as printed on the document, even when it matches none of the accounts above.",
   ].join("\n");
 }
 
@@ -211,6 +246,10 @@ export async function readScannedDocument(
       ending_balance: number;
       has_date: boolean;
       statement_date: string;
+      bank_name?: string;
+      bank_state?: string;
+      account_last4?: string;
+      account_type?: string;
       summary: string;
     };
 
@@ -222,6 +261,7 @@ export async function readScannedDocument(
         balance: input.has_balance ? Math.round(input.ending_balance * 100) / 100 : null,
         statementDate: input.has_date && input.statement_date ? input.statement_date : null,
         summary: input.summary,
+        ...readDetectedBank(input),
       },
     };
   } catch (err) {

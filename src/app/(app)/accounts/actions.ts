@@ -237,7 +237,7 @@ function accountFieldChanges(
 
 export async function upsertAccount(
   values: AccountFormValues,
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; id?: string }> {
   if (!values.bank_id) return { error: "Missing bank." };
   // Same reasoning as upsertBank's check — a server action is directly
   // callable, and this number can end up printed on a real check.
@@ -253,6 +253,7 @@ export async function upsertAccount(
         ? skipCurrentMonthIfPast(patch.monthly_fee_day, now)
         : null;
     const bankName = demoBank?.name ?? "—";
+    let demoSavedId: string | undefined = values.id;
     if (values.id) {
       const prev = getDemoAccounts().find((a) => a.id === values.id);
       const feeConfigChanged =
@@ -298,6 +299,7 @@ export async function upsertAccount(
         interest_last_accrued_on: stampOnRateChange(patch.interest_rate, now),
         deleted_at: null,
       });
+      demoSavedId = newId;
       const label = accountLabel(patch.holder, patch.account_type ? ACCOUNT_TYPE_LABELS[patch.account_type as AccountType] : null);
       addDemoPersonalLog({
         action: "account_add",
@@ -313,7 +315,7 @@ export async function upsertAccount(
       updateDemoBank(values.bank_id, { status: "open" });
     }
     revalidate();
-    return {};
+    return { id: demoSavedId };
   }
 
   const supabase = await createClient();
@@ -336,6 +338,9 @@ export async function upsertAccount(
 
   const today = todayInAppTimeZone();
   const now = new Date();
+  // Returned to the caller (Paper in's "add this bank" step needs the new
+  // account's id to file the scan against it).
+  let savedId: string | undefined = values.id;
   if (values.id) {
     // Record a dated balance point when the balance changes, so the
     // "balance as of date" history stays accurate. select("*") (not a
@@ -494,6 +499,7 @@ export async function upsertAccount(
       ({ data: created, error } = await supabase.from("accounts").insert(rest).select("id").single());
     }
     if (error || !created) return { error: friendlyDbError(error?.message) ?? "Could not add the account." };
+    savedId = created.id as string;
 
     if (patch.balance != null) {
       const { error: historyErr } = await supabase.from("account_balance_history").insert({
@@ -538,7 +544,7 @@ export async function upsertAccount(
   }
 
   revalidate();
-  return {};
+  return { id: savedId };
 }
 
 /** Moves an account to Trash. */
