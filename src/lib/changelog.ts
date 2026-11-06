@@ -21,6 +21,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-06",
+    title: "Fees & interest: this year's interest, for tax time",
+    items: [
+      "New \"This year's interest\" card at the top of Fees & interest: the interest posted to your accounts since Jan 1, what your rates should still add by Dec 31, and the total for the year — roughly what your 1099-INTs will add up to, so you can plan before year end.",
+      "Broken down per bank and per account. Counts both the automatic monthly credits and any transaction you logged as \"Interest\"; CDs stop being projected at their maturity date. It's a projection, not tax advice — your banks' 1099s are the official numbers.",
+    ],
+  },
+  {
     date: "2026-08-24",
     title: "Address Change: print every remaining letter in one job",
     items: [

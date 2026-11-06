@@ -213,9 +213,11 @@ const TOPICS: Topic[] = [
       "Every account with a monthly fee, totaled per month and per year",
       "Every account's projected annual interest, based on the rate you set — checking, savings, and money market accounts, not just CDs",
       "Interest is credited to the balance automatically around the start of each month, once a rate is set — no need to update balances by hand",
+      "This year's interest: what's been posted since Jan 1, what your rates should still add by Dec 31, and the year's total per bank and per account — handy for estimating your 1099-INTs before year end",
     ],
     tips: [
       "Add an interest rate (APY) on any account's editor to include it here and turn on auto-crediting — accounts without a rate are simply left out, not shown as $0.",
+      "Logged interest by hand instead? Add it with the reason \"Interest\" and it counts toward this year's total too.",
     ],
   },
   {
