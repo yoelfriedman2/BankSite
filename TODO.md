@@ -24,14 +24,21 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
 
 ## One-time setup pending
 
-- **Run migration `0060_paper_in.sql`** — not yet run. New private per-user table
+- ~~Run migration `0064_paper_in_detected_bank.sql`~~ — **confirmed run 2026-11-06.** Adds
+  `scanned_documents.ai_bank_name / ai_bank_state / ai_account_last4 / ai_account_type` (nullable,
+  additive). Powers the Paper in "We found X on this statement, but it's not in your tracker — add
+  it?" prompt (PR #17).
+
+- ~~Run migration `0063`~~ (self-approval guard trigger on `profiles`, PR #13) — **confirmed run 2026-11-06.**
+
+- ~~Run migration `0060_paper_in.sql`~~ — **confirmed run (verified live 2026-11-07: `scanned_documents` exists, 24 scans since 2026-08-23).** New private per-user table
   (`scanned_documents`) backing the new `/paper-in` page. Full SQL is in that migration file and was
   also pasted directly into chat when this shipped. Reuses the existing `account-documents` storage
   bucket (migration 0014) — no new bucket/storage-RLS needed. Degrades gracefully until run:
   `getScanInbox()` treats a query error as an empty inbox rather than crashing the page, so the page
   just shows nothing scanned until the migration runs — uploading/reading isn't blocked by this, only
   the "keep a queue of pending scans across page loads" part is.
-- **Set `ANTHROPIC_API_KEY`** — required for Paper in's actual AI read (`src/lib/paperIn/
+- ~~Set `ANTHROPIC_API_KEY`~~ — **confirmed set (verified live 2026-11-07: all 24 scans read by the AI, 0 errors).** Required for Paper in's actual AI read (`src/lib/paperIn/
   scanReader.ts`). Without it, uploads still work but every "read this" attempt fails with a friendly
   "AI document reading isn't set up yet" message instead of erroring the app. Get a key from
   console.anthropic.com; see `.env.local.example` for the exact variable names (also optional
@@ -39,7 +46,7 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
   cent to a few cents per document read, depending on the model — see the chat discussion where this
   was scoped for the actual math.
 
-- **Run migration `0058_personal_activity_log.sql`** — not yet run. New private per-user table
+- ~~Run migration `0058_personal_activity_log.sql`~~ — **confirmed run (verified live 2026-11-07: `personal_activity_log` exists, 447 entries since 2026-08-23).** New private per-user table
   (`personal_activity_log`) backing the new `/history` page: a private record of every change a
   user makes to their own data (bank/account edits — renamed, account number changed, status
   changed, etc. — deposits/withdrawals, money moves, imports, deletes). RLS scoped to
@@ -473,6 +480,15 @@ The FDIC says these are no longer insured institutions — merged, acquired, con
 | 28723 | First Savings Bank | WA | 11/01/2023 |
 | 29065 | Elberton Federal Savings and Loan Association | GA | 07/31/2023 |
 | 29646 | First Federal Savings and Loan Association | KY | 07/01/2023 |
+
+**Status check (2026-11-07, live DB):** all 21 are still in the app. 12 are tracked by nobody
+(27704, 28611, 28723, 29049, 29065, 29501, 29532, 29646, 29986, 29999, 30492, 57849) and are safe to
+remove. 9 are still tracked by at least one user and need re-pointing to their successor first:
+90146 Athol (11 users), 28167 Eastern CT (11), 29875 NVE (11), 26516 Wakefield, now shown as Reading
+Cooperative (4), 28481 Colonial Federal (3), 32306 New Foundation (2), 17748 Gorham (1), 26590
+Abington (1), 30519 Freehold (1). Merger links to the acquiring banks were added 2026-11-06 for
+several of these (Athol→Cornerstone, Colonial Federal→TruNorth, Freehold↔Columbia, Abington↔Bankhometown,
+Guardian→Community Partners, Lake City→Forward, Wake Forest→Piedmont, Jackson Federal→Worthington).
 
 Full details in `fdic-comparison-2026-07-03.xlsx` ("Closed or merged" tab).
 
