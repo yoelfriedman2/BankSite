@@ -40,6 +40,45 @@ export function isInterestAccrualDue(
   return last.getFullYear() !== today.getFullYear() || last.getMonth() !== today.getMonth();
 }
 
+/** How many whole calendar months of interest this account is owed as of
+ *  `today`: the number of calendar-month rollovers since the last credit.
+ *  0 means not due (no rate, or already credited this calendar month). An
+ *  account with a rate that has never been credited is owed 1 month, same
+ *  as isInterestAccrualDue treats it as due. Unlike a yes/no "due" check,
+ *  this lets the cron catch up months it missed instead of losing them. */
+export function monthsOfInterestOwed(
+  account: InterestAccrualAccount,
+  today: Date,
+): number {
+  if (account.interest_rate == null || account.interest_rate <= 0) return 0;
+  if (!account.interest_last_accrued_on) return 1;
+  const last = new Date(`${account.interest_last_accrued_on}T00:00:00`);
+  if (Number.isNaN(last.getTime())) return 1;
+  const months =
+    (today.getFullYear() - last.getFullYear()) * 12 + (today.getMonth() - last.getMonth());
+  return Math.max(0, months);
+}
+
+/** Total interest for `months` monthly credits, compounded: each month is
+ *  credited with monthlyInterestAmount on the balance as it stood after the
+ *  previous month's credit (rounded to cents each month, exactly as if the
+ *  cron had run once in each of those months). For months === 1 this is
+ *  exactly monthlyInterestAmount(balance, apyPercent). Returns 0 for
+ *  months <= 0 or non-finite inputs. */
+export function interestForMonths(balance: number, apyPercent: number, months: number): number {
+  if (!Number.isFinite(balance) || !Number.isFinite(apyPercent)) return 0;
+  if (!Number.isFinite(months) || months <= 0) return 0;
+  const n = Math.floor(months);
+  let running = balance;
+  let total = 0;
+  for (let i = 0; i < n; i++) {
+    const credit = monthlyInterestAmount(running, apyPercent);
+    total = Number((total + credit).toFixed(2));
+    running = Number((running + credit).toFixed(2));
+  }
+  return total;
+}
+
 /** When a rate is first set (or changed) on an account, decide what
  *  interest_last_accrued_on should become so the *next* cron run starts a
  *  clean calendar month rather than crediting a full month's interest for
