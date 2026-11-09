@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   monthlyInterestAmount,
   isInterestAccrualDue,
+  monthsOfInterestOwed,
+  interestForMonths,
   stampOnRateChange,
   type InterestAccrualAccount,
 } from "./interestAccrual";
@@ -72,5 +74,88 @@ describe("stampOnRateChange", () => {
 
   it("returns null when the rate is cleared, so a later re-add starts fresh", () => {
     expect(stampOnRateChange(null, new Date(2026, 0, 20))).toBeNull();
+  });
+});
+
+describe("monthsOfInterestOwed", () => {
+  it("is 0 with no rate configured", () => {
+    expect(monthsOfInterestOwed(acct({ interest_rate: null }), new Date(2026, 4, 3))).toBe(0);
+    expect(monthsOfInterestOwed(acct({ interest_rate: 0 }), new Date(2026, 4, 3))).toBe(0);
+  });
+
+  it("is 1 when a rate is configured and never accrued", () => {
+    expect(monthsOfInterestOwed(acct({ interest_last_accrued_on: null }), new Date(2026, 4, 3))).toBe(1);
+  });
+
+  it("is 0 within the same calendar month (0-month gap)", () => {
+    expect(monthsOfInterestOwed(acct({ interest_last_accrued_on: "2026-05-01" }), new Date(2026, 4, 31))).toBe(0);
+  });
+
+  it("is 1 after a normal one-month rollover", () => {
+    expect(monthsOfInterestOwed(acct({ interest_last_accrued_on: "2026-04-30" }), new Date(2026, 4, 1))).toBe(1);
+  });
+
+  it("counts every missed month, across a year boundary", () => {
+    expect(monthsOfInterestOwed(acct({ interest_last_accrued_on: "2026-02-03" }), new Date(2026, 4, 3))).toBe(3);
+    expect(monthsOfInterestOwed(acct({ interest_last_accrued_on: "2025-11-15" }), new Date(2026, 1, 2))).toBe(3);
+  });
+
+  it("never goes negative for a stamp in the future", () => {
+    expect(monthsOfInterestOwed(acct({ interest_last_accrued_on: "2026-08-01" }), new Date(2026, 4, 3))).toBe(0);
+  });
+
+  it("agrees with isInterestAccrualDue on whether anything is due", () => {
+    const cases: Array<[string | null, Date]> = [
+      [null, new Date(2026, 0, 20)],
+      ["2026-01-05", new Date(2026, 0, 20)],
+      ["2026-01-31", new Date(2026, 1, 1)],
+      ["2025-10-10", new Date(2026, 1, 1)],
+    ];
+    for (const [stamp, today] of cases) {
+      const a = acct({ interest_last_accrued_on: stamp });
+      expect(monthsOfInterestOwed(a, today) > 0).toBe(isInterestAccrualDue(a, today));
+    }
+  });
+});
+
+describe("interestForMonths", () => {
+  it("1-month gap: exactly the same as one monthly credit (unchanged behavior)", () => {
+    for (const [balance, apy] of [
+      [10_000, 4.5],
+      [1000, 3.7],
+      [2534.17, 5.05],
+      [0.5, 1],
+    ] as Array<[number, number]>) {
+      expect(interestForMonths(balance, apy, 1)).toBe(monthlyInterestAmount(balance, apy));
+    }
+  });
+
+  it("multi-month gap: compounds, same as crediting each missed month in turn", () => {
+    let balance = 10_000;
+    let expected = 0;
+    for (let i = 0; i < 3; i++) {
+      const credit = monthlyInterestAmount(balance, 4.5);
+      expected = Number((expected + credit).toFixed(2));
+      balance = Number((balance + credit).toFixed(2));
+    }
+    const caughtUp = interestForMonths(10_000, 4.5, 3);
+    expect(caughtUp).toBe(expected);
+    // More than three un-compounded single-month credits on the starting balance.
+    expect(caughtUp).toBeGreaterThan(Number((3 * monthlyInterestAmount(10_000, 4.5)).toFixed(2)));
+  });
+
+  it("twelve missed months credit the full APY", () => {
+    expect(10_000 + interestForMonths(10_000, 4.5, 12)).toBeCloseTo(10449.99, 1);
+  });
+
+  it("0-month gap: no credit", () => {
+    expect(interestForMonths(10_000, 4.5, 0)).toBe(0);
+    expect(interestForMonths(10_000, 4.5, -2)).toBe(0);
+  });
+
+  it("returns 0 for non-finite inputs rather than NaN", () => {
+    expect(interestForMonths(NaN, 4.5, 2)).toBe(0);
+    expect(interestForMonths(10_000, NaN, 2)).toBe(0);
+    expect(interestForMonths(10_000, 4.5, NaN)).toBe(0);
   });
 });
