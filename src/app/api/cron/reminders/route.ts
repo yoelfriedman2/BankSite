@@ -9,7 +9,7 @@ import {
 } from "@/lib/email";
 import { buildBackupZip, saveBackupToStorage } from "@/lib/backup";
 import { isMonthlyFeeDue } from "@/lib/monthlyFee";
-import { isInterestAccrualDue, monthlyInterestAmount } from "@/lib/interestAccrual";
+import { monthsOfInterestOwed, interestForMonths } from "@/lib/interestAccrual";
 import { monthsSince } from "@/lib/dormancy";
 import { isDepositDue } from "@/lib/mailedDeposits";
 
@@ -352,18 +352,22 @@ export async function GET(req: NextRequest) {
     // fee loop above (REL-02).
     for (const a of interestAccounts ?? []) {
       try {
-        const due = isInterestAccrualDue(
+        // Every whole calendar month since the last credit, not just one, so
+        // a month the cron missed is caught up on the next run instead of
+        // lost. A normal one-month gap gives exactly the old single-month
+        // amount; 0 means already credited this month.
+        const months = monthsOfInterestOwed(
           {
             interest_rate: a.interest_rate != null ? Number(a.interest_rate) : null,
             interest_last_accrued_on: a.interest_last_accrued_on as string | null,
           },
           today,
         );
-        if (!due) continue;
+        if (months <= 0) continue;
 
         const rate = Number(a.interest_rate);
         const oldBalance = a.balance != null ? Number(a.balance) : 0;
-        const amount = monthlyInterestAmount(oldBalance, rate);
+        const amount = interestForMonths(oldBalance, rate, months);
 
         if (amount <= 0) {
           // Nothing to credit (zero/negative balance) — still stamp the month
