@@ -21,6 +21,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: "2026-11-10",
+    title: "Paper in: approve the interest rate from a statement",
+    items: [
+      "When a scanned statement shows the account's interest rate, the review card now suggests it (\"Interest rate: 4.25%\") with Approve and Edit. Nothing changes on the account until you approve.",
+      "\"Count from Jan 1 so this year's earnings show\" (on by default) starts the interest from Jan 1, or from the day the account was opened if that's later, so this year's interest is added on the next daily update. Turn it off to start from today.",
+    ],
+  },
+  {
     date: "2026-11-06",
     title: "Paper in: add a bank straight from a statement",
     items: [

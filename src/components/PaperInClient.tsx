@@ -16,6 +16,7 @@ import {
 import { useToast } from "@/components/Toast";
 import { CameraCapture } from "@/components/CameraCapture";
 import { ScanBankPrompt, type AddedScanAccount } from "@/components/ScanBankPrompt";
+import { ScanInterestRateSuggestion } from "@/components/ScanInterestRateSuggestion";
 import { decideBankPrompt } from "@/lib/paperIn/bankPrompt";
 import { browserCameraEnv, shouldUseInPageCamera } from "@/lib/camera";
 import { DateInput } from "@/components/DateInput";
@@ -100,6 +101,9 @@ function ReviewCard({
             bankName: added.bankName,
             last4: null,
             balance: null,
+            interestRate: null,
+            dateOpened: null,
+            interestLastAccruedOn: null,
           },
         ]
       : accounts;
@@ -327,6 +331,13 @@ function ReviewCard({
           </div>
         </div>
       )}
+
+      <ScanInterestRateSuggestion
+        key={selectedAccount?.accountId ?? "none"}
+        scanId={scan.id}
+        aiRate={scan.aiInterestRate}
+        account={selectedAccount}
+      />
 
       <div className="mt-4 flex items-center gap-2">
         <button

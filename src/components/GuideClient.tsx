@@ -398,6 +398,7 @@ const TOPICS: Topic[] = [
       "Nothing is applied without your say-so — pick or correct the account, adjust the balance if it's off, then file it.",
       "Turning on \"Also update this account's balance\" writes the balance you confirm — turn it off to just keep the document on file.",
       "Once filed, it shows up in that account's regular Documents list, same as anything uploaded by hand.",
+      "If the statement shows an interest rate, it's suggested too — approve or edit it. With \"Count from Jan 1\" checked, this year's interest is added on the next daily update.",
     ],
   },
   {

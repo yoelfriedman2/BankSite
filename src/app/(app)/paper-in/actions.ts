@@ -9,6 +9,7 @@ import {
   getDemoBanks,
   getDemoScannedDocuments,
   addDemoScannedDocument,
+  updateDemoAccount,
   analyzeDemoScannedDocument,
   applyDemoScannedDocument,
   deleteDemoScannedDocument,
@@ -28,6 +29,13 @@ import {
   type ScanAccountTypeGuess,
 } from "@/lib/paperIn/bankPrompt";
 import { OPEN_STATUSES, type BankStatus } from "@/lib/types";
+import {
+  interestStartDate,
+  isMissingScanInterestColumnError,
+  sameRate,
+  type InterestStartReason,
+} from "@/lib/paperIn/interestSuggestion";
+import { isInterestLedgerRow } from "@/lib/interestYear";
 import { setBankStatus } from "@/app/(app)/banks/actions";
 import { upsertAccount, type AccountFormValues } from "@/app/(app)/accounts/actions";
 
@@ -57,6 +65,11 @@ export interface ScannedDocumentRow {
   aiBankState: string | null;
   aiAccountLast4: string | null;
   aiAccountType: ScanAccountTypeGuess | null;
+  /** The interest rate / APY the AI read off the page, in percent (migration
+   *  0065). null when none was printed, on older scans, or before the
+   *  migration is run. A suggestion only: applied by applyScanInterestRate
+   *  when the user approves it. */
+  aiInterestRate: number | null;
   /** For a ready scan the AI couldn't tie to an account: the user's own
    *  bank rows whose name matches aiBankName, best first. Drives the
    *  "this bank isn't in your tracker yet — add it?" prompt. */
@@ -70,6 +83,11 @@ export interface PaperInAccountOption {
   bankName: string;
   last4: string | null;
   balance: number | null;
+  /** What the account earns now (annual APY, percent), for the interest-rate
+   *  suggestion: "already on this account" vs. offer to approve. */
+  interestRate: number | null;
+  dateOpened: string | null;
+  interestLastAccruedOn: string | null;
 }
 
 function last4(accountNumber: string | null): string | null {
@@ -101,6 +119,7 @@ function toRow(s: DemoScannedDocument): ScannedDocumentRow {
     aiBankState: null,
     aiAccountLast4: null,
     aiAccountType: null,
+    aiInterestRate: s.ai_interest_rate ?? null,
     bankCandidates: [],
   };
 }
@@ -123,6 +142,9 @@ export async function getPaperInAccountOptions(): Promise<PaperInAccountOption[]
       bankName: banks.find((b) => b.id === a.bank_id)?.name ?? "—",
       last4: last4(a.account_number),
       balance: a.balance,
+      interestRate: a.interest_rate ?? null,
+      dateOpened: a.date_opened ?? null,
+      interestLastAccruedOn: a.interest_last_accrued_on ?? null,
     }));
   }
   const supabase = await createClient();
@@ -132,7 +154,9 @@ export async function getPaperInAccountOptions(): Promise<PaperInAccountOption[]
   if (!user) return [];
   const { data } = await supabase
     .from("accounts")
-    .select("id, bank_id, holder, account_type, account_number, balance, bank:banks(name)")
+    .select(
+      "id, bank_id, holder, account_type, account_number, balance, interest_rate, date_opened, interest_last_accrued_on, bank:banks(name)",
+    )
     .is("deleted_at", null)
     .order("created_at", { ascending: true });
   return ((data ?? []) as unknown as {
@@ -142,6 +166,9 @@ export async function getPaperInAccountOptions(): Promise<PaperInAccountOption[]
     account_type: AccountType | null;
     account_number: string | null;
     balance: number | null;
+    interest_rate: number | string | null;
+    date_opened: string | null;
+    interest_last_accrued_on: string | null;
     bank: { name: string } | null;
   }[]).map((a) => ({
     accountId: a.id,
@@ -150,6 +177,9 @@ export async function getPaperInAccountOptions(): Promise<PaperInAccountOption[]
     bankName: a.bank?.name ?? "—",
     last4: last4(a.account_number),
     balance: a.balance != null ? Number(a.balance) : null,
+    interestRate: a.interest_rate != null ? Number(a.interest_rate) : null,
+    dateOpened: a.date_opened ?? null,
+    interestLastAccruedOn: a.interest_last_accrued_on ?? null,
   }));
 }
 
@@ -187,6 +217,7 @@ export async function getScanInbox(): Promise<ScannedDocumentRow[]> {
     aiBankState: s.ai_bank_state ?? null,
     aiAccountLast4: s.ai_account_last4 ?? null,
     aiAccountType: (s.ai_account_type as ScanAccountTypeGuess | null) ?? null,
+    aiInterestRate: s.ai_interest_rate != null ? Number(s.ai_interest_rate) : null,
     bankCandidates: [],
   }));
 
@@ -359,16 +390,24 @@ export async function analyzeScan(scanId: string): Promise<{ error?: string }> {
     ai_summary: r.summary,
     ai_error: null,
   };
+  const bankUpdate = {
+    ai_bank_name: r.bankName,
+    ai_bank_state: r.bankState,
+    ai_account_last4: r.accountLast4,
+    ai_account_type: r.accountType,
+  };
   let { error } = await supabase
     .from("scanned_documents")
-    .update({
-      ...readUpdate,
-      ai_bank_name: r.bankName,
-      ai_bank_state: r.bankState,
-      ai_account_last4: r.accountLast4,
-      ai_account_type: r.accountType,
-    })
+    .update({ ...readUpdate, ...bankUpdate, ai_interest_rate: r.interestRate })
     .eq("id", scanId);
+  if (error && isMissingScanInterestColumnError(error.message)) {
+    // Migration 0065 not run yet — save the read without the rate (the
+    // card then just doesn't suggest one).
+    ({ error } = await supabase
+      .from("scanned_documents")
+      .update({ ...readUpdate, ...bankUpdate })
+      .eq("id", scanId));
+  }
   if (error && isMissingScanBankColumnsError(error.message)) {
     // Migration 0064 not run yet — save the read without the detected-bank
     // fields (the scan then just shows today's manual chooser).
@@ -509,6 +548,117 @@ export async function addBankFromScan(
     bankName: bank.name,
     label: accountLabel(holder || null, accountType ? ACCOUNT_TYPE_LABELS[accountType as AccountType] : null) ?? "Account",
   };
+}
+
+/** Interest-rate suggestion → Approve. Sets the account's rate to the one
+ *  the user approved (the AI's reading, or what they typed after Edit) and,
+ *  when "Count from Jan 1 so this year's earnings show" is checked, dates
+ *  interest_last_accrued_on back to Jan 1 (or the account's open date if
+ *  later) so the daily cron credits those months, compounded, on its next
+ *  run. This is the only place a scanned rate ever reaches an account, and
+ *  it only runs on the user's click — nothing is applied by the AI read. */
+export async function applyScanInterestRate(
+  scanId: string,
+  input: { accountId: string; rate: number; countFromJan1: boolean },
+): Promise<{ error?: string; unchanged?: boolean; startDate?: string; reason?: InterestStartReason }> {
+  if (!input.accountId) return { error: "Pick which account this rate is for." };
+  const rate = Number(input.rate);
+  if (!Number.isFinite(rate) || rate <= 0 || rate >= 100) return { error: "Enter a rate between 0 and 100%." };
+  const roundedRate = Math.round(rate * 1000) / 1000;
+  const countFromJan1 = input.countFromJan1 === true;
+  const today = todayInAppTimeZone();
+
+  if (DEMO_MODE) {
+    const a = getDemoAccounts().find((x) => x.id === input.accountId);
+    if (!a) return { error: "That account couldn't be found." };
+    if (sameRate(a.interest_rate, roundedRate)) return { unchanged: true };
+    const start = interestStartDate({
+      today,
+      countFromJan1,
+      dateOpened: a.date_opened,
+      currentRate: a.interest_rate,
+      currentLastAccruedOn: a.interest_last_accrued_on,
+    });
+    updateDemoAccount(a.id, { interest_rate: roundedRate, interest_last_accrued_on: start.date });
+    revalidate();
+    return { startDate: start.date, reason: start.reason };
+  }
+
+  // Approved users only, same guard as the other Paper in actions.
+  const user = await getApprovedUser();
+  if (!user) return { error: "Not authorized." };
+  const supabase = await createClient();
+
+  const { data: scan } = await supabase.from("scanned_documents").select("id").eq("id", scanId).maybeSingle();
+  if (!scan) return { error: "That scan couldn't be found." };
+
+  // Ownership re-check: a directly-callable server action, so the account id
+  // can't be trusted just because the UI only offered the caller's own
+  // accounts. RLS scopes this to accounts the caller owns.
+  const { data: account } = await supabase
+    .from("accounts")
+    .select("id, holder, account_type, interest_rate, interest_last_accrued_on, date_opened, bank:banks(name, cert)")
+    .eq("id", input.accountId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!account) return { error: "That account couldn't be found." };
+
+  const currentRate = account.interest_rate != null ? Number(account.interest_rate) : null;
+  if (sameRate(currentRate, roundedRate)) return { unchanged: true };
+
+  // So a month already paid this year is never paid twice: the latest
+  // interest entry on this account's own ledger since Jan 1.
+  let lastInterestPostedOn: string | null = null;
+  if (countFromJan1) {
+    const { data: ledger } = await supabase
+      .from("account_balance_history")
+      .select("*")
+      .eq("account_id", input.accountId)
+      .gte("as_of_date", `${today.slice(0, 4)}-01-01`)
+      .order("as_of_date", { ascending: false })
+      .limit(500);
+    for (const row of (ledger ?? []) as unknown as { as_of_date: string | null; reason: string | null; type?: string | null }[]) {
+      if (row.as_of_date && isInterestLedgerRow({ reason: row.reason, type: row.type ?? null })) {
+        lastInterestPostedOn = row.as_of_date;
+        break;
+      }
+    }
+  }
+
+  const start = interestStartDate({
+    today,
+    countFromJan1,
+    dateOpened: account.date_opened as string | null,
+    currentRate,
+    currentLastAccruedOn: account.interest_last_accrued_on as string | null,
+    lastInterestPostedOn,
+  });
+
+  const { error } = await supabase
+    .from("accounts")
+    .update({ interest_rate: roundedRate, interest_last_accrued_on: start.date })
+    .eq("id", input.accountId);
+  if (error) return { error: friendlyDbError(error.message) };
+
+  const bank = Array.isArray(account.bank) ? account.bank[0] : account.bank;
+  const label = accountLabel(
+    account.holder as string | null,
+    account.account_type ? ACCOUNT_TYPE_LABELS[account.account_type as AccountType] : null,
+  );
+  await logPersonalActivity(supabase, {
+    userId: user.id,
+    action: "account_edit",
+    summary: `Set interest rate to ${roundedRate}%${currentRate != null ? ` (was ${currentRate}%)` : ""} from a scanned statement, counting from ${start.date} — ${label ?? "account"} at ${bank?.name ?? "—"}`,
+    entityType: "account",
+    entityId: input.accountId,
+    cert: (bank?.cert as number | null) ?? null,
+    bankName: (bank?.name as string | null) ?? null,
+    accountLabel: label,
+  });
+
+  revalidate();
+  revalidatePath("/fees-interest");
+  return { startDate: start.date, reason: start.reason };
 }
 
 const DOC_TYPE_LABELS: Record<ScanDocType, string> = {
