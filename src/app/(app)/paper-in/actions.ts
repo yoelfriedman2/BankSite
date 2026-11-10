@@ -29,13 +29,8 @@ import {
   type ScanAccountTypeGuess,
 } from "@/lib/paperIn/bankPrompt";
 import { OPEN_STATUSES, type BankStatus } from "@/lib/types";
-import {
-  interestStartDate,
-  isMissingScanInterestColumnError,
-  sameRate,
-  type InterestStartReason,
-} from "@/lib/paperIn/interestSuggestion";
-import { isInterestLedgerRow } from "@/lib/interestYear";
+import { isMissingScanInterestColumnError, sameRate } from "@/lib/paperIn/interestSuggestion";
+import { describeBackfill, planBackfillForAccount, postInterestBackfill } from "@/lib/interestBackfillApply";
 import { setBankStatus } from "@/app/(app)/banks/actions";
 import { upsertAccount, type AccountFormValues } from "@/app/(app)/accounts/actions";
 
@@ -551,16 +546,19 @@ export async function addBankFromScan(
 }
 
 /** Interest-rate suggestion → Approve. Sets the account's rate to the one
- *  the user approved (the AI's reading, or what they typed after Edit) and,
- *  when "Count from Jan 1 so this year's earnings show" is checked, dates
- *  interest_last_accrued_on back to Jan 1 (or the account's open date if
- *  later) so the daily cron credits those months, compounded, on its next
- *  run. This is the only place a scanned rate ever reaches an account, and
- *  it only runs on the user's click — nothing is applied by the AI read. */
+ *  the user approved (the AI's reading, or what they typed after Edit). When
+ *  "Count from Jan 1 so this year's earnings show" is checked, this year's
+ *  months that aren't on the account yet (from Jan 1, or the open date if
+ *  later, up to the first month already credited) are credited once, right
+ *  away (lib/interestBackfill.ts — the same rule as the account editor).
+ *  Months already credited are never paid again. With the rate already on
+ *  the account, Approve only does that backfill. This is the only place a
+ *  scanned rate ever reaches an account, and it only runs on the user's
+ *  click — nothing is applied by the AI read. */
 export async function applyScanInterestRate(
   scanId: string,
   input: { accountId: string; rate: number; countFromJan1: boolean },
-): Promise<{ error?: string; unchanged?: boolean; startDate?: string; reason?: InterestStartReason }> {
+): Promise<{ error?: string; unchanged?: boolean; rateSet?: boolean; credited?: number; note?: string | null }> {
   if (!input.accountId) return { error: "Pick which account this rate is for." };
   const rate = Number(input.rate);
   if (!Number.isFinite(rate) || rate <= 0 || rate >= 100) return { error: "Enter a rate between 0 and 100%." };
@@ -568,97 +566,140 @@ export async function applyScanInterestRate(
   const countFromJan1 = input.countFromJan1 === true;
   const today = todayInAppTimeZone();
 
+  type AccountRow = {
+    id: string;
+    balance: number | string | null;
+    interest_rate: number | string | null;
+    interest_last_accrued_on: string | null;
+    date_opened: string | null;
+    holder: string | null;
+    account_type: string | null;
+    bankName: string | null;
+    bankCert: number | null;
+  };
+  let account: AccountRow | null = null;
+  let supabase: Awaited<ReturnType<typeof createClient>> | null = null;
+  let userId: string | null = null;
+
   if (DEMO_MODE) {
     const a = getDemoAccounts().find((x) => x.id === input.accountId);
-    if (!a) return { error: "That account couldn't be found." };
-    if (sameRate(a.interest_rate, roundedRate)) return { unchanged: true };
-    const start = interestStartDate({
-      today,
-      countFromJan1,
-      dateOpened: a.date_opened,
-      currentRate: a.interest_rate,
-      currentLastAccruedOn: a.interest_last_accrued_on,
-    });
-    updateDemoAccount(a.id, { interest_rate: roundedRate, interest_last_accrued_on: start.date });
-    revalidate();
-    return { startDate: start.date, reason: start.reason };
+    if (a) {
+      const b = getDemoBanks().find((x) => x.id === a.bank_id);
+      account = {
+        id: a.id,
+        balance: a.balance,
+        interest_rate: a.interest_rate,
+        interest_last_accrued_on: a.interest_last_accrued_on,
+        date_opened: a.date_opened,
+        holder: a.holder,
+        account_type: a.account_type,
+        bankName: b?.name ?? null,
+        bankCert: b?.cert ?? null,
+      };
+    }
+  } else {
+    // Approved users only, same guard as the other Paper in actions.
+    const user = await getApprovedUser();
+    if (!user) return { error: "Not authorized." };
+    userId = user.id;
+    supabase = await createClient();
+
+    const { data: scan } = await supabase.from("scanned_documents").select("id").eq("id", scanId).maybeSingle();
+    if (!scan) return { error: "That scan couldn't be found." };
+
+    // Ownership re-check: a directly-callable server action, so the account id
+    // can't be trusted just because the UI only offered the caller's own
+    // accounts. RLS scopes this to accounts the caller owns.
+    const { data: a } = await supabase
+      .from("accounts")
+      .select("id, balance, holder, account_type, interest_rate, interest_last_accrued_on, date_opened, bank:banks(name, cert)")
+      .eq("id", input.accountId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (a) {
+      const bank = Array.isArray(a.bank) ? a.bank[0] : a.bank;
+      account = {
+        id: a.id as string,
+        balance: a.balance as number | null,
+        interest_rate: a.interest_rate as number | null,
+        interest_last_accrued_on: a.interest_last_accrued_on as string | null,
+        date_opened: a.date_opened as string | null,
+        holder: a.holder as string | null,
+        account_type: a.account_type as string | null,
+        bankName: (bank?.name as string | null) ?? null,
+        bankCert: (bank?.cert as number | null) ?? null,
+      };
+    }
   }
-
-  // Approved users only, same guard as the other Paper in actions.
-  const user = await getApprovedUser();
-  if (!user) return { error: "Not authorized." };
-  const supabase = await createClient();
-
-  const { data: scan } = await supabase.from("scanned_documents").select("id").eq("id", scanId).maybeSingle();
-  if (!scan) return { error: "That scan couldn't be found." };
-
-  // Ownership re-check: a directly-callable server action, so the account id
-  // can't be trusted just because the UI only offered the caller's own
-  // accounts. RLS scopes this to accounts the caller owns.
-  const { data: account } = await supabase
-    .from("accounts")
-    .select("id, holder, account_type, interest_rate, interest_last_accrued_on, date_opened, bank:banks(name, cert)")
-    .eq("id", input.accountId)
-    .is("deleted_at", null)
-    .maybeSingle();
   if (!account) return { error: "That account couldn't be found." };
 
-  const currentRate = account.interest_rate != null ? Number(account.interest_rate) : null;
-  if (sameRate(currentRate, roundedRate)) return { unchanged: true };
+  const currentRate = account.interest_rate != null && account.interest_rate !== "" ? Number(account.interest_rate) : null;
+  const rateChanging = !sameRate(currentRate, roundedRate);
+  if (!rateChanging && !countFromJan1) return { unchanged: true };
 
-  // So a month already paid this year is never paid twice: the latest
-  // interest entry on this account's own ledger since Jan 1.
-  let lastInterestPostedOn: string | null = null;
-  if (countFromJan1) {
-    const { data: ledger } = await supabase
-      .from("account_balance_history")
-      .select("*")
-      .eq("account_id", input.accountId)
-      .gte("as_of_date", `${today.slice(0, 4)}-01-01`)
-      .order("as_of_date", { ascending: false })
-      .limit(500);
-    for (const row of (ledger ?? []) as unknown as { as_of_date: string | null; reason: string | null; type?: string | null }[]) {
-      if (row.as_of_date && isInterestLedgerRow({ reason: row.reason, type: row.type ?? null })) {
-        lastInterestPostedOn = row.as_of_date;
-        break;
-      }
+  // Worked out from the account as it is now, before the new rate is saved.
+  const plan = await planBackfillForAccount(supabase, account.id, {
+    today,
+    countFromJan1,
+    dateOpened: account.date_opened,
+    rate: roundedRate,
+    rateBefore: currentRate,
+    lastAccruedBefore: account.interest_last_accrued_on,
+    stampResetsToToday: rateChanging,
+    balance: account.balance,
+  });
+
+  if (!rateChanging && plan.months === 0) return { unchanged: true, note: describeBackfill(plan) };
+
+  if (rateChanging) {
+    // Same as typing a new rate in the account editor: the daily job takes
+    // it from today. Never moved back — the months before today are the
+    // backfill's, so the daily job can't pay them a second time.
+    if (DEMO_MODE || !supabase) {
+      updateDemoAccount(account.id, { interest_rate: roundedRate, interest_last_accrued_on: today });
+    } else {
+      const { error } = await supabase
+        .from("accounts")
+        .update({ interest_rate: roundedRate, interest_last_accrued_on: today })
+        .eq("id", account.id);
+      if (error) return { error: friendlyDbError(error.message) };
     }
   }
 
-  const start = interestStartDate({
-    today,
-    countFromJan1,
-    dateOpened: account.date_opened as string | null,
-    currentRate,
-    currentLastAccruedOn: account.interest_last_accrued_on as string | null,
-    lastInterestPostedOn,
-  });
+  const posted = await postInterestBackfill(supabase, account.id, plan, today);
+  const note = posted.error ? null : describeBackfill(plan);
 
-  const { error } = await supabase
-    .from("accounts")
-    .update({ interest_rate: roundedRate, interest_last_accrued_on: start.date })
-    .eq("id", input.accountId);
-  if (error) return { error: friendlyDbError(error.message) };
-
-  const bank = Array.isArray(account.bank) ? account.bank[0] : account.bank;
   const label = accountLabel(
-    account.holder as string | null,
+    account.holder,
     account.account_type ? ACCOUNT_TYPE_LABELS[account.account_type as AccountType] : null,
   );
-  await logPersonalActivity(supabase, {
-    userId: user.id,
-    action: "account_edit",
-    summary: `Set interest rate to ${roundedRate}%${currentRate != null ? ` (was ${currentRate}%)` : ""} from a scanned statement, counting from ${start.date} — ${label ?? "account"} at ${bank?.name ?? "—"}`,
-    entityType: "account",
-    entityId: input.accountId,
-    cert: (bank?.cert as number | null) ?? null,
-    bankName: (bank?.name as string | null) ?? null,
-    accountLabel: label,
-  });
+  const what = [
+    rateChanging
+      ? `Set interest rate to ${roundedRate}%${currentRate != null ? ` (was ${currentRate}%)` : ""} from a scanned statement`
+      : null,
+    posted.credited ? note : null,
+  ]
+    .filter(Boolean)
+    .join("; ");
+  if (what && supabase && userId) {
+    await logPersonalActivity(supabase, {
+      userId,
+      action: "account_edit",
+      summary: `${what} — ${label ?? "account"} at ${account.bankName ?? "—"}`,
+      entityType: "account",
+      entityId: account.id,
+      cert: account.bankCert,
+      bankName: account.bankName,
+      accountLabel: label,
+    });
+  }
 
   revalidate();
   revalidatePath("/fees-interest");
-  return { startDate: start.date, reason: start.reason };
+  if (posted.error) {
+    return rateChanging ? { rateSet: true, error: `Rate saved. ${posted.error}` } : { error: posted.error };
+  }
+  return { rateSet: rateChanging, credited: posted.credited, note };
 }
 
 const DOC_TYPE_LABELS: Record<ScanDocType, string> = {
