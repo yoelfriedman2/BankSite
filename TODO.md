@@ -24,6 +24,12 @@ change. Not urgent — nothing today suggests RLS is actually broken; this is in
 
 ## One-time setup pending
 
+- Run migration `0065_paper_in_interest_rate.sql` (PR for the Paper in interest-rate suggestion) —
+  **not run yet.** Adds one nullable column, `scanned_documents.ai_interest_rate numeric` (must be
+  between 0 and 100 when set). Additive only, nothing existing changes. Until it's run, scans are
+  read and saved exactly as before and the card just doesn't suggest a rate. Undo:
+  `alter table public.scanned_documents drop column if exists ai_interest_rate;`
+
 - ~~Run migration `0064_paper_in_detected_bank.sql`~~ — **confirmed run 2026-11-06.** Adds
   `scanned_documents.ai_bank_name / ai_bank_state / ai_account_last4 / ai_account_type` (nullable,
   additive). Powers the Paper in "We found X on this statement, but it's not in your tracker — add

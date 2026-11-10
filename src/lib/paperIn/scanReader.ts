@@ -10,6 +10,7 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { readDetectedBank, type ScanAccountTypeGuess } from "@/lib/paperIn/bankPrompt";
+import { readInterestRate } from "@/lib/paperIn/interestSuggestion";
 
 const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 
@@ -43,6 +44,10 @@ export interface ScanReadResult {
   /** Last 4 digits of the account number, if visible. */
   accountLast4: string | null;
   accountType: ScanAccountTypeGuess | null;
+  /** The account's interest rate / APY as printed on the document, in
+   *  percent (4.25 = 4.25%). null when none is shown. Only ever a
+   *  suggestion: the user approves it before it touches the account. */
+  interestRate: number | null;
 }
 
 export type { ScanAccountTypeGuess };
@@ -114,6 +119,16 @@ function buildTool(candidateCount: number): Anthropic.Tool {
           enum: ["checking", "savings", "cd", "money_market", "other", "unknown"],
           description: "What kind of account the document is about, if it says. unknown if it doesn't.",
         },
+        has_interest_rate: {
+          type: "boolean",
+          description:
+            "true only if the document itself prints this account's interest rate or APY (e.g. \"Annual Percentage Yield Earned 4.25%\"). false if no rate is printed — never estimate one from the interest amount or balance.",
+        },
+        interest_rate: {
+          type: "number",
+          description:
+            "The account's rate in percent, if has_interest_rate is true (4.25 for 4.25%). If both an APY and an interest rate are printed, use the APY. Ignored otherwise — still required, pass 0.",
+        },
         summary: {
           type: "string",
           description:
@@ -133,6 +148,8 @@ function buildTool(candidateCount: number): Anthropic.Tool {
         "bank_state",
         "account_last4",
         "account_type",
+        "has_interest_rate",
+        "interest_rate",
         "summary",
       ],
     },
@@ -158,6 +175,7 @@ function buildPrompt(candidates: ScanAccountCandidate[]): string {
     "",
     "If the document doesn't clearly match one of these accounts, set has_account_match to false rather than guessing.",
     "Always fill in bank_name with the bank's name as printed on the document, even when it matches none of the accounts above.",
+    "If the document prints the account's interest rate or APY, report it in interest_rate; if it doesn't, set has_interest_rate to false. Don't calculate a rate yourself.",
   ].join("\n");
 }
 
@@ -250,6 +268,8 @@ export async function readScannedDocument(
       bank_state?: string;
       account_last4?: string;
       account_type?: string;
+      has_interest_rate?: boolean;
+      interest_rate?: number;
       summary: string;
     };
 
@@ -262,6 +282,7 @@ export async function readScannedDocument(
         statementDate: input.has_date && input.statement_date ? input.statement_date : null,
         summary: input.summary,
         ...readDetectedBank(input),
+        interestRate: readInterestRate(input),
       },
     };
   } catch (err) {

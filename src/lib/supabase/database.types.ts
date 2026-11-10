@@ -993,6 +993,7 @@ export type Database = {
           ai_confidence: string | null
           ai_doc_type: string | null
           ai_error: string | null
+          ai_interest_rate: number | null
           ai_model: string | null
           ai_summary: string | null
           applied_at: string | null
@@ -1020,6 +1021,7 @@ export type Database = {
           ai_confidence?: string | null
           ai_doc_type?: string | null
           ai_error?: string | null
+          ai_interest_rate?: number | null
           ai_model?: string | null
           ai_summary?: string | null
           applied_at?: string | null
@@ -1047,6 +1049,7 @@ export type Database = {
           ai_confidence?: string | null
           ai_doc_type?: string | null
           ai_error?: string | null
+          ai_interest_rate?: number | null
           ai_model?: string | null
           ai_summary?: string | null
           applied_at?: string | null

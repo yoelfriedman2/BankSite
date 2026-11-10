@@ -287,6 +287,8 @@ export type DemoScannedDocument = {
   ai_as_of_date: string | null;
   ai_summary: string | null;
   ai_error: string | null;
+  /** Interest rate read off the page (migration 0065); a suggestion only. */
+  ai_interest_rate?: number | null;
   reviewed_account_id: string | null;
   reviewed_balance: number | null;
   reviewed_as_of_date: string | null;
@@ -888,6 +890,7 @@ export function analyzeDemoScannedDocument(id: string): DemoScannedDocument | nu
       ? `Matched by bank name and account type; ending balance $${(((match.balance ?? 0) + 4.11)).toFixed(2)} as of the statement date.`
       : "Couldn't confidently match this to one of your accounts — pick one below.",
     ai_error: null,
+    ai_interest_rate: 4.25,
     updated_at: now,
   };
   store().scannedDocuments = store().scannedDocuments.map((s) => (s.id === id ? updated : s));
