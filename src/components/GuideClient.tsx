@@ -217,6 +217,7 @@ const TOPICS: Topic[] = [
     ],
     tips: [
       "Add an interest rate (APY) on any account's editor to include it here and turn on auto-crediting — accounts without a rate are simply left out, not shown as $0.",
+      "\"Count from Jan 1 so this year's earnings show\" (on by default for a new or changed rate) adds this year's interest from Jan 1, or from the open date if later, right when you save. Months already credited are never added twice. Tick it on an account that already has a rate to fill in the earlier months.",
       "Logged interest by hand instead? Add it with the reason \"Interest\" and it counts toward this year's total too.",
     ],
   },
@@ -398,7 +399,7 @@ const TOPICS: Topic[] = [
       "Nothing is applied without your say-so — pick or correct the account, adjust the balance if it's off, then file it.",
       "Turning on \"Also update this account's balance\" writes the balance you confirm — turn it off to just keep the document on file.",
       "Once filed, it shows up in that account's regular Documents list, same as anything uploaded by hand.",
-      "If the statement shows an interest rate, it's suggested too — approve or edit it. With \"Count from Jan 1\" checked, this year's interest is added on the next daily update.",
+      "If the statement shows an interest rate, it's suggested too — approve or edit it. With \"Count from Jan 1\" checked, this year's interest that isn't on the account yet is added right away (months already credited aren't added again). If the rate is already on the account, \"Count this year from Jan 1\" does just that part.",
     ],
   },
   {
