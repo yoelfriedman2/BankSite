@@ -697,7 +697,7 @@ export function markDemoTransactionsExported(ids: string[]): void {
 export function addDemoTransaction(
   accountId: string,
   amount: number,
-  type: "deposit" | "withdrawal",
+  type: "deposit" | "withdrawal" | "interest",
   reason: string | null,
   asOfDate: string,
 ): number | null {
