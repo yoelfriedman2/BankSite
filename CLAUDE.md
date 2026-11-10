@@ -176,6 +176,18 @@ the code:
      multi-user RLS behavior), say so explicitly in the session's summary
      rather than silently skipping the check.
 
+**2026-11-10 (interest: "Count from Jan 1" fills this year's missing months once, from Paper in or the account editor)** —
+`lib/interestBackfill.ts` (pure, tested) + `lib/interestBackfillApply.ts` (server). With the box checked,
+the months from Jan 1 (or `date_opened`, if later) up to the first month already paid — or still owed
+by the cron — are credited **once, at save/approve time**, as one `account_balance_history` row via
+`record_account_transaction` (type `interest`, reason like `Interest Jan–Jul 2026 (counted from Jan 1)`;
+that reason is parsed back to know which months it paid, so keep its shape). `interest_last_accrued_on`
+is **never moved back** any more (PR #19 used to rewind it; now a new/changed rate stamps today, as the
+editor always did), so the cron can't pay those months again. Months a cron credit paid: 1 for rows
+before 2026-11-10 (pre-catch-up), else the gap since the previous cron credit, else matched from the
+amount; unreadable → nothing is added (never risk a double payment). Paper in's approve and
+`upsertAccount` (`count_interest_from_jan1`) share it. No migration.
+
 **2026-09-14 (fix: a stale Server Action across a deploy could leave a user stuck on the error
 screen)** — Sentry reported an unhandled `Failed to find Server Action` error on `POST /login/page`
 (a real family member's Chromebook). This is the standard Next.js deploy-skew failure: a Server

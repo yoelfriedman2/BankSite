@@ -23,6 +23,8 @@ import { VaultUnlockPrompt } from "@/components/VaultUnlockPrompt";
 import { isEncryptedVaultValue, decryptVaultField, encryptVaultField } from "@/lib/vaultCrypto";
 import { useFocusTrap } from "@/lib/useFocusTrap";
 import type { DockLane } from "@/components/AccountViewModal";
+import { useToast } from "@/components/Toast";
+import { COUNT_FROM_JAN1_HINT, COUNT_FROM_JAN1_LABEL } from "@/lib/interestBackfill";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100";
@@ -118,6 +120,18 @@ export function AccountModal({
     toValues(bankId, initial, defaultHolder),
   );
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
+  // "Count from Jan 1 so this year's earnings show": shown whenever a rate is
+  // entered. On by default for a new or changed rate; for a rate that's
+  // already on the account it starts off, so saving an unrelated edit never
+  // adds interest by surprise — ticking it is how to fill in this year.
+  const [countFromJan1Choice, setCountFromJan1Choice] = useState<boolean | null>(null);
+  const typedRate = Number(values.interest_rate);
+  const rateEntered = values.interest_rate.trim() !== "" && Number.isFinite(typedRate) && typedRate > 0;
+  const initialRate = initial?.interest_rate != null ? Number(initial.interest_rate) : null;
+  const rateIsNewOrChanged =
+    rateEntered && (initialRate == null || Math.round(initialRate * 1000) !== Math.round(typedRate * 1000));
+  const countFromJan1 = countFromJan1Choice ?? rateIsNewOrChanged;
   const [isPending, startTransition] = useTransition();
   const [showPassword, setShowPassword] = useState(false);
   const [onlineAccessOpen, setOnlineAccessOpen] = useState(() =>
@@ -383,12 +397,16 @@ export function AccountModal({
       return;
     }
     startTransition(async () => {
-      const toSave = await maybeEncryptForSave(values);
+      const toSave = await maybeEncryptForSave({
+        ...values,
+        count_interest_from_jan1: rateEntered && countFromJan1,
+      });
       const result = await upsertAccount(toSave);
       if (result.error) {
         setError(result.error);
         return;
       }
+      if (result.interestNote) toast.success(result.interestNote);
       setDirty(false);
       onSaved();
     });
@@ -675,6 +693,27 @@ export function AccountModal({
                   Once set, interest is credited to the balance automatically around the start of
                   each month, and shown on the Fees &amp; interest page.
                 </p>
+                {rateEntered && (
+                  <>
+                    <label className="mt-2 flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={countFromJan1}
+                        onChange={(e) => {
+                          setDirty(true);
+                          setCountFromJan1Choice(e.target.checked);
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-600"
+                      />
+                      {COUNT_FROM_JAN1_LABEL}
+                    </label>
+                    <p className="mt-1 text-xs text-slate-600">
+                      {countFromJan1
+                        ? `${COUNT_FROM_JAN1_HINT} Added when you save.`
+                        : "Interest counts from today."}
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           </Box>

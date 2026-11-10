@@ -26,6 +26,7 @@ import {
 } from "@/lib/types";
 import { skipCurrentMonthIfPast } from "@/lib/monthlyFee";
 import { stampOnRateChange } from "@/lib/interestAccrual";
+import { describeBackfill, planBackfillForAccount, postInterestBackfill } from "@/lib/interestBackfillApply";
 import { friendlyDbError } from "@/lib/friendlyError";
 import { normalizeRoutingNumber, routingNumberError } from "@/lib/routingNumber";
 import { formatCurrency } from "@/lib/format";
@@ -56,6 +57,11 @@ export type AccountFormValues = {
   monthly_fee_day: string;
   interest_rate: string;
   exclude_min_balance: boolean;
+  /** The editor's "Count from Jan 1 so this year's earnings show" box: on
+   *  save, this year's months of interest that aren't on the account yet are
+   *  credited once (lib/interestBackfill.ts — the same rule as Paper in's
+   *  rate approval). Absent/false = interest starts today, as before. */
+  count_interest_from_jan1?: boolean;
 };
 
 function text(v: string): string | null {
@@ -237,13 +243,16 @@ function accountFieldChanges(
 
 export async function upsertAccount(
   values: AccountFormValues,
-): Promise<{ error?: string; id?: string }> {
+): Promise<{ error?: string; id?: string; interestNote?: string | null }> {
   if (!values.bank_id) return { error: "Missing bank." };
   // Same reasoning as upsertBank's check — a server action is directly
   // callable, and this number can end up printed on a real check.
   const rtnErr = routingNumberError(values.routing_number);
   if (rtnErr) return { error: rtnErr };
   const patch = buildPatch(values);
+  // Only meaningful with a positive rate on the saved account.
+  const countFromJan1 =
+    values.count_interest_from_jan1 === true && patch.interest_rate != null && patch.interest_rate > 0;
 
   if (DEMO_MODE) {
     const demoBank = getDemoBanks().find((b) => b.id === values.bank_id);
@@ -254,6 +263,7 @@ export async function upsertAccount(
         : null;
     const bankName = demoBank?.name ?? "—";
     let demoSavedId: string | undefined = values.id;
+    let demoInterestNote: string | null = null;
     if (values.id) {
       const prev = getDemoAccounts().find((a) => a.id === values.id);
       const feeConfigChanged =
@@ -263,6 +273,18 @@ export async function upsertAccount(
       // changed — never on an unrelated field edit, or a real pending
       // accrual could get silently reset for the month.
       const rateChanged = (prev?.interest_rate ?? null) !== patch.interest_rate;
+      const demoPlan = countFromJan1
+        ? await planBackfillForAccount(null, values.id, {
+            today: todayInAppTimeZone(),
+            countFromJan1,
+            dateOpened: patch.date_opened,
+            rate: patch.interest_rate,
+            rateBefore: prev?.interest_rate ?? null,
+            lastAccruedBefore: prev?.interest_last_accrued_on ?? null,
+            stampResetsToToday: rateChanged,
+            balance: patch.balance ?? prev?.balance ?? null,
+          })
+        : null;
       updateDemoAccount(values.id, {
         ...patch,
         ...(feeConfigChanged ? { monthly_fee_last_charged_on: monthlyFeeLastChargedOn } : {}),
@@ -270,6 +292,10 @@ export async function upsertAccount(
           ? { interest_last_accrued_on: stampOnRateChange(patch.interest_rate, now) }
           : {}),
       });
+      if (demoPlan) {
+        const posted = await postInterestBackfill(null, values.id, demoPlan, todayInAppTimeZone());
+        demoInterestNote = posted.error ?? describeBackfill(demoPlan);
+      }
       const changes = accountFieldChanges(
         (prev as unknown as Record<string, unknown>) ?? null,
         patch as unknown as Record<string, unknown>,
@@ -300,6 +326,20 @@ export async function upsertAccount(
         deleted_at: null,
       });
       demoSavedId = newId;
+      if (countFromJan1) {
+        const demoPlan = await planBackfillForAccount(null, newId, {
+          today: todayInAppTimeZone(),
+          countFromJan1,
+          dateOpened: patch.date_opened,
+          rate: patch.interest_rate,
+          rateBefore: null,
+          lastAccruedBefore: null,
+          stampResetsToToday: true,
+          balance: patch.balance,
+        });
+        const posted = await postInterestBackfill(null, newId, demoPlan, todayInAppTimeZone());
+        demoInterestNote = posted.error ?? describeBackfill(demoPlan);
+      }
       const label = accountLabel(patch.holder, patch.account_type ? ACCOUNT_TYPE_LABELS[patch.account_type as AccountType] : null);
       addDemoPersonalLog({
         action: "account_add",
@@ -315,7 +355,7 @@ export async function upsertAccount(
       updateDemoBank(values.bank_id, { status: "open" });
     }
     revalidate();
-    return { id: demoSavedId };
+    return { id: demoSavedId, interestNote: demoInterestNote };
   }
 
   const supabase = await createClient();
@@ -341,6 +381,9 @@ export async function upsertAccount(
   // Returned to the caller (Paper in's "add this bank" step needs the new
   // account's id to file the scan against it).
   let savedId: string | undefined = values.id;
+  // What "Count from Jan 1" did, for the editor to show after saving.
+  let interestNote: string | null = null;
+  let interestCreditedNote: string | null = null;
   if (values.id) {
     // Record a dated balance point when the balance changes, so the
     // "balance as of date" history stays accurate. select("*") (not a
@@ -372,6 +415,21 @@ export async function upsertAccount(
     // rate itself actually changed, never on an unrelated field edit.
     const rateChanged =
       (prev?.interest_rate != null ? Number(prev.interest_rate) : null) !== patch.interest_rate;
+
+    // "Count from Jan 1": worked out from the account as it was before this
+    // save (its old rate and last-credited date), credited after it below.
+    const interestPlan = countFromJan1
+      ? await planBackfillForAccount(supabase, values.id, {
+          today,
+          countFromJan1,
+          dateOpened: patch.date_opened,
+          rate: patch.interest_rate,
+          rateBefore: prev.interest_rate as number | null,
+          lastAccruedBefore: prev.interest_last_accrued_on as string | null,
+          stampResetsToToday: rateChanged,
+          balance: patch.balance ?? (prev.balance as number | null),
+        })
+      : null;
 
     // DATA-02: a genuine balance change is handled atomically (balance +
     // history together, via update_account_balance — migration 0043) instead
@@ -449,12 +507,19 @@ export async function upsertAccount(
       }
     }
 
+    if (interestPlan) {
+      const posted = await postInterestBackfill(supabase, values.id, interestPlan, today);
+      interestNote = posted.error ?? describeBackfill(interestPlan);
+      if (posted.credited) interestCreditedNote = describeBackfill(interestPlan);
+    }
+
     // Personal history log entry — every field that changed, private to this
     // user (separate from the shared bank-field propagation elsewhere).
     const changes = accountFieldChanges(
       prev as unknown as Record<string, unknown>,
       patch as unknown as Record<string, unknown>,
     );
+    if (interestCreditedNote) changes.push(interestCreditedNote);
     if (balanceChanging) {
       changes.push(
         `Balance → ${formatCurrency(patchBalance)}${oldBalance != null ? ` (was ${formatCurrency(oldBalance)})` : ""}`,
@@ -514,6 +579,22 @@ export async function upsertAccount(
       }
     }
 
+    if (countFromJan1) {
+      const interestPlan = await planBackfillForAccount(supabase, created.id as string, {
+        today,
+        countFromJan1,
+        dateOpened: patch.date_opened,
+        rate: patch.interest_rate,
+        rateBefore: null,
+        lastAccruedBefore: null,
+        stampResetsToToday: true,
+        balance: patch.balance,
+      });
+      const posted = await postInterestBackfill(supabase, created.id as string, interestPlan, today);
+      interestNote = posted.error ?? describeBackfill(interestPlan);
+      if (posted.credited) interestCreditedNote = describeBackfill(interestPlan);
+    }
+
     const label = accountLabel(
       (patch.holder as string | null) ?? null,
       patch.account_type ? ACCOUNT_TYPE_LABELS[patch.account_type as AccountType] : null,
@@ -521,7 +602,7 @@ export async function upsertAccount(
     await logPersonalActivity(supabase, {
       userId: user.id,
       action: "account_add",
-      summary: `Added ${label ?? "an account"} at ${bankName}`,
+      summary: `Added ${label ?? "an account"} at ${bankName}${interestCreditedNote ? `: ${interestCreditedNote}` : ""}`,
       entityType: "account",
       entityId: created.id as string,
       cert: bankCert,
@@ -544,7 +625,8 @@ export async function upsertAccount(
   }
 
   revalidate();
-  return { id: savedId };
+  if (interestNote) revalidatePath("/fees-interest");
+  return { id: savedId, interestNote };
 }
 
 /** Moves an account to Trash. */

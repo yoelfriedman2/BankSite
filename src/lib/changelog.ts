@@ -22,10 +22,18 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-11-10",
+    title: "Count this year's interest from Jan 1, any time you set a rate",
+    items: [
+      "Typing or changing an interest rate in the account editor now has the same \"Count from Jan 1 so this year's earnings show\" box as a scanned statement. It's on by default and adds this year's interest from Jan 1 (or the day the account was opened, if later) when you save.",
+      "It works on accounts that already had a rate too: only the months that aren't on the account yet are added, and a month is never added twice.",
+    ],
+  },
+  {
+    date: "2026-11-10",
     title: "Paper in: approve the interest rate from a statement",
     items: [
       "When a scanned statement shows the account's interest rate, the review card now suggests it (\"Interest rate: 4.25%\") with Approve and Edit. Nothing changes on the account until you approve.",
-      "\"Count from Jan 1 so this year's earnings show\" (on by default) starts the interest from Jan 1, or from the day the account was opened if that's later, so this year's interest is added on the next daily update. Turn it off to start from today.",
+      "\"Count from Jan 1 so this year's earnings show\" (on by default) adds this year's interest from Jan 1, or from the day the account was opened if that's later, right when you approve. Turn it off to start from today.",
     ],
   },
   {
